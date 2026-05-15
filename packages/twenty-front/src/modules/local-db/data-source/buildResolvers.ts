@@ -7,6 +7,7 @@ import {
   type DataSourceObject,
   type DataSourceRecord,
   encodeCursor,
+  getAggregateFieldsForObject,
 } from 'twenty-shared/data-source';
 import {
   FieldMetadataType,
@@ -49,6 +50,16 @@ const decorateRecord = (
   return { __typename: typenameFor(object), ...record };
 };
 
+const FILTER_SYMBOL = Symbol.for('bridge:connection-filter');
+
+type ConnectionWithFilter = {
+  __typename: string;
+  [FILTER_SYMBOL]: RecordGqlOperationFilter | null;
+  edges: unknown[];
+  pageInfo: unknown;
+  totalCount: number;
+};
+
 const wrapAsConnection = (
   object: DataSourceObject,
   records: DataSourceRecord[],
@@ -59,8 +70,10 @@ const wrapAsConnection = (
     endCursor: string | null;
   },
   totalCount: number,
-) => ({
+  filter: RecordGqlOperationFilter | null = null,
+): ConnectionWithFilter => ({
   __typename: `${typenameFor(object)}Connection`,
+  [FILTER_SYMBOL]: filter,
   edges: records.map((record, index) => ({
     __typename: `${typenameFor(object)}Edge`,
     node: decorateRecord(object, record),
@@ -69,6 +82,34 @@ const wrapAsConnection = (
   pageInfo: { __typename: 'PageInfo', ...pageInfo },
   totalCount,
 });
+
+// Per-field aggregate fields (e.g. `maxEmployees`, `countNotEmptyAddress`) live
+// on the Connection type. Each aggregate resolver delegates to
+// `dataSource.aggregate`, which parses the field name and computes the value.
+const connectionAggregateResolver: GenericResolver = async (
+  parent,
+  _args,
+  context,
+  info,
+) => {
+  const aggregateFieldName = info.fieldName;
+  const filter = (parent as ConnectionWithFilter)[FILTER_SYMBOL] ?? null;
+  const typenameWithoutConnection = (
+    parent as ConnectionWithFilter
+  ).__typename.replace(/Connection$/, '');
+  const nameSingular =
+    typenameWithoutConnection[0].toLowerCase() +
+    typenameWithoutConnection.slice(1);
+  const aggregates = await context.dataSource.aggregate(
+    nameSingular,
+    {
+      filter,
+      fields: [aggregateFieldName],
+    },
+    context.dataSourceContext ?? {},
+  );
+  return aggregates[aggregateFieldName] ?? null;
+};
 
 const objectFieldResolvers = (
   bundle: DataSourceBundle,
@@ -156,6 +197,22 @@ export const buildResolvers = (bundle: DataSourceBundle) => {
       typeResolvers[typeName] = fieldResolvers;
     }
 
+    // Wire per-field aggregate resolvers (`maxEmployees`, `countNotEmpty…`,
+    // etc.) onto each `<Type>Connection`. The SDL emits matching field names
+    // via `getAggregateFieldsForObject`, so this loop registers a resolver for
+    // each one — `totalCount` keeps its eager value from `wrapAsConnection`.
+    const connectionTypeName = `${typeName}Connection`;
+    const connectionResolvers: Record<string, GenericResolver> = {};
+    for (const aggregateFieldName of getAggregateFieldsForObject(
+      object,
+    ).keys()) {
+      if (aggregateFieldName === 'totalCount') continue;
+      connectionResolvers[aggregateFieldName] = connectionAggregateResolver;
+    }
+    if (Object.keys(connectionResolvers).length > 0) {
+      typeResolvers[connectionTypeName] = connectionResolvers;
+    }
+
     // Query.<nameSingular>
     queryResolvers[object.nameSingular] = async (
       _parent,
@@ -202,6 +259,7 @@ export const buildResolvers = (bundle: DataSourceBundle) => {
         page.records,
         page.pageInfo,
         page.totalCount,
+        args.filter ?? null,
       );
     };
 

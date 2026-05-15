@@ -191,19 +191,19 @@ input CurrencyFilter {
   currencyCode: SelectFilter
 }
 
-# Composite output types
-type LinksMetadata {
+# Composite output types — typenames match Twenty's wire format.
+type Links {
   primaryLinkUrl: String
   primaryLinkLabel: String
   secondaryLinks: JSON
 }
 
-type FullNameMetadata {
+type FullName {
   firstName: String
   lastName: String
 }
 
-type AddressMetadata {
+type Address {
   addressStreet1: String
   addressStreet2: String
   addressCity: String
@@ -214,30 +214,30 @@ type AddressMetadata {
   addressLng: Float
 }
 
-type ActorMetadata {
+type Actor {
   source: String
   workspaceMemberId: UUID
   name: String
   context: JSON
 }
 
-type EmailsMetadata {
+type Emails {
   primaryEmail: String
   additionalEmails: JSON
 }
 
-type PhonesMetadata {
+type Phones {
   primaryPhoneNumber: String
   primaryPhoneCallingCode: String
   additionalPhones: JSON
 }
 
-type CurrencyMetadata {
+type Currency {
   amountMicros: Float
   currencyCode: String
 }
 
-type RichTextMetadata {
+type RichText {
   blocknote: String
   markdown: String
 }
@@ -378,17 +378,17 @@ const FIELD_TO_OUTPUT_TYPE: Partial<Record<FieldMetadataType, string>> = {
   [FieldMetadataType.RATING]: 'String',
   [FieldMetadataType.POSITION]: 'Float',
   [FieldMetadataType.RAW_JSON]: 'JSON',
-  [FieldMetadataType.RICH_TEXT]: 'RichTextMetadata',
+  [FieldMetadataType.RICH_TEXT]: 'RichText',
   [FieldMetadataType.ARRAY]: '[String!]',
   [FieldMetadataType.FILES]: 'JSON',
   [FieldMetadataType.TS_VECTOR]: 'String',
-  [FieldMetadataType.ADDRESS]: 'AddressMetadata',
-  [FieldMetadataType.FULL_NAME]: 'FullNameMetadata',
-  [FieldMetadataType.LINKS]: 'LinksMetadata',
-  [FieldMetadataType.ACTOR]: 'ActorMetadata',
-  [FieldMetadataType.EMAILS]: 'EmailsMetadata',
-  [FieldMetadataType.PHONES]: 'PhonesMetadata',
-  [FieldMetadataType.CURRENCY]: 'CurrencyMetadata',
+  [FieldMetadataType.ADDRESS]: 'Address',
+  [FieldMetadataType.FULL_NAME]: 'FullName',
+  [FieldMetadataType.LINKS]: 'Links',
+  [FieldMetadataType.ACTOR]: 'Actor',
+  [FieldMetadataType.EMAILS]: 'Emails',
+  [FieldMetadataType.PHONES]: 'Phones',
+  [FieldMetadataType.CURRENCY]: 'Currency',
 };
 
 const FIELD_TO_INPUT_TYPE: Partial<Record<FieldMetadataType, string>> = {
@@ -440,6 +440,17 @@ const FIELD_TO_COMPOSITE_ORDER_BY: Partial<Record<FieldMetadataType, string>> =
 
 const joinColumnName = (field: DataSourceField) => `${field.name}Id`;
 
+// Morph relations expose one join column per target (e.g. `targetCompanyId`,
+// `targetPersonId`) named `<fieldName><CapitalizedTargetObjectName>Id`. This
+// mirrors how Twenty's real backend explodes morph relations in GraphQL.
+const morphJoinColumnNames = (field: DataSourceField): string[] => {
+  if (field.type !== FieldMetadataType.MORPH_RELATION) return [];
+  return (field.morphRelations ?? []).map(
+    (relation) =>
+      `${field.name}${capitalize(relation.targetObjectNameSingular)}Id`,
+  );
+};
+
 const enumName = (object: DataSourceObject, field: DataSourceField) =>
   `${capitalize(object.nameSingular)}${capitalize(field.name)}Enum`;
 
@@ -449,6 +460,83 @@ const isSelectField = (field: DataSourceField) =>
 
 const isCompositeField = (field: DataSourceField) =>
   field.type in FIELD_TO_COMPOSITE_ORDER_BY;
+
+const isHiddenSystemField = (field: DataSourceField): boolean => {
+  if (field.isSystem !== true) return false;
+  // Match Twenty's `isHiddenSystemField` — `id`/`createdAt`/`updatedAt`/
+  // `deletedAt`/`position` are system but still queryable for aggregates.
+  const queryableSystemFields = new Set([
+    'id',
+    'createdAt',
+    'updatedAt',
+    'deletedAt',
+    'position',
+  ]);
+  return !queryableSystemFields.has(field.name);
+};
+
+// Mirrors `getAvailableAggregationsFromObjectFields` on the frontend: per-field
+// aggregate names emitted onto each Connection type so Apollo's normalized
+// cache can read them. Twenty's real backend exposes the same set, so the
+// SchemaLink schema needs to match 1:1.
+//
+// Returns a Map keyed by aggregate field name (e.g. `maxEmployees`) with the
+// GraphQL type (e.g. `Float`) as value, so both SDL emission and resolver
+// registration can iterate over the same shape.
+export const getAggregateFieldsForObject = (
+  object: DataSourceObject,
+): Map<string, string> => {
+  const aggregateFields = new Map<string, string>();
+  aggregateFields.set('totalCount', 'Int!');
+
+  for (const field of object.fields) {
+    if (!field.isActive) continue;
+    if (isHiddenSystemField(field)) continue;
+    if (field.type === FieldMetadataType.MORPH_RELATION) continue;
+    if (field.type === FieldMetadataType.RELATION) continue;
+
+    const capitalizedName = capitalize(field.name);
+    aggregateFields.set(`countUniqueValues${capitalizedName}`, 'Float');
+    aggregateFields.set(`countEmpty${capitalizedName}`, 'Float');
+    aggregateFields.set(`countNotEmpty${capitalizedName}`, 'Float');
+    aggregateFields.set(`percentageEmpty${capitalizedName}`, 'Float');
+    aggregateFields.set(`percentageNotEmpty${capitalizedName}`, 'Float');
+
+    if (field.type === FieldMetadataType.NUMBER) {
+      aggregateFields.set(`min${capitalizedName}`, 'Float');
+      aggregateFields.set(`max${capitalizedName}`, 'Float');
+      aggregateFields.set(`avg${capitalizedName}`, 'Float');
+      aggregateFields.set(`sum${capitalizedName}`, 'Float');
+    }
+
+    if (field.type === FieldMetadataType.CURRENCY) {
+      aggregateFields.set(`min${capitalizedName}AmountMicros`, 'Float');
+      aggregateFields.set(`max${capitalizedName}AmountMicros`, 'Float');
+      aggregateFields.set(`avg${capitalizedName}AmountMicros`, 'Float');
+      aggregateFields.set(`sum${capitalizedName}AmountMicros`, 'Float');
+    }
+
+    if (field.type === FieldMetadataType.BOOLEAN) {
+      aggregateFields.set(`countTrue${capitalizedName}`, 'Float');
+      aggregateFields.set(`countFalse${capitalizedName}`, 'Float');
+    }
+
+    if (
+      field.type === FieldMetadataType.DATE ||
+      field.type === FieldMetadataType.DATE_TIME
+    ) {
+      aggregateFields.set(`min${capitalizedName}`, 'DateTime');
+      aggregateFields.set(`max${capitalizedName}`, 'DateTime');
+    }
+  }
+
+  return aggregateFields;
+};
+
+const renderAggregateFields = (object: DataSourceObject): string[] =>
+  [...getAggregateFieldsForObject(object).entries()].map(
+    ([name, type]) => `${name}: ${type}`,
+  );
 
 const renderEnumValues = (options: DataSourceFieldOption[]) =>
   options
@@ -477,9 +565,16 @@ const renderObjectOutput = (object: DataSourceObject): string => {
       continue;
     }
     if (field.type === FieldMetadataType.MORPH_RELATION) {
-      // Morph relations are emitted as multiple targeted fields by the
-      // frontend (`mapObjectMetadataToGraphQLQuery` expands them per target).
-      // Skip from SDL for now; resolvers handle the dynamic field names.
+      // Per-target join columns (e.g. `targetCompanyId: UUID`). The
+      // `targetCompany` object itself is also fetched per target, with the
+      // target type matching each morphRelation's targetObjectMetadata.
+      for (const relation of field.morphRelations ?? []) {
+        const target = capitalize(relation.targetObjectNameSingular);
+        fields.push(
+          `${field.name}${target}: ${target}`,
+          `${field.name}${target}Id: UUID`,
+        );
+      }
       continue;
     }
 
@@ -497,7 +592,14 @@ const renderObjectOutput = (object: DataSourceObject): string => {
     fields.push(`${field.name}: ${scalarType}${nullable}`);
   }
 
-  return `type ${typeName} {\n${indent(fields)}\n}\n\ntype ${typeName}Edge {\n  node: ${typeName}!\n  cursor: String\n}\n\ntype ${typeName}Connection {\n  edges: [${typeName}Edge!]!\n  pageInfo: PageInfo!\n  totalCount: Int!\n}`;
+  const aggregateFields = renderAggregateFields(object);
+  const connectionFields = [
+    `edges: [${typeName}Edge!]!`,
+    `pageInfo: PageInfo!`,
+    ...aggregateFields,
+  ];
+
+  return `type ${typeName} {\n${indent(fields)}\n}\n\ntype ${typeName}Edge {\n  node: ${typeName}!\n  cursor: String\n}\n\ntype ${typeName}Connection {\n${indent(connectionFields)}\n}`;
 };
 
 const renderFilterInput = (object: DataSourceObject): string => {
@@ -513,11 +615,19 @@ const renderFilterInput = (object: DataSourceObject): string => {
     if (field.type === FieldMetadataType.RELATION) {
       if (!field.relation) continue;
       if (field.relation.type === RelationType.MANY_TO_ONE) {
-        fields.push(`${joinColumnName(field)}: RelationFilter`);
+        // Join columns accept full UUID filters (`eq`, `in`, `neq`, `is`) on
+        // Twenty's real backend. RelationFilter is intentionally narrower for
+        // first-class relation fields, but the join column is a plain UUID.
+        fields.push(`${joinColumnName(field)}: UUIDFilter`);
       }
       continue;
     }
-    if (field.type === FieldMetadataType.MORPH_RELATION) continue;
+    if (field.type === FieldMetadataType.MORPH_RELATION) {
+      for (const joinColumn of morphJoinColumnNames(field)) {
+        fields.push(`${joinColumn}: UUIDFilter`);
+      }
+      continue;
+    }
     if (isSelectField(field)) {
       fields.push(
         `${field.name}: ${
@@ -549,7 +659,12 @@ const renderOrderByInput = (object: DataSourceObject): string => {
       }
       continue;
     }
-    if (field.type === FieldMetadataType.MORPH_RELATION) continue;
+    if (field.type === FieldMetadataType.MORPH_RELATION) {
+      for (const joinColumn of morphJoinColumnNames(field)) {
+        fields.push(`${joinColumn}: OrderBy`);
+      }
+      continue;
+    }
     if (isCompositeField(field)) {
       const composite = FIELD_TO_COMPOSITE_ORDER_BY[field.type];
       if (!composite) continue;
@@ -579,7 +694,12 @@ const renderInput = (
       }
       continue;
     }
-    if (field.type === FieldMetadataType.MORPH_RELATION) continue;
+    if (field.type === FieldMetadataType.MORPH_RELATION) {
+      for (const joinColumn of morphJoinColumnNames(field)) {
+        fields.push(`${joinColumn}: UUID`);
+      }
+      continue;
+    }
     if (isSelectField(field)) {
       const eName = enumName(object, field);
       fields.push(

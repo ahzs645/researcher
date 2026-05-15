@@ -36,5 +36,5 @@ export { computeSearch } from './utils/computeSearch';
 export { encodeCursor, decodeCursor } from './utils/cursor';
 export { filterToPredicate } from './utils/filterToPredicate';
 export { generateConvexSchema } from './utils/generateConvexSchema';
-export { generateSdl } from './utils/generateSdl';
+export { getAggregateFieldsForObject, generateSdl } from './utils/generateSdl';
 export { orderByToComparator } from './utils/orderByToComparator';

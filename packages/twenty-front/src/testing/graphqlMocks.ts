@@ -165,7 +165,7 @@ export const graphqlSystemMocks = {
     graphql.mutation(getOperationName(TRACK_ANALYTICS) ?? '', () => {
       return HttpResponse.json({
         data: {
-          track: { success: 1, __typename: 'TRACK_ANALYTICS' },
+          trackAnalytics: { __typename: 'Analytics', success: true },
         },
       });
     }),

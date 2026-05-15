@@ -1,26 +1,17 @@
-import { graphql, http, HttpResponse } from 'msw';
+import { http, HttpResponse } from 'msw';
 
-import {
-  graphqlRecordMocks,
-  graphqlSystemMocks,
-  metadataGraphql,
-} from '~/testing/graphqlMocks';
-import { mockedClientConfig } from '~/testing/mock-data/config';
-import { mockedPublicWorkspaceDataBySubdomain } from '~/testing/mock-data/publicWorkspaceDataBySubdomain';
-import { mockedUserData } from '~/testing/mock-data/users';
+import { bridgeClientConfig } from '@/local-db/data-source/bridgeMetadataMockLink';
 import { REACT_APP_SERVER_BASE_URL } from '~/config';
 
-// Bridge MSW handlers, narrowed to the metadata + auxiliary endpoints that
-// don't flow through the executable schema / SchemaLink. Record-level data
-// (FindMany<Object>, CreateOne<Object>, etc.) is now served by the Apollo
-// core client wired to a Dexie DataSource via `BridgeApolloCoreProvider`.
+// Bridge MSW handlers narrowed to plain HTTP fetches that the GraphQL Apollo
+// Link can't handle: file proxies, icons, and the `/client-config` REST
+// endpoint that fires before Apollo is even constructed.
 //
-// Anything in here is fair game to remove once the metadata Apollo client
-// also routes through the executable schema.
-
+// All GraphQL operations are now short-circuited in-process by
+// `bridgeMetadataMockLink` (metadata client) and the SchemaLink-backed
+// executable schema (records client). No GraphQL handler should live here.
 export const localTwentyGraphqlMocks = {
   handlers: [
-    // Static file proxies — Twenty's UI hits these for avatars / attachments.
     http.get(`${REACT_APP_SERVER_BASE_URL}/files/*`, () => {
       return new HttpResponse(null, { status: 204 });
     }),
@@ -30,82 +21,14 @@ export const localTwentyGraphqlMocks = {
     http.get('https://twenty-icons.com/*', () => {
       return new HttpResponse(null, { status: 204 });
     }),
-    // Client config — frontend depends on this before anything else mounts.
     http.get(`${REACT_APP_SERVER_BASE_URL}/client-config`, () => {
-      return HttpResponse.json({
-        ...mockedClientConfig,
-        sentry: {
-          dsn: null,
-          release: null,
-          environment: null,
-        },
-      });
+      return HttpResponse.json(bridgeClientConfig);
     }),
-    // Bridge-mode workspace metadata: serve the public workspace data and the
-    // current user / connected accounts directly without going through any
-    // real backend.
-    metadataGraphql.query('GetPublicWorkspaceDataByDomain', () => {
-      return HttpResponse.json({
-        data: {
-          getPublicWorkspaceDataByDomain: {
-            ...mockedPublicWorkspaceDataBySubdomain,
-            logo: null,
-          },
-        },
-      });
+    http.get('https://chat-assets.frontapp.com/v1/chat.bundle.js', () => {
+      return HttpResponse.text(
+        `window.FrontChat = () => {};`,
+        { status: 200 },
+      );
     }),
-    graphql.query('GetCurrentUser', () => {
-      return HttpResponse.json({
-        data: {
-          currentUser: {
-            ...mockedUserData,
-            currentWorkspace: {
-              ...mockedUserData.currentWorkspace,
-              logo: null,
-            },
-          },
-        },
-      });
-    }),
-    graphql.query('FindOneWorkspaceMember', () => {
-      return HttpResponse.json({
-        data: {
-          workspaceMember: null,
-        },
-      });
-    }),
-    metadataGraphql.query('MyConnectedAccounts', () => {
-      return HttpResponse.json({
-        data: {
-          myConnectedAccounts: [],
-        },
-      });
-    }),
-    metadataGraphql.query('MyMessageChannels', () => {
-      return HttpResponse.json({
-        data: {
-          myMessageChannels: [],
-        },
-      });
-    }),
-    metadataGraphql.query('MyCalendarChannels', () => {
-      return HttpResponse.json({
-        data: {
-          myCalendarChannels: [],
-        },
-      });
-    }),
-    metadataGraphql.query('FindManyFrontComponents', () => {
-      return HttpResponse.json({
-        data: {
-          frontComponents: [],
-        },
-      });
-    }),
-    // System + record mocks reused from twenty-front's storybook setup. Most
-    // of these will be replaced once the metadata Apollo client also routes
-    // through the executable schema.
-    ...graphqlSystemMocks.handlers,
-    ...graphqlRecordMocks.handlers,
   ],
 };

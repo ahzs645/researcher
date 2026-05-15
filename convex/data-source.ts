@@ -18,6 +18,7 @@ import {
   filterToPredicate,
   orderByToComparator,
   scopeFilterByContext,
+  tryBuildConvexFilter,
   type DataSourceContext,
   type DataSourceFindManyArgs,
   type DataSourceFindOneArgs,
@@ -48,28 +49,50 @@ const includesDeletedClause = (
 
 // Convex's typed db interface unions only known table names; cast to `never`
 // to keep the generic dispatch readable.
-const collect = async (
-  ctx: {
-    db: {
-      query: (name: TableName) => {
-        collect: () => Promise<DataSourceRecord[]>;
-      };
+type ConvexQueryCtx = {
+  db: {
+    query: (name: TableName) => {
+      filter: (
+        callback: (q: unknown) => unknown,
+      ) => { collect: () => Promise<DataSourceRecord[]> };
+      collect: () => Promise<DataSourceRecord[]>;
     };
-  },
-  objectName: TableName,
-): Promise<DataSourceRecord[]> => {
-  return ctx.db.query(objectName as never).collect();
+  };
 };
 
 const fetchRecords = async (
-  ctx: Parameters<typeof collect>[0],
+  ctx: ConvexQueryCtx,
   objectName: TableName,
   filter: RecordGqlOperationFilter | null | undefined,
   context: DataSourceContext,
 ): Promise<DataSourceRecord[]> => {
   const scopedFilter = scopeFilterByContext(filter, context);
-  const all = await collect(ctx, objectName);
   const showDeleted = includesDeletedClause(scopedFilter ?? undefined);
+
+  // Compose a single filter that includes the soft-delete guard alongside the
+  // user-supplied filter, so the native translator can push both down to
+  // Convex when possible.
+  const composedFilter: RecordGqlOperationFilter | null = showDeleted
+    ? (scopedFilter ?? null)
+    : ({
+        and: [
+          ...(scopedFilter ? [scopedFilter] : []),
+          { deletedAt: { is: 'NULL' } },
+        ],
+      } as RecordGqlOperationFilter);
+
+  const nativeBuilder = tryBuildConvexFilter(composedFilter);
+  if (nativeBuilder !== null) {
+    // Whole filter translated — Convex evaluates predicates server-side.
+    return ctx.db
+      .query(objectName as never)
+      .filter((q) => nativeBuilder(q as never))
+      .collect();
+  }
+
+  // Fall back: collect everything, then evaluate predicates in JS. Reused for
+  // unsupported operators (ilike/regex/containsAny/etc.) and composite drills.
+  const all = await ctx.db.query(objectName as never).collect();
   const visible = showDeleted
     ? all
     : all.filter(
@@ -80,7 +103,7 @@ const fetchRecords = async (
 };
 
 const findMany = async (
-  ctx: Parameters<typeof collect>[0],
+  ctx: ConvexQueryCtx,
   objectName: TableName,
   args: DataSourceFindManyArgs,
   context: DataSourceContext,
@@ -115,7 +138,7 @@ const findMany = async (
 };
 
 const findOne = async (
-  ctx: Parameters<typeof collect>[0],
+  ctx: ConvexQueryCtx,
   objectName: TableName,
   args: DataSourceFindOneArgs,
   context: DataSourceContext,
@@ -125,17 +148,20 @@ const findOne = async (
 };
 
 const lookupOne = async (
-  ctx: {
-    db: {
-      query: (name: TableName) => {
-        collect: () => Promise<DataSourceRecord[]>;
-      };
-    };
-  },
+  ctx: ConvexQueryCtx,
   objectName: TableName,
   id: string,
 ): Promise<DataSourceRecord | undefined> => {
-  const all = await collect(ctx, objectName);
+  const idFilter = { id: { eq: id } } as RecordGqlOperationFilter;
+  const native = tryBuildConvexFilter(idFilter);
+  if (native !== null) {
+    const matches = await ctx.db
+      .query(objectName as never)
+      .filter((q) => native(q as never))
+      .collect();
+    return matches[0];
+  }
+  const all = await ctx.db.query(objectName as never).collect();
   return all.find((record) => record.id === id);
 };
 

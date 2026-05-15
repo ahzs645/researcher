@@ -15,6 +15,7 @@ import { MainContextStoreProvider } from '@/context-store/components/MainContext
 import { ErrorMessageEffect } from '@/error-handler/components/ErrorMessageEffect';
 import { PromiseRejectionEffect } from '@/error-handler/components/PromiseRejectionEffect';
 import { BridgeApolloCoreProvider } from '@/local-db/data-source/BridgeApolloCoreProvider';
+import { BridgeApolloMetadataProvider } from '@/local-db/data-source/BridgeApolloMetadataProvider';
 import { ConvexBridgeConfigError } from '@/local-db/twenty-local/ConvexBridgeConfigError';
 import {
   getTwentyDataBridgeConfig,
@@ -57,6 +58,19 @@ const BridgeOrCoreApolloProvider = ({
     <ApolloCoreProvider>{children}</ApolloCoreProvider>
   );
 
+const BridgeOrCoreApolloMetadataProvider = ({
+  isBridgeMode,
+  children,
+}: {
+  isBridgeMode: boolean;
+  children: React.ReactNode;
+}) =>
+  isBridgeMode ? (
+    <BridgeApolloMetadataProvider>{children}</BridgeApolloMetadataProvider>
+  ) : (
+    <ApolloProvider>{children}</ApolloProvider>
+  );
+
 export const AppRouterProviders = () => {
   const { pathname } = useLocation();
   const pageTitle = getPageTitleFromPath(pathname);
@@ -77,7 +91,7 @@ export const AppRouterProviders = () => {
     : SSEProvider;
 
   return (
-    <ApolloProvider>
+    <BridgeOrCoreApolloMetadataProvider isBridgeMode={isBridgeMode}>
       <BaseThemeProvider>
         <ClientConfigProviderEffect />
         <UserMetadataProviderInitialEffect />
@@ -133,6 +147,6 @@ export const AppRouterProviders = () => {
           </CaptchaProvider>
         </ClientConfigProvider>
       </BaseThemeProvider>
-    </ApolloProvider>
+    </BridgeOrCoreApolloMetadataProvider>
   );
 };

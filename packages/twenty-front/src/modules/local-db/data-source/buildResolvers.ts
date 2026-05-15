@@ -1,0 +1,311 @@
+import { type GraphQLFieldResolver } from 'graphql';
+
+import {
+  type DataSource,
+  type DataSourceBundle,
+  type DataSourceContext,
+  type DataSourceObject,
+  type DataSourceRecord,
+  encodeCursor,
+} from 'twenty-shared/data-source';
+import {
+  FieldMetadataType,
+  type RecordGqlOperationFilter,
+  RelationType,
+} from 'twenty-shared/types';
+
+import { customScalarResolvers } from './customScalars';
+
+// Build Apollo-compatible resolvers from a DataSourceBundle.
+// One resolver per templated operation (Query.<nameSingular>,
+// Query.<namePlural>, Mutation.create<NameSingular>, …) that delegates to
+// the supplied DataSource. Everything dynamic (filter shape, field
+// selection, connection wrapping) is handled here so adapters stay simple.
+
+type ResolverContext = {
+  dataSource: DataSource;
+  dataSourceContext?: DataSourceContext;
+};
+
+type GenericResolver = GraphQLFieldResolver<unknown, ResolverContext>;
+
+const capitalize = (str: string) =>
+  str.length === 0 ? str : str[0].toUpperCase() + str.slice(1);
+
+const TYPENAME_BY_OBJECT = new Map<string, string>();
+
+const typenameFor = (object: DataSourceObject): string =>
+  TYPENAME_BY_OBJECT.get(object.nameSingular) ??
+  TYPENAME_BY_OBJECT.set(
+    object.nameSingular,
+    capitalize(object.nameSingular),
+  ).get(object.nameSingular)!;
+
+const decorateRecord = (
+  object: DataSourceObject,
+  record: DataSourceRecord | null,
+): (DataSourceRecord & { __typename: string }) | null => {
+  if (!record) return null;
+  return { __typename: typenameFor(object), ...record };
+};
+
+const wrapAsConnection = (
+  object: DataSourceObject,
+  records: DataSourceRecord[],
+  pageInfo: {
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+    startCursor: string | null;
+    endCursor: string | null;
+  },
+  totalCount: number,
+) => ({
+  __typename: `${typenameFor(object)}Connection`,
+  edges: records.map((record, index) => ({
+    __typename: `${typenameFor(object)}Edge`,
+    node: decorateRecord(object, record),
+    cursor: pageInfo.startCursor ? encodeCursor(index) : null,
+  })),
+  pageInfo: { __typename: 'PageInfo', ...pageInfo },
+  totalCount,
+});
+
+const objectFieldResolvers = (
+  bundle: DataSourceBundle,
+  object: DataSourceObject,
+): Record<string, GenericResolver> => {
+  const resolvers: Record<string, GenericResolver> = {};
+
+  for (const field of object.fields) {
+    if (!field.isActive) continue;
+    if (field.type === FieldMetadataType.RELATION) {
+      const relation = field.relation;
+      if (!relation) continue;
+      const target = bundle.objectsByNameSingular.get(
+        relation.targetObjectNameSingular,
+      );
+      if (!target) continue;
+      const isManyToOne = relation.type === RelationType.MANY_TO_ONE;
+      if (isManyToOne) {
+        // Object reference field: `accountOwner` resolves to a Person looked
+        // up via the join column `accountOwnerId`.
+        resolvers[field.name] = async (parent, _args, context) => {
+          const joinColumn = `${field.name}Id`;
+          const targetId = (parent as Record<string, unknown>)[joinColumn];
+          if (typeof targetId !== 'string') return null;
+          const found = await context.dataSource.findOne(
+            target.nameSingular,
+            {
+              filter: { id: { eq: targetId } } as RecordGqlOperationFilter,
+            },
+            context.dataSourceContext ?? {},
+          );
+          return decorateRecord(target, found);
+        };
+      } else {
+        // One-to-many: `companies` on Person resolves to a Connection of
+        // Company records whose `accountOwnerId` matches this record's id.
+        const reverseJoinColumn = `${relation.targetFieldName}Id`;
+        resolvers[field.name] = async (parent, _args, context) => {
+          const parentId = (parent as Record<string, unknown>).id;
+          if (typeof parentId !== 'string') {
+            return wrapAsConnection(
+              target,
+              [],
+              {
+                hasNextPage: false,
+                hasPreviousPage: false,
+                startCursor: null,
+                endCursor: null,
+              },
+              0,
+            );
+          }
+          const page = await context.dataSource.findMany(
+            target.nameSingular,
+            {
+              filter: {
+                [reverseJoinColumn]: { eq: parentId },
+              } as RecordGqlOperationFilter,
+            },
+            context.dataSourceContext ?? {},
+          );
+          return wrapAsConnection(
+            target,
+            page.records,
+            page.pageInfo,
+            page.totalCount,
+          );
+        };
+      }
+    }
+  }
+
+  return resolvers;
+};
+
+export const buildResolvers = (bundle: DataSourceBundle) => {
+  const queryResolvers: Record<string, GenericResolver> = {};
+  const mutationResolvers: Record<string, GenericResolver> = {};
+  const typeResolvers: Record<string, Record<string, GenericResolver>> = {};
+
+  for (const object of bundle.objects.filter((object) => object.isActive)) {
+    const typeName = typenameFor(object);
+    const fieldResolvers = objectFieldResolvers(bundle, object);
+    if (Object.keys(fieldResolvers).length > 0) {
+      typeResolvers[typeName] = fieldResolvers;
+    }
+
+    // Query.<nameSingular>
+    queryResolvers[object.nameSingular] = async (
+      _parent,
+      args: { filter?: RecordGqlOperationFilter | null },
+      context,
+    ) => {
+      const found = await context.dataSource.findOne(
+        object.nameSingular,
+        { filter: args.filter ?? ({} as RecordGqlOperationFilter) },
+        context.dataSourceContext ?? {},
+      );
+      return decorateRecord(object, found);
+    };
+
+    // Query.<namePlural>
+    queryResolvers[object.namePlural] = async (
+      _parent,
+      args: {
+        filter?: RecordGqlOperationFilter | null;
+        orderBy?: unknown;
+        first?: number;
+        after?: string;
+        last?: number;
+        before?: string;
+        offset?: number;
+      },
+      context,
+    ) => {
+      const page = await context.dataSource.findMany(
+        object.nameSingular,
+        {
+          filter: args.filter ?? null,
+          orderBy: (args.orderBy as never) ?? null,
+          first: args.first ?? null,
+          after: args.after ?? null,
+          last: args.last ?? null,
+          before: args.before ?? null,
+          offset: args.offset ?? null,
+        },
+        context.dataSourceContext ?? {},
+      );
+      return wrapAsConnection(
+        object,
+        page.records,
+        page.pageInfo,
+        page.totalCount,
+      );
+    };
+
+    // Query.<nameSingular>Duplicates
+    queryResolvers[`${object.nameSingular}Duplicates`] = async (
+      _parent,
+      args: { ids: string[] },
+      context,
+    ) => {
+      const page = await context.dataSource.findDuplicates(
+        object.nameSingular,
+        args.ids,
+        context.dataSourceContext ?? {},
+      );
+      return wrapAsConnection(
+        object,
+        page.records,
+        page.pageInfo,
+        page.totalCount,
+      );
+    };
+
+    // Mutation.create<NameSingular>
+    mutationResolvers[`create${capitalize(object.nameSingular)}`] = async (
+      _parent,
+      args: { data: Record<string, unknown> },
+      context,
+    ) => {
+      const record = await context.dataSource.createOne(
+        object.nameSingular,
+        args.data,
+        context.dataSourceContext ?? {},
+      );
+      return decorateRecord(object, record);
+    };
+
+    // Mutation.update<NameSingular>
+    mutationResolvers[`update${capitalize(object.nameSingular)}`] = async (
+      _parent,
+      args: { id: string; data: Record<string, unknown> },
+      context,
+    ) => {
+      const record = await context.dataSource.updateOne(
+        object.nameSingular,
+        args.id,
+        args.data,
+        context.dataSourceContext ?? {},
+      );
+      return decorateRecord(object, record);
+    };
+
+    // Mutation.delete<NameSingular>
+    mutationResolvers[`delete${capitalize(object.nameSingular)}`] = async (
+      _parent,
+      args: { id: string },
+      context,
+    ) => {
+      const record = await context.dataSource.deleteOne(
+        object.nameSingular,
+        args.id,
+        context.dataSourceContext ?? {},
+      );
+      return decorateRecord(object, record);
+    };
+
+    // Mutation.destroy<NameSingular>
+    mutationResolvers[`destroy${capitalize(object.nameSingular)}`] = async (
+      _parent,
+      args: { id: string },
+      context,
+    ) => {
+      return await context.dataSource.destroyOne(
+        object.nameSingular,
+        args.id,
+        context.dataSourceContext ?? {},
+      );
+    };
+
+    // Mutation.restore<NamePlural>
+    mutationResolvers[`restore${capitalize(object.namePlural)}`] = async (
+      _parent,
+      args: { filter: RecordGqlOperationFilter },
+      context,
+    ) => {
+      return await context.dataSource.restoreMany(
+        object.nameSingular,
+        { filter: args.filter },
+        context.dataSourceContext ?? {},
+      );
+    };
+  }
+
+  // Cross-object search
+  queryResolvers.search = (async (_parent, args, context) => {
+    return await context.dataSource.search(
+      args as never,
+      context.dataSourceContext ?? {},
+    );
+  }) as GenericResolver;
+
+  return {
+    ...customScalarResolvers,
+    Query: queryResolvers,
+    Mutation: mutationResolvers,
+    ...typeResolvers,
+  };
+};

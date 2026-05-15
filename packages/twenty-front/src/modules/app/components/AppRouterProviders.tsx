@@ -14,6 +14,7 @@ import { ClientConfigProviderEffect } from '@/client-config/components/ClientCon
 import { MainContextStoreProvider } from '@/context-store/components/MainContextStoreProvider';
 import { ErrorMessageEffect } from '@/error-handler/components/ErrorMessageEffect';
 import { PromiseRejectionEffect } from '@/error-handler/components/PromiseRejectionEffect';
+import { BridgeApolloCoreProvider } from '@/local-db/data-source/BridgeApolloCoreProvider';
 import { ConvexBridgeConfigError } from '@/local-db/twenty-local/ConvexBridgeConfigError';
 import {
   getTwentyDataBridgeConfig,
@@ -21,7 +22,6 @@ import {
 } from '@/local-db/twenty-local/getTwentyDataBridgeConfig';
 import { isTwentyDataBridgeMode } from '@/local-db/twenty-local/isLocalTwentyDataMode';
 import { LocalTwentyBridgeMetadataLoadEffect } from '@/local-db/twenty-local/LocalTwentyBridgeMetadataLoadEffect';
-import { LocalTwentyBridgeRecordEffects } from '@/local-db/twenty-local/LocalTwentyBridgeRecordEffects';
 import { MinimalMetadataLoadEffect } from '@/metadata-store/effect-components/MinimalMetadataLoadEffect';
 import { UserMetadataProviderInitialEffect } from '@/metadata-store/effect-components/UserMetadataProviderInitialEffect';
 import { ApolloCoreProvider } from '@/object-metadata/components/ApolloCoreProvider';
@@ -43,6 +43,19 @@ import { WorkspaceProviderEffect } from '@/workspace/components/WorkspaceProvide
 import { StrictMode } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { getPageTitleFromPath } from '~/utils/title-utils';
+
+const BridgeOrCoreApolloProvider = ({
+  isBridgeMode,
+  children,
+}: {
+  isBridgeMode: boolean;
+  children: React.ReactNode;
+}) =>
+  isBridgeMode ? (
+    <BridgeApolloCoreProvider>{children}</BridgeApolloCoreProvider>
+  ) : (
+    <ApolloCoreProvider>{children}</ApolloCoreProvider>
+  );
 
 export const AppRouterProviders = () => {
   const { pathname } = useLocation();
@@ -81,7 +94,7 @@ export const AppRouterProviders = () => {
           <CaptchaProvider>
             <MinimalMetadataGater>
               <AuthProvider>
-                <ApolloCoreProvider>
+                <BridgeOrCoreApolloProvider isBridgeMode={isBridgeMode}>
                   <ApolloAdminProvider>
                     <MaybeSSEProvider>
                       <PreComputedChipGeneratorsProvider>
@@ -98,9 +111,6 @@ export const AppRouterProviders = () => {
                                   <GotoHotkeysEffectsProvider />
                                   <PageTitle title={pageTitle} />
                                   <PageFavicon />
-                                  {isBridgeMode ? (
-                                    <LocalTwentyBridgeRecordEffects />
-                                  ) : null}
                                   <Outlet />
                                   <GlobalFilePreviewModal />
                                   <CommandMenuConfirmationModalManager />
@@ -117,7 +127,7 @@ export const AppRouterProviders = () => {
                       </PreComputedChipGeneratorsProvider>
                     </MaybeSSEProvider>
                   </ApolloAdminProvider>
-                </ApolloCoreProvider>
+                </BridgeOrCoreApolloProvider>
               </AuthProvider>
             </MinimalMetadataGater>
           </CaptchaProvider>

@@ -63,6 +63,10 @@ export interface Options {
   extraLinks?: ApolloLink[];
   isDebugMode?: boolean;
   appVersion?: string;
+  // When set, replaces the HTTP terminating link (REST + upload) with the
+  // provided link. Used by the bridge to mount Apollo on an in-process
+  // executable schema via SchemaLink, so no real network transport is needed.
+  terminatingLink?: ApolloLink;
 }
 
 export class ApolloFactory implements ApolloManager {
@@ -89,6 +93,7 @@ export class ApolloFactory implements ApolloManager {
       extraLinks,
       isDebugMode,
       appVersion,
+      terminatingLink,
     } = opts;
 
     this.currentWorkspaceMember = currentWorkspaceMember;
@@ -342,16 +347,23 @@ export class ApolloFactory implements ApolloManager {
 
       // Type assertion needed because third-party link packages (apollo-link-rest,
       // apollo-upload-client) reference their own @apollo/client ApolloLink type
-      const links = [
-        errorLink,
-        authLink,
-        ...(extraLinks || []),
-        ...(isDebugMode ? [logger] : []),
-        retryLink,
-        streamingRestLink,
-        restLink,
-        uploadLink,
-      ] as ApolloLink[];
+      const links = (
+        terminatingLink !== undefined
+          ? // SchemaLink (or similar in-process transport): skip REST + upload
+            // links and the retry/auth chain, since the terminating link
+            // resolves operations against a local schema synchronously.
+            [errorLink, ...(extraLinks || []), terminatingLink]
+          : [
+              errorLink,
+              authLink,
+              ...(extraLinks || []),
+              ...(isDebugMode ? [logger] : []),
+              retryLink,
+              streamingRestLink,
+              restLink,
+              uploadLink,
+            ]
+      ) as ApolloLink[];
 
       return ApolloLink.from(links);
     };

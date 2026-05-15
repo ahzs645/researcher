@@ -23,13 +23,16 @@ const renderApp = async () => {
       { startLocalTwentyWorker },
       { seedTwentyBridgeAuthState },
       { getTwentyLocalObjectRoutePath, defaultTwentyLocalObjectConfig },
+      { ensureBridgeDataSourceSeeded },
     ] = await Promise.all([
       import('@/local-db/twenty-local/startLocalTwentyWorker'),
       import('@/local-db/twenty-local/seedTwentyBridgeAuthState'),
       import('@/local-db/twenty-local/twentyLocalObjectConfigs'),
+      import('@/local-db/data-source/buildBridgeDataSource'),
     ]);
 
     seedTwentyBridgeAuthState();
+    await ensureBridgeDataSourceSeeded();
     await startLocalTwentyWorker();
 
     const isBridgeIndexPath =

@@ -1,9 +1,11 @@
-import { type AppDataMode } from '@/local-db/createDataClient';
 import { getTwentyConvexUrl } from '@/local-db/twenty-local/getTwentyConvexUrl';
-import { getTwentyDataMode } from '@/local-db/twenty-local/isLocalTwentyDataMode';
+import {
+  getTwentyDataMode,
+  type TwentyDataBridgeMode,
+} from '@/local-db/twenty-local/isLocalTwentyDataMode';
 
 export type TwentyDataBridgeConfig = {
-  mode: AppDataMode;
+  mode: TwentyDataBridgeMode;
   convexUrl?: string;
 };
 

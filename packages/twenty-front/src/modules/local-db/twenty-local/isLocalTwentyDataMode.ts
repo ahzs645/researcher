@@ -1,16 +1,16 @@
-import { type AppDataMode } from '@/local-db/createDataClient';
+export type TwentyDataBridgeMode = 'local' | 'convex';
 
 const TWENTY_DATA_MODE_STORAGE_KEY = 'twenty-data-bridge-mode';
 
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
-const persistTwentyDataMode = (mode: AppDataMode) => {
+const persistTwentyDataMode = (mode: TwentyDataBridgeMode) => {
   window.sessionStorage.setItem(TWENTY_DATA_MODE_STORAGE_KEY, mode);
 
   return mode;
 };
 
-export const getTwentyDataMode = (): AppDataMode | null => {
+export const getTwentyDataMode = (): TwentyDataBridgeMode | null => {
   if (typeof window === 'undefined') {
     return null;
   }

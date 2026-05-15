@@ -1,0 +1,37 @@
+// Regenerate convex/schema.ts from the standard 33-object metadata bundle.
+// Run with: npx tsx packages/twenty-front/scripts/generate-convex-schema.ts
+//
+// The output replaces convex/schema.ts. Keep the generated file checked in so
+// Convex deployments don't depend on running this script; rerun whenever the
+// metadata source changes.
+
+import { writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+import {
+  buildDataSourceBundle,
+  generateConvexSchema,
+} from 'twenty-shared/data-source';
+
+import { mockedStandardObjectMetadataQueryResult } from '../src/testing/mock-data/generated/metadata/objects/mock-objects-metadata';
+
+const main = async () => {
+  const bundle = buildDataSourceBundle(
+    mockedStandardObjectMetadataQueryResult as never,
+  );
+  const source = generateConvexSchema(bundle);
+  const outputPath = resolve(__dirname, '../../../convex/schema.ts');
+  await writeFile(outputPath, source, 'utf8');
+  // oxlint-disable-next-line no-console
+  console.log(`Wrote ${outputPath}`);
+};
+
+main().catch((error) => {
+  // oxlint-disable-next-line no-console
+  console.error(error);
+  process.exit(1);
+});

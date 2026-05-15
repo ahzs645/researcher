@@ -80,6 +80,11 @@
       "import": "./dist/constants.mjs",
       "require": "./dist/constants.cjs"
     },
+    "./data-source": {
+      "types": "./dist/data-source/index.d.ts",
+      "import": "./dist/data-source.mjs",
+      "require": "./dist/data-source.cjs"
+    },
     "./database-events": {
       "types": "./dist/database-events/index.d.ts",
       "import": "./dist/database-events.mjs",
@@ -141,6 +146,7 @@
     "ai",
     "application",
     "constants",
+    "data-source",
     "database-events",
     "i18n",
     "logic-function",
@@ -163,6 +169,9 @@
       ],
       "constants": [
         "dist/constants/index.d.ts"
+      ],
+      "data-source": [
+        "dist/data-source/index.d.ts"
       ],
       "database-events": [
         "dist/database-events/index.d.ts"

@@ -1,5 +1,3 @@
-import { type AppDataSnapshot } from '@/local-db/domain/types';
-
 export type TwentyLocalDataMode = 'local' | 'convex';
 
 export type TwentyLocalObjectNamePlural = 'companies' | 'notes' | 'tasks';
@@ -9,7 +7,6 @@ export type TwentyLocalObjectConfig = {
   objectNameSingular: string;
   defaultViewId: string;
   preferredFieldNames: readonly string[];
-  shouldSeedSnapshot: (snapshot: AppDataSnapshot) => boolean;
 };
 
 export const twentyLocalObjectConfigs = [
@@ -24,21 +21,18 @@ export const twentyLocalObjectConfigs = [
       'tagline',
       'updatedAt',
     ],
-    shouldSeedSnapshot: (snapshot) => snapshot.projects.length === 0,
   },
   {
     objectNamePlural: 'notes',
     objectNameSingular: 'note',
     defaultViewId: 'a2e8fcd2-53c0-41e5-a433-95b00f565ca3',
     preferredFieldNames: ['title', 'bodyV2', 'updatedAt', 'createdAt'],
-    shouldSeedSnapshot: (snapshot) => snapshot.notes.length === 0,
   },
   {
     objectNamePlural: 'tasks',
     objectNameSingular: 'task',
     defaultViewId: 'a3a0aec8-388a-4147-b853-ddb75245f7fa',
     preferredFieldNames: ['title', 'status', 'bodyV2', 'updatedAt'],
-    shouldSeedSnapshot: (snapshot) => snapshot.layers.length === 0,
   },
 ] as const satisfies readonly TwentyLocalObjectConfig[];
 

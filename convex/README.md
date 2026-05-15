@@ -1,31 +1,50 @@
-# Convex data adapter
+# Convex backend (Twenty data source)
 
-This directory contains the Convex backend for the shared `AppDataClient`
-interface used by the Twenty bridge.
+Schema and HTTP actions backing `createConvexDataSource` on the frontend side.
 
-Run a Convex dev deployment:
+```
+convex/
+├── schema.ts           # 33-object schema, auto-generated from metadata
+├── data-source.ts      # Generic httpAction implementations of the DataSource
+├── http.ts             # Routes /data-source/* → data-source.ts handlers
+├── _legacy/            # Archived researcher-shaped schema (kept for history)
+└── README.md
+```
+
+## Regenerating the schema
+
+`convex/schema.ts` is generated from the standard 33-object metadata bundle.
+Run:
+
+```bash
+npx tsx packages/twenty-front/scripts/generate-convex-schema.ts
+```
+
+The script imports `mockedStandardObjectMetadataQueryResult` and writes the
+emitted SDL to `convex/schema.ts`. Commit the result so Convex deploys don't
+depend on running the script.
+
+## Running
 
 ```bash
 yarn convex:dev
 ```
 
-The Twenty frontend expects the Convex deployment URL to be exposed with the
-same prefix as the rest of this Vite app:
+The Twenty frontend then talks to Convex via the data-source HTTP actions:
 
 ```bash
 REACT_APP_DATA_MODE=convex
 VITE_CONVEX_URL=<your Convex deployment URL>
 ```
 
-Local demo mode does not need Convex:
+The frontend's `createConvexDataSource` posts a JSON body matching the
+`DataSource` method signature (e.g. `findMany`, `createOne`, `updateOne`) to
+`<convexUrl>/data-source/<method>`. Each HTTP action runs the matching logic
+against Convex's db. Filter / sort / pagination semantics are shared with the
+in-memory and Dexie adapters via `twenty-shared/data-source`.
 
-```bash
-REACT_APP_DATA_MODE=local
-```
+## Legacy schema
 
-`REACT_APP_CONVEX_URL` is also supported for consistency with the existing
-Twenty frontend environment prefix.
-
-The Convex records intentionally keep app-level IDs in `appId` fields. The
-frontend maps those app IDs to Twenty record IDs, while Convex `_id` values stay
-internal to Convex.
+`_legacy/` holds the original projects/layers/notes researcher-shape backend.
+The `_` prefix tells Convex to ignore the directory; the files are kept as
+reference for historical bridge data only.

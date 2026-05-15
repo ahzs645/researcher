@@ -32,9 +32,14 @@ export type {
 } from './types/DataSourceTypes';
 export { buildDataSourceBundle } from './utils/buildDataSourceBundle';
 export { computeAggregate } from './utils/computeAggregate';
+export { computeDuplicates } from './utils/computeDuplicates';
 export { computeSearch } from './utils/computeSearch';
 export { encodeCursor, decodeCursor } from './utils/cursor';
 export { filterToPredicate } from './utils/filterToPredicate';
 export { generateConvexSchema } from './utils/generateConvexSchema';
 export { getAggregateFieldsForObject, generateSdl } from './utils/generateSdl';
 export { orderByToComparator } from './utils/orderByToComparator';
+export {
+  scopeFilterByContext,
+  buildActorFromContext,
+} from './utils/scopeContext';

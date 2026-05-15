@@ -17,5 +17,9 @@ export type DataSourceObject = {
   isSearchable: boolean;
   labelIdentifierFieldName?: string | null;
   imageIdentifierFieldName?: string | null;
+  // Array of criteria; each criterion is a list of field names that must all
+  // match for two records to be considered duplicates. Twenty's backend uses
+  // this to power `findDuplicates`.
+  duplicateCriteria?: string[][] | null;
   fields: DataSourceField[];
 };

@@ -9,12 +9,16 @@
 
 import { httpAction } from './_generated/server';
 import {
+  buildActorFromContext,
   computeAggregate,
+  computeDuplicates,
   computeSearch,
   decodeCursor,
   encodeCursor,
   filterToPredicate,
   orderByToComparator,
+  scopeFilterByContext,
+  type DataSourceContext,
   type DataSourceFindManyArgs,
   type DataSourceFindOneArgs,
   type DataSourceRecord,
@@ -60,16 +64,18 @@ const collect = async (
 const fetchRecords = async (
   ctx: Parameters<typeof collect>[0],
   objectName: TableName,
-  filter?: RecordGqlOperationFilter | null,
+  filter: RecordGqlOperationFilter | null | undefined,
+  context: DataSourceContext,
 ): Promise<DataSourceRecord[]> => {
+  const scopedFilter = scopeFilterByContext(filter, context);
   const all = await collect(ctx, objectName);
-  const showDeleted = includesDeletedClause(filter ?? undefined);
+  const showDeleted = includesDeletedClause(scopedFilter ?? undefined);
   const visible = showDeleted
     ? all
     : all.filter(
         (record) => record.deletedAt === null || record.deletedAt === undefined,
       );
-  const predicate = filterToPredicate(filter ?? undefined);
+  const predicate = filterToPredicate(scopedFilter ?? undefined);
   return visible.filter(predicate);
 };
 
@@ -77,8 +83,9 @@ const findMany = async (
   ctx: Parameters<typeof collect>[0],
   objectName: TableName,
   args: DataSourceFindManyArgs,
+  context: DataSourceContext,
 ) => {
-  const matched = await fetchRecords(ctx, objectName, args.filter);
+  const matched = await fetchRecords(ctx, objectName, args.filter, context);
   const sorted = [...matched].sort(orderByToComparator(args.orderBy ?? null));
 
   const offset = args.offset ?? 0;
@@ -111,8 +118,9 @@ const findOne = async (
   ctx: Parameters<typeof collect>[0],
   objectName: TableName,
   args: DataSourceFindOneArgs,
+  context: DataSourceContext,
 ): Promise<DataSourceRecord | null> => {
-  const matched = await fetchRecords(ctx, objectName, args.filter);
+  const matched = await fetchRecords(ctx, objectName, args.filter, context);
   return matched[0] ?? null;
 };
 
@@ -137,56 +145,96 @@ const ok = (body: unknown): Response =>
   });
 
 export const findManyAction = httpAction(async (ctx, request) => {
-  const { objectName, args } = (await request.json()) as {
+  const { objectName, args, context } = (await request.json()) as {
     objectName: string;
     args: DataSourceFindManyArgs;
+    context: DataSourceContext;
   };
-  return ok(await findMany(ctx as never, objectName, args));
+  return ok(await findMany(ctx as never, objectName, args, context ?? {}));
 });
 
 export const findOneAction = httpAction(async (ctx, request) => {
-  const { objectName, args } = (await request.json()) as {
+  const { objectName, args, context } = (await request.json()) as {
     objectName: string;
     args: DataSourceFindOneArgs;
+    context: DataSourceContext;
   };
-  return ok(await findOne(ctx as never, objectName, args));
+  return ok(await findOne(ctx as never, objectName, args, context ?? {}));
 });
 
-export const findDuplicatesAction = httpAction(async (_ctx, _request) => {
+export const findDuplicatesAction = httpAction(async (ctx, request) => {
+  const { objectName, ids, duplicateCriteria, context } =
+    (await request.json()) as {
+      objectName: string;
+      ids: string[];
+      duplicateCriteria: string[][] | null;
+      context: DataSourceContext;
+    };
+  if (!duplicateCriteria || ids.length === 0) {
+    return ok({
+      records: [],
+      pageInfo: {
+        hasNextPage: false,
+        hasPreviousPage: false,
+        startCursor: null,
+        endCursor: null,
+      },
+      totalCount: 0,
+    });
+  }
+  const all = await fetchRecords(
+    ctx as never,
+    objectName,
+    null,
+    context ?? {},
+  );
+  const sourceRecords = all.filter((record) => ids.includes(record.id));
+  const duplicates = computeDuplicates(sourceRecords, all, duplicateCriteria);
   return ok({
-    records: [],
+    records: duplicates,
     pageInfo: {
       hasNextPage: false,
       hasPreviousPage: false,
-      startCursor: null,
-      endCursor: null,
+      startCursor: duplicates.length > 0 ? encodeCursor(0) : null,
+      endCursor:
+        duplicates.length > 0 ? encodeCursor(duplicates.length - 1) : null,
     },
-    totalCount: 0,
+    totalCount: duplicates.length,
   });
 });
 
 export const aggregateAction = httpAction(async (ctx, request) => {
-  const { objectName, args } = (await request.json()) as {
+  const { objectName, args, context } = (await request.json()) as {
     objectName: string;
     args: { filter?: RecordGqlOperationFilter | null; fields: string[] };
+    context: DataSourceContext;
   };
-  const matched = await fetchRecords(ctx as never, objectName, args.filter);
+  const matched = await fetchRecords(
+    ctx as never,
+    objectName,
+    args.filter,
+    context ?? {},
+  );
   return ok(computeAggregate(matched, args.fields));
 });
 
 export const searchAction = httpAction(async (ctx, request) => {
-  const { args, objectNames } = (await request.json()) as {
+  const { args, objectNames, context } = (await request.json()) as {
     args: DataSourceSearchArgs;
     // The caller supplies the candidate object table names — Convex's typed
     // db unions can't be enumerated at runtime without the schema bundle, so
     // the client side decides the search scope.
     objectNames: string[];
+    context: DataSourceContext;
   };
+  const scopedContext = context ?? {};
   const sources = await Promise.all(
     objectNames.map(async (objectName) => ({
       objectName,
       objectLabelSingular: objectName,
-      records: (await collect(ctx as never, objectName)).filter(
+      records: (
+        await fetchRecords(ctx as never, objectName, null, scopedContext)
+      ).filter(
         (record) => record.deletedAt === null || record.deletedAt === undefined,
       ),
     })),
@@ -195,17 +243,26 @@ export const searchAction = httpAction(async (ctx, request) => {
 });
 
 export const createOneAction = httpAction(async (ctx, request) => {
-  const { objectName, input } = (await request.json()) as {
+  const { objectName, input, context } = (await request.json()) as {
     objectName: string;
     input: Record<string, unknown>;
+    context: DataSourceContext;
   };
+  const scopedContext = context ?? {};
   const now = new Date().toISOString();
+  const actor = buildActorFromContext(scopedContext);
   const record: DataSourceRecord = {
     id:
       typeof input.id === 'string' && input.id.length > 0
         ? input.id
         : crypto.randomUUID(),
     ...input,
+    ...(scopedContext.workspaceId
+      ? { workspaceId: scopedContext.workspaceId }
+      : {}),
+    ...(actor && input.createdBy === undefined
+      ? { createdBy: actor, updatedBy: actor }
+      : {}),
     createdAt: typeof input.createdAt === 'string' ? input.createdAt : now,
     updatedAt: now,
     ...ALWAYS_NULL_DELETED,
@@ -215,17 +272,28 @@ export const createOneAction = httpAction(async (ctx, request) => {
 });
 
 export const updateOneAction = httpAction(async (ctx, request) => {
-  const { objectName, id, input } = (await request.json()) as {
+  const { objectName, id, input, context } = (await request.json()) as {
     objectName: string;
     id: string;
     input: Record<string, unknown>;
+    context: DataSourceContext;
   };
+  const scopedContext = context ?? {};
   const existing = await lookupOne(ctx as never, objectName, id);
   if (!existing)
     return new Response(`Not found: ${objectName}/${id}`, { status: 404 });
+  if (
+    scopedContext.workspaceId &&
+    typeof existing.workspaceId === 'string' &&
+    existing.workspaceId !== scopedContext.workspaceId
+  ) {
+    return new Response(`Forbidden: ${objectName}/${id}`, { status: 403 });
+  }
+  const actor = buildActorFromContext(scopedContext);
   const next: DataSourceRecord = {
     ...existing,
     ...input,
+    ...(actor && input.updatedBy === undefined ? { updatedBy: actor } : {}),
     id: existing.id,
     updatedAt: new Date().toISOString(),
   };
@@ -236,14 +304,26 @@ export const updateOneAction = httpAction(async (ctx, request) => {
   return ok(next);
 });
 
+const sameWorkspace = (
+  existing: DataSourceRecord,
+  context: DataSourceContext,
+): boolean =>
+  !context.workspaceId ||
+  typeof existing.workspaceId !== 'string' ||
+  existing.workspaceId === context.workspaceId;
+
 export const deleteOneAction = httpAction(async (ctx, request) => {
-  const { objectName, id } = (await request.json()) as {
+  const { objectName, id, context } = (await request.json()) as {
     objectName: string;
     id: string;
+    context: DataSourceContext;
   };
+  const scopedContext = context ?? {};
   const existing = await lookupOne(ctx as never, objectName, id);
   if (!existing)
     return new Response(`Not found: ${objectName}/${id}`, { status: 404 });
+  if (!sameWorkspace(existing, scopedContext))
+    return new Response(`Forbidden: ${objectName}/${id}`, { status: 403 });
   const now = new Date().toISOString();
   const next: DataSourceRecord = {
     ...existing,
@@ -258,12 +338,16 @@ export const deleteOneAction = httpAction(async (ctx, request) => {
 });
 
 export const destroyOneAction = httpAction(async (ctx, request) => {
-  const { objectName, id } = (await request.json()) as {
+  const { objectName, id, context } = (await request.json()) as {
     objectName: string;
     id: string;
+    context: DataSourceContext;
   };
+  const scopedContext = context ?? {};
   const existing = await lookupOne(ctx as never, objectName, id);
   if (!existing) return ok({ id });
+  if (!sameWorkspace(existing, scopedContext))
+    return new Response(`Forbidden: ${objectName}/${id}`, { status: 403 });
   await (ctx.db.delete as never)(
     (existing as DataSourceRecord & { _id: string })._id as never,
   );
@@ -271,11 +355,17 @@ export const destroyOneAction = httpAction(async (ctx, request) => {
 });
 
 export const restoreManyAction = httpAction(async (ctx, request) => {
-  const { objectName, args } = (await request.json()) as {
+  const { objectName, args, context } = (await request.json()) as {
     objectName: string;
     args: DataSourceFindOneArgs;
+    context: DataSourceContext;
   };
-  const matched = await fetchRecords(ctx as never, objectName, args.filter);
+  const matched = await fetchRecords(
+    ctx as never,
+    objectName,
+    args.filter,
+    context ?? {},
+  );
   const restored: Array<{ id: string }> = [];
   const now = new Date().toISOString();
   for (const record of matched) {

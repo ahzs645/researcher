@@ -44,6 +44,7 @@ const requireJson = async <T>(response: Response): Promise<T> => {
 };
 
 export const createConvexDataSource = ({
+  bundle,
   convexUrl,
   fetchImpl = fetch,
 }: ConvexDataSourceOptions): DataSource => {
@@ -82,7 +83,15 @@ export const createConvexDataSource = ({
       ids: string[],
       context: DataSourceContext,
     ): Promise<DataSourceRecordPage> {
-      return call('findDuplicates', { objectName, ids, context });
+      // Pass `duplicateCriteria` from the client-side bundle; Convex doesn't
+      // ship the metadata bundle, so the criteria comes over the wire.
+      const object = bundle.objectsByNameSingular.get(objectName);
+      return call('findDuplicates', {
+        objectName,
+        ids,
+        context,
+        duplicateCriteria: object?.duplicateCriteria ?? null,
+      });
     },
     async createOne(
       objectName: string,

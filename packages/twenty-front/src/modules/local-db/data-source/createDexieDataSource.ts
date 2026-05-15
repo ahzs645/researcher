@@ -13,7 +13,9 @@ import {
   type DataSourceRecordPage,
   type DataSourceSearchArgs,
   type DataSourceSearchPage,
+  buildActorFromContext,
   computeAggregate,
+  computeDuplicates,
   computeSearch,
   decodeCursor,
   encodeCursor,
@@ -179,12 +181,18 @@ export const createDexieDataSource = ({
   const createOne = async (
     objectName: string,
     input: Record<string, unknown>,
+    context: DataSourceContext,
   ): Promise<DataSourceRecord> => {
     const table = tableFor(objectName);
     const now = new Date().toISOString();
+    const actor = buildActorFromContext(context);
     const record: DataSourceRecord = {
       id: typeof input.id === 'string' ? input.id : crypto.randomUUID(),
       ...input,
+      ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
+      ...(actor && input.createdBy === undefined
+        ? { createdBy: actor, updatedBy: actor }
+        : {}),
       createdAt: typeof input.createdAt === 'string' ? input.createdAt : now,
       updatedAt: now,
       deletedAt: null,
@@ -197,13 +205,16 @@ export const createDexieDataSource = ({
     objectName: string,
     id: string,
     input: Record<string, unknown>,
+    context: DataSourceContext,
   ): Promise<DataSourceRecord> => {
     const table = tableFor(objectName);
     const existing = await table.get(id);
     if (!existing) throw new Error(`${objectName} not found: ${id}`);
+    const actor = buildActorFromContext(context);
     const next: DataSourceRecord = {
       ...existing,
       ...input,
+      ...(actor && input.updatedBy === undefined ? { updatedBy: actor } : {}),
       id: existing.id,
       updatedAt: new Date().toISOString(),
     };
@@ -296,18 +307,44 @@ export const createDexieDataSource = ({
   };
 
   const findDuplicates = async (
-    _objectName: string,
-    _ids: string[],
-  ): Promise<DataSourceRecordPage> => ({
-    records: [],
-    pageInfo: {
-      hasNextPage: false,
-      hasPreviousPage: false,
-      startCursor: null,
-      endCursor: null,
-    },
-    totalCount: 0,
-  });
+    objectName: string,
+    ids: string[],
+  ): Promise<DataSourceRecordPage> => {
+    const object = bundle.objectsByNameSingular.get(objectName);
+    if (!object || ids.length === 0) {
+      return {
+        records: [],
+        pageInfo: {
+          hasNextPage: false,
+          hasPreviousPage: false,
+          startCursor: null,
+          endCursor: null,
+        },
+        totalCount: 0,
+      };
+    }
+    const table = tableFor(objectName);
+    const sourceRecords = (await table.bulkGet(ids)).filter(
+      (record): record is DataSourceRecord => record !== undefined,
+    );
+    const allRecords = await table.toArray();
+    const duplicates = computeDuplicates(
+      sourceRecords,
+      allRecords,
+      object.duplicateCriteria,
+    );
+    return {
+      records: duplicates,
+      pageInfo: {
+        hasNextPage: false,
+        hasPreviousPage: false,
+        startCursor: duplicates.length > 0 ? encodeCursor(0) : null,
+        endCursor:
+          duplicates.length > 0 ? encodeCursor(duplicates.length - 1) : null,
+      },
+      totalCount: duplicates.length,
+    };
+  };
 
   return {
     mode: 'dexie',

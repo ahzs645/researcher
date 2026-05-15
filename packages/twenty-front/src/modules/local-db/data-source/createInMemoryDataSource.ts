@@ -2,13 +2,17 @@ import {
   type DataSource,
   type DataSourceAggregateArgs,
   type DataSourceAggregateResult,
+  type DataSourceBundle,
+  type DataSourceContext,
   type DataSourceFindManyArgs,
   type DataSourceFindOneArgs,
   type DataSourceRecord,
   type DataSourceRecordPage,
   type DataSourceSearchArgs,
   type DataSourceSearchPage,
+  buildActorFromContext,
   computeAggregate,
+  computeDuplicates,
   computeSearch,
   decodeCursor,
   encodeCursor,
@@ -59,8 +63,10 @@ export type InMemoryDataSource = DataSource & {
 
 export const createInMemoryDataSource = (
   initialSeed: Record<string, DataSourceRecord[]> = {},
+  options: { bundle?: DataSourceBundle } = {},
 ): InMemoryDataSource => {
   let records = cloneSeed(initialSeed);
+  const { bundle } = options;
 
   const getOrCreate = (objectName: string): DataSourceRecord[] => {
     const existing = records.get(objectName);
@@ -150,28 +156,57 @@ export const createInMemoryDataSource = (
   };
 
   const findDuplicates = async (
-    _objectName: string,
-    _ids: string[],
-  ): Promise<DataSourceRecordPage> => ({
-    records: [],
-    pageInfo: {
-      hasNextPage: false,
-      hasPreviousPage: false,
-      startCursor: null,
-      endCursor: null,
-    },
-    totalCount: 0,
-  });
+    objectName: string,
+    ids: string[],
+  ): Promise<DataSourceRecordPage> => {
+    const object = bundle?.objectsByNameSingular.get(objectName);
+    if (!object || ids.length === 0) {
+      return {
+        records: [],
+        pageInfo: {
+          hasNextPage: false,
+          hasPreviousPage: false,
+          startCursor: null,
+          endCursor: null,
+        },
+        totalCount: 0,
+      };
+    }
+    const list = records.get(objectName) ?? [];
+    const sourceRecords = list.filter((record) => ids.includes(record.id));
+    const duplicates = computeDuplicates(
+      sourceRecords,
+      list,
+      object.duplicateCriteria,
+    );
+    return {
+      records: duplicates,
+      pageInfo: {
+        hasNextPage: false,
+        hasPreviousPage: false,
+        startCursor: duplicates.length > 0 ? encodeCursor(0) : null,
+        endCursor:
+          duplicates.length > 0 ? encodeCursor(duplicates.length - 1) : null,
+      },
+      totalCount: duplicates.length,
+    };
+  };
 
   const createOne = async (
     objectName: string,
     input: Record<string, unknown>,
+    context: DataSourceContext,
   ): Promise<DataSourceRecord> => {
     const list = getOrCreate(objectName);
     const now = new Date().toISOString();
+    const actor = buildActorFromContext(context);
     const record: DataSourceRecord = {
       id: typeof input.id === 'string' ? input.id : crypto.randomUUID(),
       ...input,
+      ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
+      ...(actor && input.createdBy === undefined
+        ? { createdBy: actor, updatedBy: actor }
+        : {}),
       createdAt: typeof input.createdAt === 'string' ? input.createdAt : now,
       updatedAt: now,
       deletedAt: null,
@@ -184,13 +219,16 @@ export const createInMemoryDataSource = (
     objectName: string,
     id: string,
     input: Record<string, unknown>,
+    context: DataSourceContext,
   ): Promise<DataSourceRecord> => {
     const list = getOrCreate(objectName);
     const index = list.findIndex((record) => record.id === id);
     if (index < 0) throw new Error(`${objectName} not found: ${id}`);
+    const actor = buildActorFromContext(context);
     const updated: DataSourceRecord = {
       ...list[index],
       ...input,
+      ...(actor && input.updatedBy === undefined ? { updatedBy: actor } : {}),
       id: list[index].id,
       updatedAt: new Date().toISOString(),
     };

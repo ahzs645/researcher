@@ -195,8 +195,9 @@ describe('generateSdl', () => {
 
     expect(sdl).toContain('accountOwner: Person');
     expect(sdl).toContain('accountOwnerId: UUID');
-    // Filter input only exposes the join column for relations.
-    expect(sdl).toMatch(/accountOwnerId: RelationFilter/);
+    // Join columns expose full UUID filters (eq/in/neq/is) — Twenty's real
+    // backend treats them as plain UUIDs, not relation handles.
+    expect(sdl).toMatch(/accountOwnerId: UUIDFilter/);
   });
 
   it('renders SELECT options as a named enum', () => {

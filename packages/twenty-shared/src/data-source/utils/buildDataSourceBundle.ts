@@ -54,6 +54,7 @@ type RawObject = {
   isSearchable: boolean;
   labelIdentifierFieldMetadataId?: string | null;
   imageIdentifierFieldMetadataId?: string | null;
+  duplicateCriteria?: string[][] | null;
   fieldsList: RawField[];
 };
 
@@ -156,6 +157,7 @@ const toObject = (raw: RawObject): DataSourceObject => ({
     raw,
     raw.imageIdentifierFieldMetadataId,
   ),
+  duplicateCriteria: raw.duplicateCriteria ?? null,
   fields: raw.fieldsList.map(toField),
 });
 

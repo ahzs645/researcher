@@ -9,7 +9,7 @@
     "tsup": "npx tsup"
   },
   "engines": {
-    "node": "^24.5.0",
+    "node": ">=24.5.0 <26",
     "npm": "please-use-yarn",
     "yarn": "^4.0.2"
   },
@@ -80,12 +80,14 @@
     "apollo-link-rest": "^0.10.0-rc.2",
     "apollo-upload-client": "^19.0.0",
     "buffer": "^6.0.3",
+    "convex": "^1.38.0",
     "country-flag-icons": "^1.5.11",
     "cron-parser": "5.1.1",
     "d3-shape": "^3.2.0",
     "date-fns": "^2.30.0",
     "date-fns-tz": "^2.0.0",
     "deep-equal": "^2.2.2",
+    "dexie": "^4.4.2",
     "file-saver": "^2.0.5",
     "framer-motion": "^11.18.0",
     "fuse.js": "^7.1.0",

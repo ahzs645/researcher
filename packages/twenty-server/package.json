@@ -255,7 +255,7 @@
     "twenty-shared": "workspace:*"
   },
   "engines": {
-    "node": "^24.5.0",
+    "node": ">=24.5.0 <26",
     "npm": "please-use-yarn",
     "yarn": "^4.0.2"
   }

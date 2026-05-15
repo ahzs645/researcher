@@ -106,6 +106,18 @@ const NotFound = lazy(() =>
   })),
 );
 
+const LocalDbDemoPage = lazy(() =>
+  import('~/pages/local-db/LocalDbDemoPage').then((module) => ({
+    default: module.LocalDbDemoPage,
+  })),
+);
+
+const ConvexDbDemoPage = lazy(() =>
+  import('~/pages/convex-db/ConvexDbDemoPage').then((module) => ({
+    default: module.ConvexDbDemoPage,
+  })),
+);
+
 export const useCreateAppRouter = (
   isFunctionSettingsEnabled?: boolean,
   isAdminPageEnabled?: boolean,
@@ -231,6 +243,22 @@ export const useCreateAppRouter = (
             element={
               <LazyRoute>
                 <StandalonePageLayoutPage />
+              </LazyRoute>
+            }
+          />
+          <Route
+            path="/localdb"
+            element={
+              <LazyRoute>
+                <LocalDbDemoPage />
+              </LazyRoute>
+            }
+          />
+          <Route
+            path="/convex"
+            element={
+              <LazyRoute>
+                <ConvexDbDemoPage />
               </LazyRoute>
             }
           />

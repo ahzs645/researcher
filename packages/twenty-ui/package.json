@@ -67,7 +67,7 @@
     "monaco-editor": ">= 0.25.0 < 1"
   },
   "scripts": {
-    "build": "npx vite build"
+    "build": "unset NO_COLOR; npx vite build"
   },
   "files": [
     "dist",

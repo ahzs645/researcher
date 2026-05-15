@@ -14,9 +14,9 @@
       "options": {
         "cwd": "{projectRoot}",
         "commands": [
-          "npx rimraf dist && npx vite build -c vite.config.node.ts && npx vite build -c vite.config.define.ts && npx vite build -c vite.config.billing.ts && npx vite build -c vite.config.front-component.ts && npx vite build -c vite.config.logic-function.ts && npx vite build -c vite.config.browser.ts",
-          "tsgo -p tsconfig.lib.json --declaration --emitDeclarationOnly --noEmit false --outDir dist --rootDir src && npx tsc-alias -p tsconfig.lib.json --outDir dist",
-          "npx rimraf 'dist/sdk' 'dist/define/**/*.d.ts' 'dist/define/**/*.d.ts.map' 'dist/billing/**/*.d.ts' 'dist/billing/**/*.d.ts.map' 'dist/front-component/**/*.d.ts' 'dist/front-component/**/*.d.ts.map' 'dist/logic-function/**/*.d.ts' 'dist/logic-function/**/*.d.ts.map' && npx rollup -c rollup.config.sdk-dts.mjs"
+          "unset NO_COLOR; npx rimraf dist && npx vite build -c vite.config.node.ts && npx vite build -c vite.config.define.ts && npx vite build -c vite.config.billing.ts && npx vite build -c vite.config.front-component.ts && npx vite build -c vite.config.logic-function.ts && npx vite build -c vite.config.browser.ts",
+          "unset NO_COLOR; tsgo -p tsconfig.lib.json --declaration --emitDeclarationOnly --noEmit false --outDir dist --rootDir src && npx tsc-alias -p tsconfig.lib.json --outDir dist",
+          "unset NO_COLOR; npx rimraf 'dist/sdk' 'dist/define/**/*.d.ts' 'dist/define/**/*.d.ts.map' 'dist/billing/**/*.d.ts' 'dist/billing/**/*.d.ts.map' 'dist/front-component/**/*.d.ts' 'dist/front-component/**/*.d.ts.map' 'dist/logic-function/**/*.d.ts' 'dist/logic-function/**/*.d.ts.map' && npx rollup -c rollup.config.sdk-dts.mjs"
         ],
         "parallel": false
       }
@@ -98,7 +98,7 @@
       ],
       "options": {
         "cwd": "{projectRoot}",
-        "command": "npx vite build -c vite.config.define.ts && npx vite build -c vite.config.front-component.ts && npx vite build -c vite.config.logic-function.ts && npx rollup -c rollup.config.sdk-dts.mjs"
+        "command": "unset NO_COLOR; npx vite build -c vite.config.define.ts && npx vite build -c vite.config.front-component.ts && npx vite build -c vite.config.logic-function.ts && npx rollup -c rollup.config.sdk-dts.mjs"
       }
     }
   }

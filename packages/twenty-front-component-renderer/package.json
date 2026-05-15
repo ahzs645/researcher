@@ -9,7 +9,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "npx rimraf dist && npx vite build"
+    "build": "unset NO_COLOR; npx rimraf dist && npx vite build"
   },
   "exports": {
     ".": {

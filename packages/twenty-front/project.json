@@ -2,31 +2,29 @@
   "name": "twenty-front",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "tags": [
-    "scope:frontend"
-  ],
+  "tags": ["scope:frontend"],
   "targets": {
     "build": {
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "executor": "nx:run-commands",
+      "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "{projectRoot}/build"
+        "outputPath": "{projectRoot}/build",
+        "cwd": "{projectRoot}",
+        "command": "unset NO_COLOR; NODE_ENV=production NODE_OPTIONS=--max-old-space-size=8192 npx vite build",
+        "forwardAllArgs": false
       },
-      "dependsOn": [
-        "^build"
-      ]
+      "dependsOn": ["^build"]
     },
     "build:sourcemaps": {
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "executor": "nx:run-commands",
+      "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "{projectRoot}/build"
+        "outputPath": "{projectRoot}/build",
+        "cwd": "{projectRoot}",
+        "command": "unset NO_COLOR; NODE_ENV=production VITE_BUILD_SOURCEMAP=true NODE_OPTIONS=--max-old-space-size=8192 npx vite build",
+        "forwardAllArgs": false
       },
-      "dependsOn": [
-        "^build"
-      ]
+      "dependsOn": ["^build"]
     },
     "serve": {
       "executor": "nx:run-commands",
@@ -51,12 +49,8 @@
     },
     "reset:env": {
       "executor": "nx:run-commands",
-      "inputs": [
-        "{projectRoot}/.env.example"
-      ],
-      "outputs": [
-        "{projectRoot}/.env"
-      ],
+      "inputs": ["{projectRoot}/.env.example"],
+      "outputs": ["{projectRoot}/.env"],
       "cache": true,
       "options": {
         "cwd": "{projectRoot}",

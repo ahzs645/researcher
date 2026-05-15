@@ -14,8 +14,8 @@
       "options": {
         "cwd": "{projectRoot}",
         "commands": [
-          "npx rimraf dist && npx vite build",
-          "tsgo -p tsconfig.lib.json --declaration --emitDeclarationOnly --noEmit false --outDir dist --rootDir src && npx tsc-alias -p tsconfig.lib.json --outDir dist"
+          "unset NO_COLOR; npx rimraf dist && npx vite build",
+          "unset NO_COLOR; tsgo -p tsconfig.lib.json --declaration --emitDeclarationOnly --noEmit false --outDir dist --rootDir src && npx tsc-alias -p tsconfig.lib.json --outDir dist"
         ],
         "parallel": false
       }

@@ -1,3 +1,4 @@
+import { addTwentyDataBridgeModeToPath } from '@/local-db/twenty-local/addTwentyDataBridgeModeToPath';
 import { CoreObjectNameSingular } from 'twenty-shared/types';
 import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { getAvatarType } from '@/object-metadata/utils/getAvatarType';
@@ -38,7 +39,9 @@ export const recordIdentifierToObjectRecordIdentifier = ({
     !isWorkspaceMemberObjectMetadata &&
     isDefined(recordIdentifier.id)
   ) {
-    linkToShowPage = `${basePathToShowPage}${recordIdentifier.id}`;
+    linkToShowPage = addTwentyDataBridgeModeToPath(
+      `${basePathToShowPage}${recordIdentifier.id}`,
+    );
   }
 
   return {

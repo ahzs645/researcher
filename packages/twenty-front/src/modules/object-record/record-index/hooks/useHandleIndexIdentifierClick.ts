@@ -1,4 +1,5 @@
 import { contextStoreCurrentViewIdComponentState } from '@/context-store/states/contextStoreCurrentViewIdComponentState';
+import { addTwentyDataBridgeModeToPath } from '@/local-db/twenty-local/addTwentyDataBridgeModeToPath';
 import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { AppPath } from 'twenty-shared/types';
@@ -14,15 +15,17 @@ export const useHandleIndexIdentifierClick = ({
   );
 
   const indexIdentifierUrl = (recordId: string) => {
-    return getAppPath(
-      AppPath.RecordShowPage,
-      {
-        objectNameSingular: objectMetadataItem.nameSingular,
-        objectRecordId: recordId,
-      },
-      {
-        viewId: contextStoreCurrentViewId,
-      },
+    return addTwentyDataBridgeModeToPath(
+      getAppPath(
+        AppPath.RecordShowPage,
+        {
+          objectNameSingular: objectMetadataItem.nameSingular,
+          objectRecordId: recordId,
+        },
+        {
+          viewId: contextStoreCurrentViewId,
+        },
+      ),
     );
   };
 

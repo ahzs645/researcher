@@ -1,4 +1,5 @@
 import { type AppDataMode } from '@/local-db/createDataClient';
+import { getTwentyConvexUrl } from '@/local-db/twenty-local/getTwentyConvexUrl';
 import { getTwentyDataMode } from '@/local-db/twenty-local/isLocalTwentyDataMode';
 
 export type TwentyDataBridgeConfig = {
@@ -15,7 +16,7 @@ export const getTwentyDataBridgeConfig = (): TwentyDataBridgeConfig | null => {
 
   return {
     mode,
-    convexUrl: import.meta.env.REACT_APP_CONVEX_URL,
+    convexUrl: getTwentyConvexUrl(),
   };
 };
 

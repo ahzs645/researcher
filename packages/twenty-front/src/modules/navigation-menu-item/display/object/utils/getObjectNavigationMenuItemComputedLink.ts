@@ -1,3 +1,4 @@
+import { addTwentyDataBridgeModeToPath } from '@/local-db/twenty-local/addTwentyDataBridgeModeToPath';
 import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { type View } from '@/views/types/View';
 import { ViewKey } from '@/views/types/ViewKey';
@@ -21,9 +22,11 @@ export const getObjectNavigationMenuItemComputedLink = (
       view.objectMetadataId === objectMetadataItem.id &&
       view.key === ViewKey.INDEX,
   );
-  return getAppPath(
-    AppPath.RecordIndexPage,
-    { objectNamePlural: objectMetadataItem.namePlural },
-    indexView ? { viewId: indexView.id } : {},
+  return addTwentyDataBridgeModeToPath(
+    getAppPath(
+      AppPath.RecordIndexPage,
+      { objectNamePlural: objectMetadataItem.namePlural },
+      indexView ? { viewId: indexView.id } : {},
+    ),
   );
 };

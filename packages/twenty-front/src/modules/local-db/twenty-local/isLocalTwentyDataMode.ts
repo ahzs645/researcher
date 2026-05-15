@@ -2,6 +2,8 @@ import { type AppDataMode } from '@/local-db/createDataClient';
 
 const TWENTY_DATA_MODE_STORAGE_KEY = 'twenty-data-bridge-mode';
 
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
 const persistTwentyDataMode = (mode: AppDataMode) => {
   window.sessionStorage.setItem(TWENTY_DATA_MODE_STORAGE_KEY, mode);
 
@@ -15,8 +17,10 @@ export const getTwentyDataMode = (): AppDataMode | null => {
 
   const searchParams = new URLSearchParams(window.location.search);
   const envDataMode = import.meta.env.REACT_APP_DATA_MODE;
-
   const pathname = window.location.pathname;
+  const storedMode = window.sessionStorage.getItem(
+    TWENTY_DATA_MODE_STORAGE_KEY,
+  );
 
   if (
     pathname === '/convex' ||
@@ -36,14 +40,16 @@ export const getTwentyDataMode = (): AppDataMode | null => {
     return persistTwentyDataMode('local');
   }
 
-  if (pathname.startsWith('/objects/') || pathname.startsWith('/object/')) {
-    const storedMode = window.sessionStorage.getItem(
-      TWENTY_DATA_MODE_STORAGE_KEY,
-    );
+  if (storedMode === 'local' || storedMode === 'convex') {
+    return storedMode;
+  }
 
-    return storedMode === 'local' || storedMode === 'convex'
-      ? storedMode
-      : null;
+  const isLocalHost = LOCAL_HOSTNAMES.has(window.location.hostname);
+  const isOptedOut =
+    import.meta.env.REACT_APP_LOCAL_DB_AUTH_BYPASS_DISABLED === 'true';
+
+  if (isLocalHost && !isOptedOut) {
+    return persistTwentyDataMode('local');
   }
 
   return null;

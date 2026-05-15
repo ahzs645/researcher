@@ -109,7 +109,7 @@ export const metadataGraphql = graphql.link(
   `${REACT_APP_SERVER_BASE_URL}/metadata`,
 );
 
-export const graphqlMocks = {
+export const graphqlSystemMocks = {
   handlers: [
     graphql.query('IntrospectionQuery', () => {
       return HttpResponse.json({
@@ -224,6 +224,11 @@ export const graphqlMocks = {
         data: { commandMenuItems: mockedBackendCommandMenuItems },
       });
     }),
+  ],
+};
+
+export const graphqlRecordMocks = {
+  handlers: [
     graphql.query('SearchPeople', () => {
       return HttpResponse.json({
         data: {
@@ -694,4 +699,8 @@ export const graphqlMocks = {
       });
     }),
   ],
+};
+
+export const graphqlMocks = {
+  handlers: [...graphqlSystemMocks.handlers, ...graphqlRecordMocks.handlers],
 };

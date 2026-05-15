@@ -3,6 +3,7 @@ import { isNonEmptyString } from '@sniptt/guards';
 import { Fragment, type ReactNode, useContext } from 'react';
 
 import { isLayoutCustomizationModeEnabledState } from '@/layout-customization/states/isLayoutCustomizationModeEnabledState';
+import { addTwentyDataBridgeModeToPath } from '@/local-db/twenty-local/addTwentyDataBridgeModeToPath';
 import { lastClickedNavigationMenuItemIdState } from '@/navigation-menu-item/common/states/lastClickedNavigationMenuItemIdState';
 import { recordIdentifierToObjectRecordIdentifier } from '@/navigation-menu-item/common/utils/recordIdentifierToObjectRecordIdentifier';
 import { useIdentifyActiveNavigationMenuItems } from '@/navigation-menu-item/display/hooks/useIdentifyActiveNavigationMenuItems';
@@ -89,10 +90,12 @@ export const NavigationDrawerItemForObjectMetadataItem = ({
         objectMetadataItems,
         views,
       )
-    : getAppPath(
-        AppPath.RecordIndexPage,
-        { objectNamePlural: objectMetadataItem.namePlural },
-        lastVisitedViewId ? { viewId: lastVisitedViewId } : undefined,
+    : addTwentyDataBridgeModeToPath(
+        getAppPath(
+          AppPath.RecordIndexPage,
+          { objectNamePlural: objectMetadataItem.namePlural },
+          lastVisitedViewId ? { viewId: lastVisitedViewId } : undefined,
+        ),
       );
 
   const isActive = hasNavigationMenuItem

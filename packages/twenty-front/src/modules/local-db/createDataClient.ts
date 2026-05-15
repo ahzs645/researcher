@@ -14,7 +14,9 @@ export const createDataClient = (
 ): AppDataClient => {
   if (mode === 'convex') {
     if (options.convexUrl === undefined || options.convexUrl.length === 0) {
-      throw new Error('REACT_APP_CONVEX_URL is required for Convex data mode.');
+      throw new Error(
+        'REACT_APP_CONVEX_URL or VITE_CONVEX_URL is required for Convex data mode.',
+      );
     }
 
     return createConvexHttpDataClient({ convexUrl: options.convexUrl });

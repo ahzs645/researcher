@@ -19,8 +19,9 @@ import {
   getTwentyDataBridgeConfig,
   isTwentyDataBridgeConfigured,
 } from '@/local-db/twenty-local/getTwentyDataBridgeConfig';
-import { LocalAppRouterProviders } from '@/local-db/twenty-local/LocalAppRouterProviders';
 import { isTwentyDataBridgeMode } from '@/local-db/twenty-local/isLocalTwentyDataMode';
+import { LocalTwentyBridgeMetadataLoadEffect } from '@/local-db/twenty-local/LocalTwentyBridgeMetadataLoadEffect';
+import { LocalTwentyBridgeRecordEffects } from '@/local-db/twenty-local/LocalTwentyBridgeRecordEffects';
 import { MinimalMetadataLoadEffect } from '@/metadata-store/effect-components/MinimalMetadataLoadEffect';
 import { UserMetadataProviderInitialEffect } from '@/metadata-store/effect-components/UserMetadataProviderInitialEffect';
 import { ApolloCoreProvider } from '@/object-metadata/components/ApolloCoreProvider';
@@ -46,24 +47,35 @@ import { getPageTitleFromPath } from '~/utils/title-utils';
 export const AppRouterProviders = () => {
   const { pathname } = useLocation();
   const pageTitle = getPageTitleFromPath(pathname);
+  const isBridgeMode = isTwentyDataBridgeMode();
 
-  if (isTwentyDataBridgeMode()) {
+  if (isBridgeMode) {
     const bridgeConfig = getTwentyDataBridgeConfig();
 
     if (!isTwentyDataBridgeConfigured(bridgeConfig)) {
       return <ConvexBridgeConfigError />;
     }
-
-    return <LocalAppRouterProviders />;
   }
+
+  // SSE talks to the real Twenty backend over an event stream.
+  // The bridge has no backend, so we render a no-op wrapper that just passes children through.
+  const MaybeSSEProvider = isBridgeMode
+    ? ({ children }: { children: React.ReactNode }) => <>{children}</>
+    : SSEProvider;
 
   return (
     <ApolloProvider>
       <BaseThemeProvider>
         <ClientConfigProviderEffect />
         <UserMetadataProviderInitialEffect />
-        <MinimalMetadataLoadEffect />
-        <IsMinimalMetadataReadyEffect />
+        {isBridgeMode ? (
+          <LocalTwentyBridgeMetadataLoadEffect />
+        ) : (
+          <>
+            <MinimalMetadataLoadEffect />
+            <IsMinimalMetadataReadyEffect />
+          </>
+        )}
         <WorkspaceProviderEffect />
         <ClientConfigProvider>
           <CaptchaProvider>
@@ -71,7 +83,7 @@ export const AppRouterProviders = () => {
               <AuthProvider>
                 <ApolloCoreProvider>
                   <ApolloAdminProvider>
-                    <SSEProvider>
+                    <MaybeSSEProvider>
                       <PreComputedChipGeneratorsProvider>
                         <UserThemeProviderEffect />
                         <SnackBarProvider>
@@ -86,6 +98,9 @@ export const AppRouterProviders = () => {
                                   <GotoHotkeysEffectsProvider />
                                   <PageTitle title={pageTitle} />
                                   <PageFavicon />
+                                  {isBridgeMode ? (
+                                    <LocalTwentyBridgeRecordEffects />
+                                  ) : null}
                                   <Outlet />
                                   <GlobalFilePreviewModal />
                                   <CommandMenuConfirmationModalManager />
@@ -100,7 +115,7 @@ export const AppRouterProviders = () => {
                         <PageChangeEffect />
                         <SignOutOnOtherTabSignOutEffect />
                       </PreComputedChipGeneratorsProvider>
-                    </SSEProvider>
+                    </MaybeSSEProvider>
                   </ApolloAdminProvider>
                 </ApolloCoreProvider>
               </AuthProvider>

@@ -19,11 +19,33 @@ const renderApp = async () => {
   const twentyDataBridgeConfig = getTwentyDataBridgeConfig();
 
   if (isTwentyDataBridgeConfigured(twentyDataBridgeConfig)) {
-    const { startLocalTwentyWorker } = await import(
-      '@/local-db/twenty-local/startLocalTwentyWorker'
-    );
+    const [
+      { startLocalTwentyWorker },
+      { seedTwentyBridgeAuthState },
+      { getTwentyLocalObjectRoutePath, defaultTwentyLocalObjectConfig },
+    ] = await Promise.all([
+      import('@/local-db/twenty-local/startLocalTwentyWorker'),
+      import('@/local-db/twenty-local/seedTwentyBridgeAuthState'),
+      import('@/local-db/twenty-local/twentyLocalObjectConfigs'),
+    ]);
 
+    seedTwentyBridgeAuthState();
     await startLocalTwentyWorker();
+
+    const isBridgeIndexPath =
+      window.location.pathname === '/' ||
+      window.location.pathname === '/welcome' ||
+      window.location.pathname === '/localdb' ||
+      window.location.pathname === '/convex';
+
+    if (isBridgeIndexPath) {
+      const target = getTwentyLocalObjectRoutePath({
+        dataMode: twentyDataBridgeConfig.mode,
+        objectNamePlural: defaultTwentyLocalObjectConfig.objectNamePlural,
+      });
+
+      window.history.replaceState(null, '', target);
+    }
   }
 
   root.render(<App />);

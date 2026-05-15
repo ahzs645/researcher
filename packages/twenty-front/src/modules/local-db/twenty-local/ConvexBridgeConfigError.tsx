@@ -46,8 +46,9 @@ export const ConvexBridgeConfigError = () => (
             margin: 0,
           }}
         >
-          Set <code>REACT_APP_CONVEX_URL</code> to your Convex deployment URL to
-          run the Twenty bridge against the live Convex backend.
+          Set <code>VITE_CONVEX_URL</code> or <code>REACT_APP_CONVEX_URL</code>{' '}
+          to your Convex deployment URL to run the Twenty bridge against the
+          live Convex backend.
         </p>
       </section>
     </main>

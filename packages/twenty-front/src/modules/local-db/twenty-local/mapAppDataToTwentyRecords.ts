@@ -23,6 +23,44 @@ const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 
+const emptyConnection = (typename: string) => ({
+  __typename: typename,
+  edges: [],
+});
+
+const emptyLinks = {
+  __typename: 'Links',
+  primaryLinkUrl: '',
+  primaryLinkLabel: '',
+  secondaryLinks: [],
+};
+
+const emptyAddress = {
+  __typename: 'Address',
+  addressStreet1: '',
+  addressStreet2: '',
+  addressCity: '',
+  addressState: '',
+  addressCountry: '',
+  addressPostcode: '',
+  addressLat: null,
+  addressLng: null,
+};
+
+const emptyCurrency = {
+  __typename: 'Currency',
+  amountMicros: null,
+  currencyCode: null,
+};
+
+const localActor = {
+  __typename: 'Actor',
+  source: 'MANUAL',
+  workspaceMemberId: null,
+  name: 'Local Dexie',
+  context: null,
+};
+
 export const toTwentyRecordId = (appId: string) =>
   appId.split('_').at(-1) ?? appId;
 
@@ -239,6 +277,13 @@ export const mapAppDataSnapshotToCompanies = (
       createdAt: toIsoString(project.createdAt),
       updatedAt: toIsoString(project.updatedAt),
       deletedAt: project.deletedAt ? toIsoString(project.deletedAt) : null,
+      accountOwner: null,
+      accountOwnerId: null,
+      address: emptyAddress,
+      annualRecurringRevenue: emptyCurrency,
+      attachments: emptyConnection('AttachmentConnection'),
+      caredForPets: emptyConnection('PetCareAgreementConnection'),
+      createdBy: localActor,
       domainName: {
         __typename: 'Links',
         primaryLinkUrl: `${slugify(project.name) || 'project'}.local`,
@@ -249,6 +294,8 @@ export const mapAppDataSnapshotToCompanies = (
         (layer) => layer.projectId === project.id,
       ).length,
       idealCustomerProfile: project.status === 'active',
+      introVideo: emptyLinks,
+      linkedinLink: emptyLinks,
       noteTargets: {
         __typename: 'NoteTargetConnection',
         edges: projectNotes.map((note) => ({
@@ -264,7 +311,16 @@ export const mapAppDataSnapshotToCompanies = (
           },
         })),
       },
+      opportunities: emptyConnection('OpportunityConnection'),
+      people: emptyConnection('PersonConnection'),
       position: index + 1,
+      previousEmployees: emptyConnection('EmploymentHistoryConnection'),
+      taskTargets: emptyConnection('TaskTargetConnection'),
+      timelineActivities: emptyConnection('TimelineActivityConnection'),
+      updatedBy: localActor,
+      visaSponsorship: false,
+      workPolicy: [],
+      xLink: emptyLinks,
     };
   });
 
@@ -295,11 +351,15 @@ export const mapAppDataSnapshotToNotes = (
     createdAt: toIsoString(note.createdAt),
     updatedAt: toIsoString(note.updatedAt),
     deletedAt: note.deletedAt ? toIsoString(note.deletedAt) : null,
+    attachments: emptyConnection('AttachmentConnection'),
+    createdBy: localActor,
     noteTargets: {
       __typename: 'NoteTargetConnection',
       edges: [],
     },
     position: index + 1,
+    timelineActivities: emptyConnection('TimelineActivityConnection'),
+    updatedBy: localActor,
   }));
 
 export const mapAppDataSnapshotToTasks = (
@@ -344,12 +404,18 @@ export const mapAppDataSnapshotToTasks = (
       createdAt: toIsoString(layer.createdAt),
       updatedAt: toIsoString(layer.updatedAt),
       deletedAt: layer.deletedAt ? toIsoString(layer.deletedAt) : null,
+      assignee: null,
+      assigneeId: null,
+      attachments: emptyConnection('AttachmentConnection'),
+      createdBy: localActor,
       dueAt: null,
       status: taskStatusByKind[layer.kind],
       taskTargets: {
         __typename: 'TaskTargetConnection',
         edges: [],
       },
+      timelineActivities: emptyConnection('TimelineActivityConnection'),
+      updatedBy: localActor,
       position: index + 1,
     };
   });

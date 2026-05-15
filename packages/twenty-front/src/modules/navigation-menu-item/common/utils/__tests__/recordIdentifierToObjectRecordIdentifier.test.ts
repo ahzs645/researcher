@@ -13,6 +13,10 @@ jest.mock('@/object-metadata/utils/getBasePathToShowPage', () => ({
   ),
 }));
 
+jest.mock('@/local-db/twenty-local/addTwentyDataBridgeModeToPath', () => ({
+  addTwentyDataBridgeModeToPath: jest.fn((path: string) => path),
+}));
+
 describe('recordIdentifierToObjectRecordIdentifier', () => {
   const baseRecordIdentifier = {
     id: 'record-123',

@@ -8,6 +8,7 @@ import {
   getTwentyDataBridgeConfig,
   isTwentyDataBridgeConfigured,
 } from '@/local-db/twenty-local/getTwentyDataBridgeConfig';
+import { getTwentyConvexUrl } from '@/local-db/twenty-local/getTwentyConvexUrl';
 import {
   twentyLocalObjectConfigs,
   type TwentyLocalObjectNamePlural,
@@ -29,8 +30,14 @@ import {
   toTwentyRecordId,
 } from '@/local-db/twenty-local/mapAppDataToTwentyRecords';
 import { getEmptyPageInfo } from '@/object-record/cache/utils/getEmptyPageInfo';
-import { mockedPersonRecords } from '~/testing/mock-data/generated/data/people/mock-people-data';
-import { graphqlMocks } from '~/testing/graphqlMocks';
+import {
+  graphqlRecordMocks,
+  graphqlSystemMocks,
+  metadataGraphql,
+} from '~/testing/graphqlMocks';
+import { mockedClientConfig } from '~/testing/mock-data/config';
+import { mockedPublicWorkspaceDataBySubdomain } from '~/testing/mock-data/publicWorkspaceDataBySubdomain';
+import { mockedUserData } from '~/testing/mock-data/users';
 import { getConnectionTypename, getEdgeTypename } from 'twenty-shared/utils';
 import { REACT_APP_SERVER_BASE_URL } from '~/config';
 
@@ -87,7 +94,7 @@ const ensureSeededDemo = async () => {
   const dataClient = getDataClient();
   const dataClientConfigKey = getDataClientConfigKey({
     mode: dataClient.mode,
-    convexUrl: import.meta.env.REACT_APP_CONVEX_URL,
+    convexUrl: getTwentyConvexUrl(),
   });
   const seedPromise = seedPromisesByConfigKey.get(dataClientConfigKey);
 
@@ -118,6 +125,30 @@ const wrapRecordsAsConnection = (
   })),
   pageInfo: getEmptyPageInfo(),
   totalCount: records.length,
+});
+
+const unsupportedBridgeConnectionRootFields: Record<string, string> = {
+  people: 'person',
+  opportunities: 'opportunity',
+  workspaceMembers: 'workspaceMember',
+  taskTargets: 'taskTarget',
+  noteTargets: 'noteTarget',
+};
+
+const unsupportedBridgeSearchRootFields: Record<string, string> = {
+  searchPeople: 'searchPeople',
+  searchOpportunities: 'searchOpportunities',
+  searchWorkspaceMembers: 'searchWorkspaceMembers',
+};
+
+const getEmptySearchConnection = () => ({
+  edges: [],
+  pageInfo: {
+    hasNextPage: false,
+    hasPreviousPage: false,
+    startCursor: null,
+    endCursor: null,
+  },
 });
 
 const getLocalRecords = async () => {
@@ -413,11 +444,79 @@ export const localTwentyGraphqlMocks = {
     http.get(`${REACT_APP_SERVER_BASE_URL}/files/*`, () => {
       return new HttpResponse(null, { status: 204 });
     }),
+    http.get('http://localhost:3000/files/*', () => {
+      return new HttpResponse(null, { status: 204 });
+    }),
     http.get('https://twenty-icons.com/*', () => {
       return new HttpResponse(null, { status: 204 });
     }),
-    http.get(`${REACT_APP_SERVER_BASE_URL}/metadata`, () => {
-      return HttpResponse.json({});
+    http.get(`${REACT_APP_SERVER_BASE_URL}/client-config`, () => {
+      return HttpResponse.json({
+        ...mockedClientConfig,
+        sentry: {
+          dsn: null,
+          release: null,
+          environment: null,
+        },
+      });
+    }),
+    metadataGraphql.query('GetPublicWorkspaceDataByDomain', () => {
+      return HttpResponse.json({
+        data: {
+          getPublicWorkspaceDataByDomain: {
+            ...mockedPublicWorkspaceDataBySubdomain,
+            logo: null,
+          },
+        },
+      });
+    }),
+    graphql.query('GetCurrentUser', () => {
+      return HttpResponse.json({
+        data: {
+          currentUser: {
+            ...mockedUserData,
+            currentWorkspace: {
+              ...mockedUserData.currentWorkspace,
+              logo: null,
+            },
+          },
+        },
+      });
+    }),
+    graphql.query('FindOneWorkspaceMember', () => {
+      return HttpResponse.json({
+        data: {
+          workspaceMember: null,
+        },
+      });
+    }),
+    metadataGraphql.query('MyConnectedAccounts', () => {
+      return HttpResponse.json({
+        data: {
+          myConnectedAccounts: [],
+        },
+      });
+    }),
+    metadataGraphql.query('MyMessageChannels', () => {
+      return HttpResponse.json({
+        data: {
+          myMessageChannels: [],
+        },
+      });
+    }),
+    metadataGraphql.query('MyCalendarChannels', () => {
+      return HttpResponse.json({
+        data: {
+          myCalendarChannels: [],
+        },
+      });
+    }),
+    metadataGraphql.query('FindManyFrontComponents', () => {
+      return HttpResponse.json({
+        data: {
+          frontComponents: [],
+        },
+      });
     }),
     graphql.mutation('CreateOneCompany', async ({ variables }) => {
       const company = await createCompany(
@@ -515,6 +614,55 @@ export const localTwentyGraphqlMocks = {
         },
       });
     }),
+    graphql.query('SearchPeople', () => {
+      return HttpResponse.json({
+        data: {
+          searchPeople: getEmptySearchConnection(),
+        },
+      });
+    }),
+    graphql.query('SearchOpportunities', () => {
+      return HttpResponse.json({
+        data: {
+          searchOpportunities: getEmptySearchConnection(),
+        },
+      });
+    }),
+    graphql.query('SearchWorkspaceMembers', () => {
+      return HttpResponse.json({
+        data: {
+          searchWorkspaceMembers: getEmptySearchConnection(),
+        },
+      });
+    }),
+    graphql.query('FindManyPeople', () => {
+      return HttpResponse.json({
+        data: {
+          people: wrapRecordsAsConnection('person', []),
+        },
+      });
+    }),
+    graphql.query('FindManyOpportunities', () => {
+      return HttpResponse.json({
+        data: {
+          opportunities: wrapRecordsAsConnection('opportunity', []),
+        },
+      });
+    }),
+    graphql.query('FindManyWorkspaceMembers', () => {
+      return HttpResponse.json({
+        data: {
+          workspaceMembers: wrapRecordsAsConnection('workspaceMember', []),
+        },
+      });
+    }),
+    graphql.query('FindManyTaskTargets', () => {
+      return HttpResponse.json({
+        data: {
+          taskTargets: wrapRecordsAsConnection('taskTarget', []),
+        },
+      });
+    }),
     graphql.operation(async ({ query, variables }) => {
       if (typeof query !== 'string') {
         return;
@@ -540,6 +688,24 @@ export const localTwentyGraphqlMocks = {
         });
       }
 
+      const objectConfig = twentyLocalObjectConfigs.find((config) =>
+        query.includes(config.objectNamePlural),
+      );
+
+      if (objectConfig !== undefined) {
+        const records = await getLocalRecordsForObject(
+          objectConfig.objectNamePlural,
+        );
+        return HttpResponse.json({
+          data: {
+            [objectConfig.objectNamePlural]: wrapRecordsAsConnection(
+              objectConfig.objectNameSingular,
+              records,
+            ),
+          },
+        });
+      }
+
       if (query.includes('timelineActivities')) {
         return HttpResponse.json({
           data: {
@@ -556,19 +722,30 @@ export const localTwentyGraphqlMocks = {
         });
       }
 
-      const objectConfig = twentyLocalObjectConfigs.find((config) =>
-        query.includes(config.objectNamePlural),
-      );
+      const unsupportedSearchFieldName = Object.keys(
+        unsupportedBridgeSearchRootFields,
+      ).find((fieldName) => query.includes(fieldName));
 
-      if (objectConfig !== undefined) {
-        const records = await getLocalRecordsForObject(
-          objectConfig.objectNamePlural,
-        );
+      if (unsupportedSearchFieldName !== undefined) {
         return HttpResponse.json({
           data: {
-            [objectConfig.objectNamePlural]: wrapRecordsAsConnection(
-              objectConfig.objectNameSingular,
-              records,
+            [unsupportedSearchFieldName]: getEmptySearchConnection(),
+          },
+        });
+      }
+
+      const unsupportedConnectionFieldName = Object.keys(
+        unsupportedBridgeConnectionRootFields,
+      ).find((fieldName) => query.includes(fieldName));
+
+      if (unsupportedConnectionFieldName !== undefined) {
+        return HttpResponse.json({
+          data: {
+            [unsupportedConnectionFieldName]: wrapRecordsAsConnection(
+              unsupportedBridgeConnectionRootFields[
+                unsupportedConnectionFieldName
+              ],
+              [],
             ),
           },
         });
@@ -626,26 +803,7 @@ export const localTwentyGraphqlMocks = {
       });
     }),
     graphql.query('Search', async () => {
-      const { companies, tasks } = await getLocalRecords();
-
-      const personSearchEdges = mockedPersonRecords
-        .slice(0, 2)
-        .map((person: Record<string, unknown>, index: number) => ({
-          node: {
-            __typename: 'SearchRecordDTO',
-            recordId: person.id,
-            objectNameSingular: 'person',
-            objectLabelSingular: 'Person',
-            label:
-              `${(person.name as Record<string, string>)?.firstName ?? ''} ${
-                (person.name as Record<string, string>)?.lastName ?? ''
-              }`.trim(),
-            imageUrl: '',
-            tsRankCD: 0.2,
-            tsRank: 0.12158542,
-          },
-          cursor: `cursor-${index + 1}`,
-        }));
+      const { companies, notes, tasks } = await getLocalRecords();
 
       const companySearchEdges = companies
         .slice(0, 2)
@@ -660,7 +818,23 @@ export const localTwentyGraphqlMocks = {
             tsRankCD: 0.2,
             tsRank: 0.12158542,
           },
-          cursor: `cursor-${personSearchEdges.length + index + 1}`,
+          cursor: `cursor-${index + 1}`,
+        }));
+
+      const noteSearchEdges = notes
+        .slice(0, 2)
+        .map((note: Record<string, unknown>, index: number) => ({
+          node: {
+            __typename: 'SearchRecordDTO',
+            recordId: note.id,
+            objectNameSingular: 'note',
+            objectLabelSingular: 'Note',
+            label: note.title,
+            imageUrl: '',
+            tsRankCD: 0.2,
+            tsRank: 0.12158542,
+          },
+          cursor: `cursor-${companySearchEdges.length + index + 1}`,
         }));
 
       const taskSearchEdges = tasks
@@ -677,12 +851,12 @@ export const localTwentyGraphqlMocks = {
             tsRank: 0.12158542,
           },
           cursor: `cursor-${
-            personSearchEdges.length + companySearchEdges.length + index + 1
+            companySearchEdges.length + noteSearchEdges.length + index + 1
           }`,
         }));
       const allEdges = [
-        ...personSearchEdges,
         ...companySearchEdges,
+        ...noteSearchEdges,
         ...taskSearchEdges,
       ];
 
@@ -700,6 +874,7 @@ export const localTwentyGraphqlMocks = {
         },
       });
     }),
-    ...graphqlMocks.handlers,
+    ...graphqlSystemMocks.handlers,
+    ...graphqlRecordMocks.handlers,
   ],
 };

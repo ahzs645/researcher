@@ -1,4 +1,5 @@
 import { ContextStoreComponentInstanceContext } from '@/context-store/states/contexts/ContextStoreComponentInstanceContext';
+import { addTwentyDataBridgeModeToPath } from '@/local-db/twenty-local/addTwentyDataBridgeModeToPath';
 import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
 import { getObjectPermissionsForObject } from '@/object-metadata/utils/getObjectPermissionsForObject';
 import { RecordComponentInstanceContextsWrapper } from '@/object-record/components/RecordComponentInstanceContextsWrapper';
@@ -52,10 +53,12 @@ export const RecordTableWidgetProvider = ({
 
   const indexIdentifierUrl = useCallback(
     (recordId: string) => {
-      return getAppPath(AppPath.RecordShowPage, {
-        objectNameSingular,
-        objectRecordId: recordId,
-      });
+      return addTwentyDataBridgeModeToPath(
+        getAppPath(AppPath.RecordShowPage, {
+          objectNameSingular,
+          objectRecordId: recordId,
+        }),
+      );
     },
     [objectNameSingular],
   );

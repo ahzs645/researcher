@@ -25,6 +25,15 @@ type RecordTableContextProviderProps = {
   children: ReactNode;
 };
 
+const preferredFallbackFieldNamesByObjectNameSingular: Record<
+  string,
+  string[]
+> = {
+  company: ['domainName', 'employees', 'tagline', 'updatedAt'],
+  note: ['bodyV2', 'updatedAt', 'createdAt'],
+  task: ['status', 'bodyV2', 'updatedAt'],
+};
+
 export const RecordTableContextProvider = ({
   viewBarId,
   recordTableId,
@@ -45,6 +54,31 @@ export const RecordTableContextProvider = ({
   const visibleRecordFields = useAtomComponentSelectorValue(
     visibleRecordFieldsComponentSelector,
   );
+  const preferredFallbackFieldNames =
+    preferredFallbackFieldNamesByObjectNameSingular[objectNameSingular] ?? [
+      'updatedAt',
+      'createdAt',
+    ];
+  const fallbackRecordFields = [
+    objectMetadataItem.fields.find(
+      (field) => field.id === objectMetadataItem.labelIdentifierFieldMetadataId,
+    ),
+    ...preferredFallbackFieldNames.map((fieldName) =>
+      objectMetadataItem.fields.find((field) => field.name === fieldName),
+    ),
+  ].filter((field) => field !== undefined);
+
+  const effectiveVisibleRecordFields =
+    visibleRecordFields.length > 0
+      ? visibleRecordFields
+      : fallbackRecordFields.map((field, index) => ({
+          id: `fallback-${field.id}`,
+          fieldMetadataItemId: field.id,
+          isVisible: true,
+          position: index,
+          size: index === 0 ? 180 : 150,
+          aggregateOperation: null,
+        }));
 
   const { updateOneRecord } = useUpdateOneRecord();
 
@@ -79,7 +113,7 @@ export const RecordTableContextProvider = ({
           recordTableId,
           objectNameSingular,
           objectPermissions,
-          visibleRecordFields: visibleRecordFields.map((field) => ({
+          visibleRecordFields: effectiveVisibleRecordFields.map((field) => ({
             ...field,
             size: Math.max(field.size, RECORD_TABLE_COLUMN_MIN_WIDTH),
           })),

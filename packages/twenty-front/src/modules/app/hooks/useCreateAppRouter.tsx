@@ -4,6 +4,12 @@ import { SettingsRoutes } from '@/app/components/SettingsRoutes';
 import { VerifyLoginTokenEffect } from '@/auth/components/VerifyLoginTokenEffect';
 
 import { VerifyEmailEffect } from '@/auth/components/VerifyEmailEffect';
+import {
+  getTwentyLocalObjectRoutePath,
+  getTwentyLocalObjectConfigByObjectNamePlural,
+  getTwentyLocalRecordRoutePath,
+  type TwentyLocalObjectNamePlural,
+} from '@/local-db/twenty-local/twentyLocalObjectConfigs';
 import indexAppPath from '@/navigation/utils/indexAppPath';
 import { BlankLayout } from '@/ui/layout/page/components/BlankLayout';
 import { DefaultLayout } from '@/ui/layout/page/components/DefaultLayout';
@@ -13,7 +19,9 @@ import { lazy } from 'react';
 import {
   createBrowserRouter,
   createRoutesFromElements,
+  Navigate,
   Route,
+  useParams,
 } from 'react-router-dom';
 
 const RecordIndexPage = lazy(() =>
@@ -106,16 +114,67 @@ const NotFound = lazy(() =>
   })),
 );
 
-const LocalDbDemoPage = lazy(() =>
-  import('~/pages/local-db/LocalDbDemoPage').then((module) => ({
-    default: module.LocalDbDemoPage,
-  })),
+const TwentyBridgeRedirect = ({
+  dataMode,
+  objectNamePlural,
+}: {
+  dataMode: 'local' | 'convex';
+  objectNamePlural: TwentyLocalObjectNamePlural;
+}) => (
+  <Navigate
+    replace
+    to={getTwentyLocalObjectRoutePath({ dataMode, objectNamePlural })}
+  />
 );
 
-const ConvexDbDemoPage = lazy(() =>
-  import('~/pages/convex-db/ConvexDbDemoPage').then((module) => ({
-    default: module.ConvexDbDemoPage,
-  })),
+const getBridgeObjectNamePlural = (objectNamePlural: string | undefined) =>
+  getTwentyLocalObjectConfigByObjectNamePlural(objectNamePlural)
+    ?.objectNamePlural ?? 'companies';
+
+const TwentyBridgeObjectRedirect = ({
+  dataMode,
+}: {
+  dataMode: 'local' | 'convex';
+}) => {
+  const { objectNamePlural } = useParams();
+
+  return (
+    <TwentyBridgeRedirect
+      dataMode={dataMode}
+      objectNamePlural={getBridgeObjectNamePlural(objectNamePlural)}
+    />
+  );
+};
+
+const TwentyBridgeRecordRedirect = ({
+  dataMode,
+}: {
+  dataMode: 'local' | 'convex';
+}) => {
+  const { objectNamePlural, objectRecordId } = useParams();
+
+  if (objectRecordId === undefined) {
+    return <TwentyBridgeObjectRedirect dataMode={dataMode} />;
+  }
+
+  return (
+    <Navigate
+      replace
+      to={getTwentyLocalRecordRoutePath({
+        dataMode,
+        objectNamePlural: getBridgeObjectNamePlural(objectNamePlural),
+        objectRecordId,
+      })}
+    />
+  );
+};
+
+const LocalDbTwentyRedirect = () => (
+  <TwentyBridgeRedirect dataMode="local" objectNamePlural="companies" />
+);
+
+const ConvexTwentyRedirect = () => (
+  <TwentyBridgeRedirect dataMode="convex" objectNamePlural="companies" />
 );
 
 export const useCreateAppRouter = (
@@ -246,21 +305,23 @@ export const useCreateAppRouter = (
               </LazyRoute>
             }
           />
+          <Route path="/localdb" element={<LocalDbTwentyRedirect />} />
           <Route
-            path="/localdb"
-            element={
-              <LazyRoute>
-                <LocalDbDemoPage />
-              </LazyRoute>
-            }
+            path="/localdb/:objectNamePlural"
+            element={<TwentyBridgeObjectRedirect dataMode="local" />}
           />
           <Route
-            path="/convex"
-            element={
-              <LazyRoute>
-                <ConvexDbDemoPage />
-              </LazyRoute>
-            }
+            path="/localdb/:objectNamePlural/:objectRecordId"
+            element={<TwentyBridgeRecordRedirect dataMode="local" />}
+          />
+          <Route path="/convex" element={<ConvexTwentyRedirect />} />
+          <Route
+            path="/convex/:objectNamePlural"
+            element={<TwentyBridgeObjectRedirect dataMode="convex" />}
+          />
+          <Route
+            path="/convex/:objectNamePlural/:objectRecordId"
+            element={<TwentyBridgeRecordRedirect dataMode="convex" />}
           />
           <Route
             path={AppPath.SettingsCatchAll}

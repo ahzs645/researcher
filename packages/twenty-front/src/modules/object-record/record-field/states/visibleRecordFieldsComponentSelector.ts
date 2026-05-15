@@ -72,9 +72,9 @@ const filterVisibleAndReadableRecordFields = (
           fieldMetadata: fieldMetadataItem,
         });
 
-      const isReadable = objectMetadataItem.readableFields.some(
-        findById(fieldMetadataItem.id),
-      );
+      const isReadable =
+        objectMetadataItem.readableFields.length === 0 ||
+        objectMetadataItem.readableFields.some(findById(fieldMetadataItem.id));
 
       return isReadable && isActive;
     },

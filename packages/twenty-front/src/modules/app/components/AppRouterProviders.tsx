@@ -14,6 +14,13 @@ import { ClientConfigProviderEffect } from '@/client-config/components/ClientCon
 import { MainContextStoreProvider } from '@/context-store/components/MainContextStoreProvider';
 import { ErrorMessageEffect } from '@/error-handler/components/ErrorMessageEffect';
 import { PromiseRejectionEffect } from '@/error-handler/components/PromiseRejectionEffect';
+import { ConvexBridgeConfigError } from '@/local-db/twenty-local/ConvexBridgeConfigError';
+import {
+  getTwentyDataBridgeConfig,
+  isTwentyDataBridgeConfigured,
+} from '@/local-db/twenty-local/getTwentyDataBridgeConfig';
+import { LocalAppRouterProviders } from '@/local-db/twenty-local/LocalAppRouterProviders';
+import { isTwentyDataBridgeMode } from '@/local-db/twenty-local/isLocalTwentyDataMode';
 import { MinimalMetadataLoadEffect } from '@/metadata-store/effect-components/MinimalMetadataLoadEffect';
 import { UserMetadataProviderInitialEffect } from '@/metadata-store/effect-components/UserMetadataProviderInitialEffect';
 import { ApolloCoreProvider } from '@/object-metadata/components/ApolloCoreProvider';
@@ -39,6 +46,16 @@ import { getPageTitleFromPath } from '~/utils/title-utils';
 export const AppRouterProviders = () => {
   const { pathname } = useLocation();
   const pageTitle = getPageTitleFromPath(pathname);
+
+  if (isTwentyDataBridgeMode()) {
+    const bridgeConfig = getTwentyDataBridgeConfig();
+
+    if (!isTwentyDataBridgeConfigured(bridgeConfig)) {
+      return <ConvexBridgeConfigError />;
+    }
+
+    return <LocalAppRouterProviders />;
+  }
 
   return (
     <ApolloProvider>

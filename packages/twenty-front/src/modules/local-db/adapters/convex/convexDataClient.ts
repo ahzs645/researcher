@@ -62,7 +62,7 @@ export const createConvexDataClient = ({
         return await mutations.projects.create({
           appId: createAppId('project'),
           name: input.name,
-          summary: input.summary,
+          summary: input.summary ?? '',
         });
       },
       async update(id, patch: UpdateProjectInput) {

@@ -37,6 +37,7 @@ const StyledContainerWithPadding = styled.div`
 
 export const RecordIndexContainer = () => {
   const recordIndexViewType = useAtomStateValue(recordIndexViewTypeState);
+  const effectiveRecordIndexViewType = recordIndexViewType ?? ViewType.TABLE;
 
   const {
     objectNamePlural,
@@ -60,7 +61,7 @@ export const RecordIndexContainer = () => {
               <ObjectOptionsDropdown
                 recordIndexId={recordIndexId}
                 objectMetadataItem={objectMetadataItem}
-                viewType={recordIndexViewType ?? ViewType.TABLE}
+                viewType={effectiveRecordIndexViewType}
               />
             }
           />
@@ -76,10 +77,10 @@ export const RecordIndexContainer = () => {
         ) : (
           <>
             <RecordIndexFiltersToContextStoreEffect />
-            {recordIndexViewType === ViewType.TABLE && (
+            {effectiveRecordIndexViewType === ViewType.TABLE && (
               <RecordIndexTableContainer recordTableId={recordIndexId} />
             )}
-            {recordIndexViewType === ViewType.KANBAN && (
+            {effectiveRecordIndexViewType === ViewType.KANBAN && (
               <StyledContainerWithPadding>
                 <RecordBoardContainer
                   recordBoardId={recordIndexId}
@@ -88,7 +89,7 @@ export const RecordIndexContainer = () => {
                 />
               </StyledContainerWithPadding>
             )}
-            {recordIndexViewType === ViewType.CALENDAR && (
+            {effectiveRecordIndexViewType === ViewType.CALENDAR && (
               <StyledContainerWithPadding>
                 <RecordIndexCalendarContainer
                   recordCalendarInstanceId={recordIndexId}

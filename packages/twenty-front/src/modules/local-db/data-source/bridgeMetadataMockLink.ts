@@ -1,30 +1,42 @@
 import { ApolloLink, Observable, type FetchResult } from '@apollo/client';
 
+import {
+  assignRoleToApiKey,
+  createApiKey,
+  generateApiKeyToken,
+  getApiKey,
+  getApiKeys,
+  getCalendarChannels,
+  getCommandMenuItems,
+  getConnectedAccounts,
+  getCurrentUser,
+  getCurrentWorkspaceMember,
+  getFrontComponents,
+  getLogicFunctions,
+  getMessageChannels,
+  getNavigationMenuItems,
+  getPageLayouts,
+  getPublicWorkspaceDataByDomain,
+  getViews,
+  getWebhook,
+  getWebhooks,
+  revokeApiKey,
+  updateApiKey,
+} from '@/local-db/data-source/bridgeSystemStore';
 import { mockedClientConfig } from '~/testing/mock-data/config';
-import { mockedBackendCommandMenuItems } from '~/testing/mock-data/command-menu-items';
-import { mockedApiKeys } from '~/testing/mock-data/generated/metadata/api-keys/mock-api-keys-data';
 import { mockedMinimalMetadata } from '~/testing/mock-data/generated/metadata/minimal/mock-minimal-metadata';
-import { mockedNavigationMenuItems } from '~/testing/mock-data/generated/metadata/navigation-menu-items/mock-navigation-menu-items-data';
 import { mockedStandardObjectMetadataQueryResult } from '~/testing/mock-data/generated/metadata/objects/mock-objects-metadata';
-import { mockedViews } from '~/testing/mock-data/generated/metadata/views/mock-views-data';
-import { mockedPublicWorkspaceDataBySubdomain } from '~/testing/mock-data/publicWorkspaceDataBySubdomain';
-import { mockedUserData } from '~/testing/mock-data/users';
 
-// Apollo Link that short-circuits known metadata / auth operations with fixed
-// mock data. Used as the bridge's metadata-client terminating link in place
-// of MSW + HTTP — every operation listed here resolves synchronously without
-// hitting the network. Unknown operations are forwarded to `next`, which lets
-// MSW (still mounted for HTTP-shaped requests like /client-config and file
-// proxies) keep working until those callers are migrated too.
-//
-// Adding an operation here is the equivalent of writing an MSW handler, but
-// without the schema-introspection or HTTP-shape overhead. Variables aren't
-// validated — the bridge trusts its own callers.
+// Apollo Link that short-circuits known metadata / auth operations against the
+// bridge's persistent system Dexie database (`bridgeSystemStore`). Mutations
+// write back to the same store so settings pages mutate state that survives
+// reload. Unknown operations are forwarded to `next` (where MSW still handles
+// plain HTTP fallbacks). Adding a new operation means registering a handler
+// here and, if needed, a table+seed in `bridgeSystemDexie`/`bridgeSystemSeed`.
 
-type MockHandler = (variables: Record<string, unknown>) =>
-  | Record<string, unknown>
-  | null
-  | undefined;
+type Variables = Record<string, unknown>;
+
+type MockHandler = (variables: Variables) => Promise<unknown> | unknown;
 
 const handlers: Record<string, MockHandler> = {
   IntrospectionQuery: () => ({
@@ -46,64 +58,109 @@ const handlers: Record<string, MockHandler> = {
     },
   }),
 
-  GetCurrentUser: () => ({
-    currentUser: {
-      ...mockedUserData,
-      currentWorkspace: {
-        ...mockedUserData.currentWorkspace,
-        logo: null,
-      },
-    },
+  GetCurrentUser: async () => ({
+    currentUser: await getCurrentUser(),
   }),
 
-  GetPublicWorkspaceDataByDomain: () => ({
-    getPublicWorkspaceDataByDomain: {
-      ...mockedPublicWorkspaceDataBySubdomain,
-      logo: null,
-    },
+  GetPublicWorkspaceDataByDomain: async () => ({
+    getPublicWorkspaceDataByDomain: await getPublicWorkspaceDataByDomain(),
   }),
 
   TrackAnalytics: () => ({
     trackAnalytics: { __typename: 'Analytics', success: true },
   }),
 
-  FindOneWorkspaceMember: () => ({ workspaceMember: null }),
+  FindOneWorkspaceMember: async () => ({
+    workspaceMember: await getCurrentWorkspaceMember(),
+  }),
 
-  MyConnectedAccounts: () => ({ myConnectedAccounts: [] }),
-  MyMessageChannels: () => ({ myMessageChannels: [] }),
-  MyCalendarChannels: () => ({ myCalendarChannels: [] }),
-  FindManyFrontComponents: () => ({ frontComponents: [] }),
+  MyConnectedAccounts: async () => ({
+    myConnectedAccounts: await getConnectedAccounts(),
+  }),
+  MyMessageChannels: async () => ({
+    myMessageChannels: await getMessageChannels(),
+  }),
+  MyCalendarChannels: async () => ({
+    myCalendarChannels: await getCalendarChannels(),
+  }),
+  FindManyFrontComponents: async () => ({
+    frontComponents: await getFrontComponents(),
+  }),
 
+  // Object metadata + minimal metadata aren't yet persisted — they're large,
+  // static, and read once at boot into the Jotai metadata-store. Stub the
+  // Apollo metadata-client return so any caller that still goes through it
+  // gets the same payload.
   FindManyObjectMetadataItems: () => mockedStandardObjectMetadataQueryResult,
   FindMinimalMetadata: () => ({ minimalMetadata: mockedMinimalMetadata }),
 
-  FindAllViews: () => ({ getViews: mockedViews }),
-  FindFieldsWidgetViews: () => ({
-    getViews: mockedViews.filter((view) => view.type === 'FIELDS_WIDGET'),
+  FindAllViews: async () => ({ getViews: await getViews() }),
+  FindFieldsWidgetViews: async () => ({
+    getViews: await getViews({ type: 'FIELDS_WIDGET' }),
   }),
-  FindTableWidgetViews: () => ({
-    getViews: mockedViews.filter((view) => view.type === 'TABLE_WIDGET'),
-  }),
-
-  FindAllRecordPageLayouts: () => ({ getPageLayouts: [] }),
-  FindManyLogicFunctions: () => ({ findManyLogicFunctions: [] }),
-  FindManyNavigationMenuItems: () => ({
-    navigationMenuItems: mockedNavigationMenuItems,
-  }),
-  FindManyCommandMenuItems: () => ({
-    commandMenuItems: mockedBackendCommandMenuItems,
+  FindTableWidgetViews: async () => ({
+    getViews: await getViews({ type: 'TABLE_WIDGET' }),
   }),
 
-  GetApiKeys: () => ({ apiKeys: mockedApiKeys }),
-  GetApiKey: (variables) => ({
-    apiKey:
-      mockedApiKeys.find(
-        (key) => key.id === (variables.input as { id?: string } | undefined)?.id,
-      ) ?? null,
+  FindAllRecordPageLayouts: async () => ({
+    getPageLayouts: await getPageLayouts({ type: 'RECORD_PAGE' }),
+  }),
+  FindManyLogicFunctions: async () => ({
+    findManyLogicFunctions: await getLogicFunctions(),
+  }),
+  FindManyNavigationMenuItems: async () => ({
+    navigationMenuItems: await getNavigationMenuItems(),
+  }),
+  FindManyCommandMenuItems: async () => ({
+    commandMenuItems: await getCommandMenuItems(),
   }),
 
-  GetWebhooks: () => ({
-    webhooks: [],
+  GetApiKeys: async () => ({ apiKeys: await getApiKeys() }),
+  GetApiKey: async (variables) => ({
+    apiKey: await getApiKey(
+      (variables.input as { id?: string } | undefined)?.id ?? '',
+    ),
+  }),
+  CreateApiKey: async (variables) => ({
+    createApiKey: await createApiKey(
+      (variables.input as {
+        name: string;
+        expiresAt?: string | null;
+        roleId?: string | null;
+      }) ?? { name: 'Untitled' },
+    ),
+  }),
+  UpdateApiKey: async (variables) => {
+    const input = variables.input as {
+      id: string;
+      name?: string;
+      expiresAt?: string | null;
+    };
+    return { updateApiKey: await updateApiKey(input) };
+  },
+  RevokeApiKey: async (variables) => {
+    const input = variables.input as { id: string };
+    return { revokeApiKey: await revokeApiKey(input.id) };
+  },
+  AssignRoleToApiKey: async (variables) => {
+    const input = variables.input as { apiKeyId: string; roleId: string };
+    return { assignRoleToApiKey: await assignRoleToApiKey(input) };
+  },
+  GenerateApiKeyToken: (variables) => {
+    const input = variables.input as { apiKeyId: string };
+    return {
+      generateApiKeyToken: {
+        __typename: 'ApiKeyToken',
+        ...generateApiKeyToken(input.apiKeyId),
+      },
+    };
+  },
+
+  GetWebhooks: async () => ({ webhooks: await getWebhooks() }),
+  GetWebhook: async (variables) => ({
+    webhook: await getWebhook(
+      (variables.input as { id?: string } | undefined)?.id ?? '',
+    ),
   }),
 };
 
@@ -116,10 +173,6 @@ const CLIENT_CONFIG = {
   },
 };
 
-// Some operations are HTTP GETs (not GraphQL) — e.g. /client-config. The link
-// only handles GraphQL operations, so plain HTTP requests still fall through
-// to MSW. Surface this as a constant so the bridge HTTP handlers can read the
-// same data.
 export { CLIENT_CONFIG as bridgeClientConfig };
 
 export const bridgeMetadataMockLink = new ApolloLink((operation, forward) => {
@@ -127,16 +180,17 @@ export const bridgeMetadataMockLink = new ApolloLink((operation, forward) => {
   const handler = operationName ? handlers[operationName] : undefined;
 
   if (!handler) {
-    // Unknown operation — let the next link handle it. In bridge mode there's
-    // no real backend, so this typically results in a fetch error which the
-    // caller treats as "no data". Add to `handlers` if you need a real stub.
     return forward(operation);
   }
 
-  const data = handler(operation.variables ?? {});
-
   return new Observable<FetchResult>((subscriber) => {
-    subscriber.next({ data });
-    subscriber.complete();
+    Promise.resolve(handler(operation.variables ?? {}))
+      .then((data) => {
+        subscriber.next({ data: data as Record<string, unknown> });
+        subscriber.complete();
+      })
+      .catch((error) => {
+        subscriber.error(error);
+      });
   });
 });

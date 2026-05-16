@@ -1,3 +1,6 @@
+// Sets up an in-memory IndexedDB before any Dexie-backed import loads.
+import 'fake-indexeddb/auto';
+
 import {
   ApolloClient,
   ApolloLink,
@@ -8,6 +11,8 @@ import {
 } from '@apollo/client';
 
 import { bridgeMetadataMockLink } from '@/local-db/data-source/bridgeMetadataMockLink';
+import { getBridgeSystemDexie } from '@/local-db/data-source/bridgeSystemDexie';
+import { __resetBridgeSystemSeedForTests } from '@/local-db/data-source/bridgeSystemSeed';
 
 // The mock link short-circuits known operations in-process. Verifying a few
 // representative shapes guards against accidental handler removal.
@@ -30,17 +35,43 @@ const runQuery = async (query: DocumentNode, link = bridgeMetadataMockLink) => {
 
 const runMutation = async (
   mutation: DocumentNode,
+  variables: Record<string, unknown> = {},
   link = bridgeMetadataMockLink,
 ) => {
   const client = buildClient(link);
   const result = await client.mutate({
     mutation,
+    variables,
     errorPolicy: 'all',
   });
   return result.data;
 };
 
 describe('bridgeMetadataMockLink', () => {
+  beforeEach(async () => {
+    const db = getBridgeSystemDexie();
+    await Promise.all([
+      db.user.clear(),
+      db.workspace.clear(),
+      db.workspaceMember.clear(),
+      db.view.clear(),
+      db.viewField.clear(),
+      db.viewFilter.clear(),
+      db.viewSort.clear(),
+      db.viewGroup.clear(),
+      db.viewFilterGroup.clear(),
+      db.viewFieldGroup.clear(),
+      db.publicWorkspaceData.clear(),
+      db.navigationMenuItem.clear(),
+      db.commandMenuItem.clear(),
+      db.role.clear(),
+      db.apiKey.clear(),
+      db.webhook.clear(),
+      db.pageLayout.clear(),
+    ]);
+    __resetBridgeSystemSeedForTests();
+  });
+
   it('returns mocked currentUser for GetCurrentUser', async () => {
     const data = await runQuery(gql`
       query GetCurrentUser {
@@ -74,6 +105,39 @@ describe('bridgeMetadataMockLink', () => {
       }
     `);
     expect((data as Record<string, unknown>).myConnectedAccounts).toEqual([]);
+  });
+
+  it('persists CreateApiKey through to subsequent GetApiKeys', async () => {
+    const createData = await runMutation(
+      gql`
+        mutation CreateApiKey($input: CreateApiKeyInput!) {
+          createApiKey(input: $input) {
+            id
+            name
+          }
+        }
+      `,
+      { input: { name: 'Test', expiresAt: null, roleId: null } },
+    );
+    const created = (createData as Record<string, unknown>).createApiKey as {
+      id: string;
+      name: string;
+    };
+    expect(created.id).toBeTruthy();
+    expect(created.name).toBe('Test');
+
+    const listData = await runQuery(gql`
+      query GetApiKeys {
+        apiKeys {
+          id
+          name
+        }
+      }
+    `);
+    const apiKeys = (listData as Record<string, unknown>).apiKeys as {
+      id: string;
+    }[];
+    expect(apiKeys.some((key) => key.id === created.id)).toBe(true);
   });
 
   it('forwards unknown operations to the next link', async () => {

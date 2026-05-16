@@ -10,13 +10,27 @@ const persistTwentyDataMode = (mode: TwentyDataBridgeMode) => {
   return mode;
 };
 
+const readViteEnv = (): Record<string, string | undefined> | undefined => {
+  // `import.meta` is a syntactic ESM construct; deferring through
+  // `new Function(…)` keeps this file parsable in Jest's CommonJS context
+  // while Vite still resolves the values at runtime.
+  try {
+    const fn = new Function(
+      'return typeof import !== "undefined" ? import.meta?.env : undefined',
+    ) as () => Record<string, string | undefined> | undefined;
+    return fn();
+  } catch {
+    return undefined;
+  }
+};
+
 export const getTwentyDataMode = (): TwentyDataBridgeMode | null => {
   if (typeof window === 'undefined') {
     return null;
   }
 
   const searchParams = new URLSearchParams(window.location.search);
-  const envDataMode = import.meta.env.REACT_APP_DATA_MODE;
+  const envDataMode = readViteEnv()?.REACT_APP_DATA_MODE;
   const pathname = window.location.pathname;
   const storedMode = window.sessionStorage.getItem(
     TWENTY_DATA_MODE_STORAGE_KEY,
@@ -46,7 +60,7 @@ export const getTwentyDataMode = (): TwentyDataBridgeMode | null => {
 
   const isLocalHost = LOCAL_HOSTNAMES.has(window.location.hostname);
   const isOptedOut =
-    import.meta.env.REACT_APP_LOCAL_DB_AUTH_BYPASS_DISABLED === 'true';
+    readViteEnv()?.REACT_APP_LOCAL_DB_AUTH_BYPASS_DISABLED === 'true';
 
   if (isLocalHost && !isOptedOut) {
     return persistTwentyDataMode('local');

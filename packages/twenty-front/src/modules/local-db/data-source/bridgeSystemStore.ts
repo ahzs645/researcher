@@ -3,11 +3,43 @@ import {
   getBridgeSystemDexie,
 } from '@/local-db/data-source/bridgeSystemDexie';
 import { ensureBridgeSystemSeeded } from '@/local-db/data-source/bridgeSystemSeed';
+import {
+  createConvexSystemStore,
+  type ConvexSystemStore,
+} from '@/local-db/data-source/createConvexSystemStore';
+import { getTwentyDataBridgeConfig } from '@/local-db/twenty-local/getTwentyDataBridgeConfig';
 
-// Async helpers over the bridge's system Dexie database. The metadata
-// Apollo Link calls these to satisfy each operation, replacing what used to
-// be hardcoded mock returns. Every helper awaits `ensureBridgeSystemSeeded()`
-// first so callers don't need to coordinate the one-shot seed themselves.
+// Public system-store API. Dispatches to either:
+//   * the Dexie-backed implementation in this file (mode === 'local'), or
+//   * `createConvexSystemStore` talking to `/system-source/*` HTTP actions
+//     (mode === 'convex').
+//
+// The Apollo metadata link (`bridgeMetadataMockLink`) calls these helpers
+// regardless of mode, so the dispatch boundary lives here. Each call resolves
+// the mode lazily so React → useEffect → store changes pick up the latest
+// state without restarting the page.
+
+let cachedConvexStore: ConvexSystemStore | undefined;
+let cachedConvexUrl: string | undefined;
+
+const getConvexStore = (convexUrl: string): ConvexSystemStore => {
+  if (cachedConvexUrl !== convexUrl) {
+    cachedConvexStore = createConvexSystemStore(convexUrl);
+    cachedConvexUrl = convexUrl;
+  }
+  return cachedConvexStore!;
+};
+
+const resolveBackend = (): ConvexSystemStore | null => {
+  const config = getTwentyDataBridgeConfig();
+  if (!config) return null;
+  if (config.mode === 'convex' && config.convexUrl) {
+    return getConvexStore(config.convexUrl);
+  }
+  return null; // → fall through to Dexie
+};
+
+// --- Dexie-backed implementation (mode === 'local') ---
 
 const withSeed = async <T>(fn: () => Promise<T>): Promise<T> => {
   await ensureBridgeSystemSeeded();
@@ -15,10 +47,6 @@ const withSeed = async <T>(fn: () => Promise<T>): Promise<T> => {
 };
 
 const stripBridgeId = <T extends Record<string, unknown>>(record: T): T => {
-  // The user / workspace singletons store under a stable bridge id (e.g.
-  // `__bridge_user__`) so the resolver can find them without parameters.
-  // Twenty's UI expects the original uuid the User had in production, so we
-  // strip the sentinel here.
   if (record.id === BRIDGE_SYSTEM_KEYS.USER) {
     const { id: _id, ...rest } = record;
     return rest as T;
@@ -57,8 +85,12 @@ const rehydrateView = async (
   };
 };
 
-export const getCurrentUser = (): Promise<Record<string, unknown> | null> =>
-  withSeed(async () => {
+// --- Public dispatch surface ---
+
+export const getCurrentUser = (): Promise<Record<string, unknown> | null> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getCurrentUser();
+  return withSeed(async () => {
     const db = getBridgeSystemDexie();
     const stored = await db.user.get(BRIDGE_SYSTEM_KEYS.USER);
     if (!stored) return null;
@@ -72,33 +104,42 @@ export const getCurrentUser = (): Promise<Record<string, unknown> | null> =>
         : {}),
     };
   });
+};
 
 export const getPublicWorkspaceDataByDomain = (): Promise<
   Record<string, unknown> | null
-> =>
-  withSeed(async () => {
+> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getPublicWorkspaceDataByDomain();
+  return withSeed(async () => {
     const db = getBridgeSystemDexie();
     const stored = await db.publicWorkspaceData.toCollection().first();
     if (!stored) return null;
     const { subdomain: _subdomain, ...rest } = stored;
     return rest;
   });
+};
 
 export const getCurrentWorkspaceMember = (): Promise<
   Record<string, unknown> | null
-> =>
-  withSeed(async () => {
+> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getCurrentWorkspaceMember();
+  return withSeed(async () => {
     const db = getBridgeSystemDexie();
     const stored = await db.workspaceMember.toCollection().first();
     return stored ?? null;
   });
+};
 
 export const getViews = (filter?: {
   type?: string;
   key?: string;
   objectMetadataId?: string;
-}): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => {
+}): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getViews(filter);
+  return withSeed(async () => {
     const db = getBridgeSystemDexie();
     const all = await db.view.toArray();
     const filtered = all.filter(
@@ -111,42 +152,67 @@ export const getViews = (filter?: {
     );
     return Promise.all(filtered.map((view) => rehydrateView(view)));
   });
+};
 
 export const getPageLayouts = (filter?: {
   type?: string;
-}): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => {
+}): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getPageLayouts(filter);
+  return withSeed(async () => {
     const db = getBridgeSystemDexie();
     const all = await db.pageLayout.toArray();
     return filter?.type
       ? all.filter((layout) => layout.type === filter.type)
       : all;
   });
+};
 
-export const getNavigationMenuItems = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().navigationMenuItem.toArray());
+export const getNavigationMenuItems = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getNavigationMenuItems();
+  return withSeed(async () =>
+    getBridgeSystemDexie().navigationMenuItem.toArray(),
+  );
+};
 
-export const getCommandMenuItems = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().commandMenuItem.toArray());
+export const getCommandMenuItems = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getCommandMenuItems();
+  return withSeed(async () => getBridgeSystemDexie().commandMenuItem.toArray());
+};
 
-export const getRoles = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().role.toArray());
+export const getRoles = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getRoles();
+  return withSeed(async () => getBridgeSystemDexie().role.toArray());
+};
 
-export const getApiKeys = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().apiKey.toArray());
+export const getApiKeys = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getApiKeys();
+  return withSeed(async () => getBridgeSystemDexie().apiKey.toArray());
+};
 
-export const getApiKey = (id: string): Promise<Record<string, unknown> | null> =>
-  withSeed(async () => {
+export const getApiKey = (
+  id: string,
+): Promise<Record<string, unknown> | null> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getApiKey(id);
+  return withSeed(async () => {
     const stored = await getBridgeSystemDexie().apiKey.get(id);
     return stored ?? null;
   });
+};
 
 export const createApiKey = (input: {
   name: string;
   expiresAt?: string | null;
   roleId?: string | null;
-}): Promise<Record<string, unknown>> =>
-  withSeed(async () => {
+}): Promise<Record<string, unknown>> => {
+  const remote = resolveBackend();
+  if (remote) return remote.createApiKey(input);
+  return withSeed(async () => {
     const db = getBridgeSystemDexie();
     const role = input.roleId ? await db.role.get(input.roleId) : null;
     const apiKey = {
@@ -169,13 +235,16 @@ export const createApiKey = (input: {
     await db.apiKey.put(apiKey);
     return apiKey;
   });
+};
 
 export const updateApiKey = (input: {
   id: string;
   name?: string;
   expiresAt?: string | null;
-}): Promise<Record<string, unknown> | null> =>
-  withSeed(async () => {
+}): Promise<Record<string, unknown> | null> => {
+  const remote = resolveBackend();
+  if (remote) return remote.updateApiKey(input);
+  return withSeed(async () => {
     const db = getBridgeSystemDexie();
     const existing = await db.apiKey.get(input.id);
     if (!existing) return null;
@@ -188,9 +257,14 @@ export const updateApiKey = (input: {
     await db.apiKey.put(next);
     return next;
   });
+};
 
-export const revokeApiKey = (id: string): Promise<Record<string, unknown> | null> =>
-  withSeed(async () => {
+export const revokeApiKey = (
+  id: string,
+): Promise<Record<string, unknown> | null> => {
+  const remote = resolveBackend();
+  if (remote) return remote.revokeApiKey(id);
+  return withSeed(async () => {
     const db = getBridgeSystemDexie();
     const existing = await db.apiKey.get(id);
     if (!existing) return null;
@@ -202,12 +276,15 @@ export const revokeApiKey = (id: string): Promise<Record<string, unknown> | null
     await db.apiKey.put(next);
     return next;
   });
+};
 
 export const assignRoleToApiKey = (input: {
   apiKeyId: string;
   roleId: string;
-}): Promise<boolean> =>
-  withSeed(async () => {
+}): Promise<boolean> => {
+  const remote = resolveBackend();
+  if (remote) return remote.assignRoleToApiKey(input);
+  return withSeed(async () => {
     const db = getBridgeSystemDexie();
     const apiKey = await db.apiKey.get(input.apiKeyId);
     const role = await db.role.get(input.roleId);
@@ -224,33 +301,55 @@ export const assignRoleToApiKey = (input: {
     });
     return true;
   });
+};
 
 export const generateApiKeyToken = (apiKeyId: string): { token: string } => ({
-  // The bridge can't sign tokens; emit a stable opaque string so the UI shows
-  // a value to copy and the user knows the key was generated.
   token: `bridge-mock-token-${apiKeyId}`,
 });
 
-export const getWebhooks = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().webhook.toArray());
+export const getWebhooks = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getWebhooks();
+  return withSeed(async () => getBridgeSystemDexie().webhook.toArray());
+};
 
-export const getWebhook = (id: string): Promise<Record<string, unknown> | null> =>
-  withSeed(async () => {
+export const getWebhook = (id: string): Promise<Record<string, unknown> | null> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getWebhook(id);
+  return withSeed(async () => {
     const stored = await getBridgeSystemDexie().webhook.get(id);
     return stored ?? null;
   });
+};
 
-export const getConnectedAccounts = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().connectedAccount.toArray());
+export const getConnectedAccounts = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getConnectedAccounts();
+  return withSeed(async () =>
+    getBridgeSystemDexie().connectedAccount.toArray(),
+  );
+};
 
-export const getMessageChannels = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().messageChannel.toArray());
+export const getMessageChannels = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getMessageChannels();
+  return withSeed(async () => getBridgeSystemDexie().messageChannel.toArray());
+};
 
-export const getCalendarChannels = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().calendarChannel.toArray());
+export const getCalendarChannels = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getCalendarChannels();
+  return withSeed(async () => getBridgeSystemDexie().calendarChannel.toArray());
+};
 
-export const getFrontComponents = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().frontComponent.toArray());
+export const getFrontComponents = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getFrontComponents();
+  return withSeed(async () => getBridgeSystemDexie().frontComponent.toArray());
+};
 
-export const getLogicFunctions = (): Promise<Record<string, unknown>[]> =>
-  withSeed(async () => getBridgeSystemDexie().logicFunction.toArray());
+export const getLogicFunctions = (): Promise<Record<string, unknown>[]> => {
+  const remote = resolveBackend();
+  if (remote) return remote.getLogicFunctions();
+  return withSeed(async () => getBridgeSystemDexie().logicFunction.toArray());
+};

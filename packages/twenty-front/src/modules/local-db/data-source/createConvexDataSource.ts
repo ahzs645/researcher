@@ -12,6 +12,8 @@ import {
   type DataSourceSearchPage,
 } from 'twenty-shared/data-source';
 
+import { getTwentyBridgeSecret } from '@/local-db/twenty-local/getTwentyBridgeSecret';
+
 // Skeleton ConvexDataSource. Production builds will:
 //
 //  1. Speak to Convex via HTTP actions registered under `/data-source/*`
@@ -54,9 +56,15 @@ export const createConvexDataSource = ({
     method: string,
     body: Record<string, unknown>,
   ): Promise<T> => {
+    // Per-call so a freshly-injected `?bridgeToken=…` URL param applies
+    // immediately. Convex's `checkBridgeAuth` rejects mismatches.
+    const secret = getTwentyBridgeSecret();
     const response = await fetchImpl(url(`data-source/${method}`), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(secret ? { 'X-Bridge-Token': secret } : {}),
+      },
       body: JSON.stringify(body),
     });
     return requireJson<T>(response);

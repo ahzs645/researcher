@@ -1,3 +1,4 @@
+import { getTwentyBridgeSecret } from '@/local-db/twenty-local/getTwentyBridgeSecret';
 import { getTwentyConvexUrl } from '@/local-db/twenty-local/getTwentyConvexUrl';
 import {
   getTwentyDataMode,
@@ -15,6 +16,11 @@ export const getTwentyDataBridgeConfig = (): TwentyDataBridgeConfig | null => {
   if (mode === null) {
     return null;
   }
+
+  // Resolve the bridge token here too so the URL-param value gets persisted
+  // into sessionStorage before React Router rewrites `?bridgeToken=…` off the
+  // address bar. The fetcher reads it back via `getTwentyBridgeSecret`.
+  getTwentyBridgeSecret();
 
   return {
     mode,

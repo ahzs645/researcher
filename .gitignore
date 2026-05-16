@@ -1,7 +1,20 @@
 **/**/.env
+.env.local
+.env.convex.local
 .DS_Store
 /.idea
 .claude/
+
+# Convex bridge — self-hosted backend data + browser-verify screenshots
+.convex-data/
+convex/_generated/
+convex-bridge*.png
+verify-*.png
+no-shim-*.png
+show-page*.png
+final-*.png
+aggregates-fixed.png
+after-isactive-fix.png
 .cursor/debug-*.log
 **/**/node_modules/
 .cache

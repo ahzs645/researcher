@@ -23,8 +23,11 @@ const main = async () => {
   const bundle = buildDataSourceBundle(
     mockedStandardObjectMetadataQueryResult as never,
   );
+  // Auto-generated record tables live in `convex/recordSchema.ts`; the
+  // combined `schema.ts` is hand-written and spreads them alongside the
+  // system tables so we keep one defineSchema() call.
   const source = generateConvexSchema(bundle);
-  const outputPath = resolve(__dirname, '../../../convex/schema.ts');
+  const outputPath = resolve(__dirname, '../../../convex/recordSchema.ts');
   await writeFile(outputPath, source, 'utf8');
   // oxlint-disable-next-line no-console
   console.log(`Wrote ${outputPath}`);

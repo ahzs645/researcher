@@ -57,7 +57,9 @@ const renderField = (field: DataSourceField): string | null => {
 };
 
 const renderIndexes = (object: DataSourceObject): string[] => {
-  const indexes: string[] = [`.index('by_id', ['id'])`];
+  // Convex reserves the index name `by_id`; use `by_external_id` for the
+  // application-level `id` (Convex's own `_id` is the natural primary key).
+  const indexes: string[] = [`.index('by_external_id', ['id'])`];
   const fieldNames = new Set<string>(['updatedAt', 'createdAt', 'deletedAt']);
   for (const field of object.fields) {
     if (!field.isActive) continue;
@@ -98,14 +100,16 @@ export const generateConvexSchema = (bundle: DataSourceBundle): string => {
   const objects = bundle.objects.filter((object) => object.isActive);
   const tableBlocks = objects.map(renderTable).join(',\n');
   return `\
-import { defineSchema, defineTable } from 'convex/server';
+import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
 // Auto-generated from DataSourceBundle. Regenerate via the data-source
 // schema script — see twenty-shared/data-source/utils/generateConvexSchema.
+// Exported as a plain object so \`schema.ts\` can spread it alongside
+// hand-written system tables (\`systemSchema.ts\`) in a single defineSchema().
 
-export default defineSchema({
+export const recordTables = {
 ${tableBlocks},
-});
+};
 `;
 };

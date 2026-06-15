@@ -30,7 +30,12 @@ export const getTwentyDataMode = (): TwentyDataBridgeMode | null => {
   }
 
   const searchParams = new URLSearchParams(window.location.search);
-  const envDataMode = readViteEnv()?.REACT_APP_DATA_MODE;
+  // `window._env_` is the runtime-config channel injected into index.html at
+  // build/boot time. Unlike `import.meta.env` (module-only, unreadable from the
+  // `new Function` shim below in a built bundle), it reliably forces a mode on
+  // non-localhost static hosts such as GitHub Pages.
+  const runtimeDataMode = window._env_?.REACT_APP_DATA_MODE;
+  const envDataMode = runtimeDataMode ?? readViteEnv()?.REACT_APP_DATA_MODE;
   const pathname = window.location.pathname;
   const storedMode = window.sessionStorage.getItem(
     TWENTY_DATA_MODE_STORAGE_KEY,

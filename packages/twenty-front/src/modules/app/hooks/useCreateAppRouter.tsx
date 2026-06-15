@@ -4,6 +4,7 @@ import { SettingsRoutes } from '@/app/components/SettingsRoutes';
 import { VerifyLoginTokenEffect } from '@/auth/components/VerifyLoginTokenEffect';
 
 import { VerifyEmailEffect } from '@/auth/components/VerifyEmailEffect';
+import { getTwentyRouterBasename } from '@/local-db/twenty-local/getTwentyPublicBasePath';
 import {
   getTwentyLocalObjectRoutePath,
   getTwentyLocalObjectConfigByObjectNamePlural,
@@ -353,4 +354,7 @@ export const useCreateAppRouter = (
         </Route>
       </Route>,
     ),
+    // `basename` is `/` for normal root deploys and the repo sub-path
+    // (e.g. `/researcher`) for static GitHub Pages builds.
+    { basename: getTwentyRouterBasename() },
   );

@@ -1,0 +1,81 @@
+name: Deploy GitHub Pages (Dexie local demo)
+
+# Builds the Twenty frontend in local-db (Dexie) bridge mode and publishes it as
+# a fully static site to GitHub Pages. No backend: data is seeded from the demo
+# fixtures into the browser's IndexedDB and every create/edit persists there.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/twenty-front/**'
+      - 'packages/twenty-shared/**'
+      - 'packages/twenty-ui/**'
+      - '.github/workflows/deploy-github-pages.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; let in-progress builds finish.
+concurrency:
+  group: github-pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NODE_OPTIONS: '--max-old-space-size=8192'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 1
+
+      - name: Install dependencies
+        uses: ./.github/actions/yarn-install
+
+      - name: Build twenty-shared
+        run: npx nx build twenty-shared
+
+      - name: Build frontend (Dexie bridge + Pages base path)
+        env:
+          # Force the in-browser Dexie bridge on a non-localhost host.
+          REACT_APP_DATA_MODE: local
+          # Project-page base path, e.g. `/researcher/`. Drives Vite `base`,
+          # the router basename, the MSW worker scope and asset URLs.
+          VITE_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}/
+        run: npx nx build twenty-front
+
+      - name: Add SPA fallback and disable Jekyll
+        working-directory: packages/twenty-front/build
+        run: |
+          # GitHub Pages serves 404.html for unknown deep links; making it a
+          # copy of index.html lets the SPA boot and route client-side.
+          cp index.html 404.html
+          # Don't let Jekyll strip files/dirs (e.g. leading-underscore names).
+          touch .nojekyll
+
+      - name: Configure Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v3.0.1
+        with:
+          path: packages/twenty-front/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

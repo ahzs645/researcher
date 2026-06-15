@@ -32,6 +32,52 @@ export default defineConfig(({ mode }) => {
     ? parseInt(REACT_APP_PORT)
     : 3001;
 
+  // Public base path for the built app. Defaults to `/` (root-served, the
+  // production assumption). Static sub-path deploys (e.g. GitHub Pages project
+  // sites at `/<repo>/`) set `VITE_PUBLIC_BASE_PATH`.
+  const normalizePublicBasePath = (value: string | undefined): string => {
+    if (!isNonEmptyString(value) || value === '/') {
+      return '/';
+    }
+    const withLeadingSlash = value.startsWith('/') ? value : `/${value}`;
+    return withLeadingSlash.endsWith('/')
+      ? withLeadingSlash
+      : `${withLeadingSlash}/`;
+  };
+
+  const publicBasePath = normalizePublicBasePath(env.VITE_PUBLIC_BASE_PATH);
+
+  // Runtime config injected into index.html's `window._env_` block. Mirrors
+  // how Twenty's container entrypoint populates `_env_`, but at build time so a
+  // fully static bundle (no backend) can still force bridge mode and resolve
+  // its sub-path. Only emitted when there is something to inject, so normal
+  // root builds keep their original index.html.
+  const runtimeEnv: Record<string, string> = {};
+  if (publicBasePath !== '/') {
+    runtimeEnv.PUBLIC_URL = publicBasePath;
+  }
+  if (isNonEmptyString(env.REACT_APP_DATA_MODE)) {
+    runtimeEnv.REACT_APP_DATA_MODE = env.REACT_APP_DATA_MODE;
+  }
+  if (isNonEmptyString(env.REACT_APP_SERVER_BASE_URL)) {
+    runtimeEnv.REACT_APP_SERVER_BASE_URL = env.REACT_APP_SERVER_BASE_URL;
+  }
+
+  const injectRuntimeEnvPlugin: PluginOption = {
+    name: 'twenty-inject-runtime-env',
+    transformIndexHtml(html: string) {
+      if (Object.keys(runtimeEnv).length === 0) {
+        return html;
+      }
+      // Replace the placeholder `window._env_ = { ... }` (no nested braces)
+      // with the resolved runtime config.
+      return html.replace(
+        /window\._env_\s*=\s*\{[^}]*\}/,
+        `window._env_ = ${JSON.stringify(runtimeEnv)}`,
+      );
+    },
+  };
+
   const CHUNK_SIZE_WARNING_LIMIT = 1024 * 1024; // 1MB
   // Please don't increase this limit for main index chunk
   // If it gets too big then find modules in the code base
@@ -46,6 +92,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: __dirname,
+    base: publicBasePath,
     cacheDir: '../../node_modules/.vite/packages/twenty-front',
 
     server: {
@@ -71,6 +118,7 @@ export default defineConfig(({ mode }) => {
     },
 
     plugins: [
+      injectRuntimeEnvPlugin,
       react({
         plugins: [['@lingui/swc-plugin', {}]],
       }),

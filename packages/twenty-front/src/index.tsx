@@ -35,11 +35,24 @@ const renderApp = async () => {
     await ensureBridgeDataSourceSeeded();
     await startLocalTwentyWorker();
 
+    const { getTwentyRawPathPrefix } = await import(
+      '@/local-db/twenty-local/getTwentyPublicBasePath'
+    );
+
+    // Strip the deploy sub-path (e.g. `/researcher`) before comparing, since
+    // `window.location.pathname` includes it but our route constants don't.
+    const rawPathPrefix = getTwentyRawPathPrefix();
+    const relativePathname =
+      rawPathPrefix.length > 0 &&
+      window.location.pathname.startsWith(rawPathPrefix)
+        ? window.location.pathname.slice(rawPathPrefix.length) || '/'
+        : window.location.pathname;
+
     const isBridgeIndexPath =
-      window.location.pathname === '/' ||
-      window.location.pathname === '/welcome' ||
-      window.location.pathname === '/localdb' ||
-      window.location.pathname === '/convex';
+      relativePathname === '/' ||
+      relativePathname === '/welcome' ||
+      relativePathname === '/localdb' ||
+      relativePathname === '/convex';
 
     if (isBridgeIndexPath) {
       const target = getTwentyLocalObjectRoutePath({
@@ -47,7 +60,8 @@ const renderApp = async () => {
         objectNamePlural: defaultTwentyLocalObjectConfig.objectNamePlural,
       });
 
-      window.history.replaceState(null, '', target);
+      // Re-add the sub-path because raw history is not basename-aware.
+      window.history.replaceState(null, '', `${rawPathPrefix}${target}`);
     }
   }
 

@@ -8,7 +8,14 @@ import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { isCurrentUserLoadedState } from '@/auth/states/isCurrentUserLoadedState';
 import { tokenPairState } from '@/auth/states/tokenPairState';
 import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
+import { PermissionFlagType } from '~/generated-metadata/graphql';
 import { mockedUserData } from '~/testing/mock-data/users';
+
+// The local demo is single-user with no backend RBAC, so grant every settings
+// permission flag. Otherwise `SettingsProtectedRouteWrapper` bounces any
+// workspace-level settings page (general, data model, roles, API keys,
+// security, …) back to /settings/profile — which reads as settings "restarting".
+const ALL_PERMISSION_FLAGS = Object.values(PermissionFlagType);
 
 // Local bridge mode never talks to Twenty's auth backend, so we mint an
 // always-valid placeholder pair. Apollo only checks the cookie's shape;
@@ -33,10 +40,10 @@ export const seedTwentyBridgeAuthState = () => {
     workspaceCustomApplication:
       mockedUserData.currentWorkspace.workspaceCustomApplication ?? null,
   });
-  jotaiStore.set(
-    currentUserWorkspaceState.atom,
-    mockedUserData.currentUserWorkspace,
-  );
+  jotaiStore.set(currentUserWorkspaceState.atom, {
+    ...mockedUserData.currentUserWorkspace,
+    permissionFlags: ALL_PERMISSION_FLAGS,
+  });
   jotaiStore.set(
     currentWorkspaceMemberState.atom,
     mockedUserData.workspaceMember,

@@ -147,7 +147,7 @@ const projectRecords = (): SeedRecord[] => [
 
 const grantRecords = (): SeedRecord[] => [
   makeRecord('grant', 'nserc-discovery', 0, {
-    name: 'NSERC Discovery Grant — Quantum Materials',
+    name: 'Quantum materials core program',
     funder: 'Natural Sciences and Engineering Research Council',
     program: 'Discovery Grants',
     status: 'ACTIVE',
@@ -168,7 +168,7 @@ const grantRecords = (): SeedRecord[] => [
     notes: '',
   }),
   makeRecord('grant', 'cihr-project', 1, {
-    name: 'CIHR Project Grant — Quantum Sensing for Health',
+    name: 'Quantum sensing for early diagnostics',
     funder: 'Canadian Institutes of Health Research',
     program: 'Project Grant',
     status: 'SUBMITTED',
@@ -189,7 +189,7 @@ const grantRecords = (): SeedRecord[] => [
     notes: '',
   }),
   makeRecord('grant', 'innovate-bc-ignite', 2, {
-    name: 'Innovate BC Ignite — Spintronic Memory',
+    name: 'Spintronic memory commercialization',
     funder: 'Innovate BC',
     program: 'Ignite',
     status: 'DRAFTING',
@@ -210,7 +210,7 @@ const grantRecords = (): SeedRecord[] => [
     notes: 'Requires an industry partner match.',
   }),
   makeRecord('grant', 'cfi-jelf', 3, {
-    name: 'CFI John R. Evans Leaders Fund — Cryo Platform',
+    name: 'Shared cryogenic measurement platform',
     funder: 'Canada Foundation for Innovation',
     program: 'John R. Evans Leaders Fund',
     status: 'PROSPECTING',
@@ -231,7 +231,7 @@ const grantRecords = (): SeedRecord[] => [
     notes: '',
   }),
   makeRecord('grant', 'nfrf-exploration', 4, {
-    name: 'New Frontiers in Research Fund — Exploration',
+    name: 'Topological qubits feasibility study',
     funder: 'Tri-Agency (NFRF)',
     program: 'Exploration',
     status: 'DECLINED',
@@ -255,7 +255,7 @@ const grantRecords = (): SeedRecord[] => [
 
 const grantOpportunityRecords = (): SeedRecord[] => [
   makeRecord('grantOpportunity', 'cihr-team-grant', 0, {
-    name: 'CIHR Team Grant: Quantum Technologies for Health',
+    name: 'Quantum technologies for health',
     funder: 'Canadian Institutes of Health Research',
     program: 'Team Grant',
     source: 'CIHR ResearchNet current funding opportunities',
@@ -272,7 +272,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
       'Funds interdisciplinary teams applying quantum technologies to health challenges.',
   }),
   makeRecord('grantOpportunity', 'innovate-bc-ignite-2026', 1, {
-    name: 'Innovate BC Ignite — Fall 2026 intake',
+    name: 'Fall 2026 commercialization intake',
     funder: 'Innovate BC',
     program: 'Ignite',
     source: 'Innovate BC programs',
@@ -288,7 +288,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     description: 'Funds late-stage research with a clear path to commercialization.',
   }),
   makeRecord('grantOpportunity', 'ndit-grant-writing', 2, {
-    name: 'NDIT Grant Writing Support',
+    name: 'Grant writing support reimbursement',
     funder: 'Northern Development Initiative Trust',
     program: 'Grant Writing Support',
     source: 'Northern Development Initiative Trust',
@@ -304,7 +304,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     description: 'Reimburses a portion of professional grant-writing costs.',
   }),
   makeRecord('grantOpportunity', 'nrc-collaboration', 3, {
-    name: 'NRC Collaborative R&D Opportunity',
+    name: 'Collaborative R&D with NRC labs',
     funder: 'National Research Council Canada',
     program: 'Collaborative R&D',
     source: 'NRC research collaboration',
@@ -320,7 +320,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     description: 'Co-funded collaborative research with NRC laboratories.',
   }),
   makeRecord('grantOpportunity', 'mitacs-accelerate', 4, {
-    name: 'Mitacs Accelerate Internship',
+    name: 'Graduate internship with industry partner',
     funder: 'Mitacs',
     program: 'Accelerate',
     source: 'Innovate BC programs',
@@ -336,7 +336,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     description: 'Funds graduate internships co-supervised with industry.',
   }),
   makeRecord('grantOpportunity', 'first-nations-clean-energy', 5, {
-    name: 'First Nations Clean Energy Business Fund',
+    name: 'First Nations clean energy stream',
     funder: 'Province of British Columbia',
     program: 'Clean Energy Business Fund',
     source: 'First Nations Clean Energy Business Fund',
@@ -381,7 +381,7 @@ const grantApplicationRecords = (): SeedRecord[] => [
     applicant: 'Dr. Maya Okafor',
     organization: 'Quantum Materials Lab',
     email: 'maya.okafor@example.ubc.ca',
-    grant: 'CIHR Team Grant: Quantum Technologies for Health',
+    grant: 'Quantum technologies for health',
     cycle: 'Fall 2026 Tri-Agency push',
     amountRequested: 1500000,
     projectSummary: 'Interdisciplinary team proposal for quantum-enabled diagnostics.',
@@ -395,7 +395,7 @@ const grantApplicationRecords = (): SeedRecord[] => [
     applicant: 'Liam Tran',
     organization: 'Quantum Materials Lab',
     email: 'liam.tran@example.ubc.ca',
-    grant: 'Innovate BC Ignite — Spintronic Memory',
+    grant: 'Spintronic memory commercialization',
     cycle: 'Spring 2026 industry partnerships',
     amountRequested: 300000,
     projectSummary: 'Late-stage development with a hardware partner.',
@@ -409,7 +409,7 @@ const grantApplicationRecords = (): SeedRecord[] => [
     applicant: 'Sofia Reyes',
     organization: 'Quantum Materials Lab',
     email: 'sofia.reyes@example.ubc.ca',
-    grant: 'Mitacs Accelerate Internship',
+    grant: 'Graduate internship with industry partner',
     cycle: 'Spring 2026 industry partnerships',
     amountRequested: 60000,
     projectSummary: 'Four internship units co-supervised with an industry partner.',
@@ -419,11 +419,11 @@ const grantApplicationRecords = (): SeedRecord[] => [
     notes: '',
   }),
   makeRecord('grantApplication', 'nserc-renewal-app', 3, {
-    name: 'NSERC Discovery renewal',
+    name: 'Discovery program renewal',
     applicant: 'Dr. Maya Okafor',
     organization: 'Quantum Materials Lab',
     email: 'maya.okafor@example.ubc.ca',
-    grant: 'NSERC Discovery Grant — Quantum Materials',
+    grant: 'Quantum materials core program',
     cycle: 'Fall 2026 Tri-Agency push',
     amountRequested: 600000,
     projectSummary: 'Renewal of the lab’s flagship Discovery program.',

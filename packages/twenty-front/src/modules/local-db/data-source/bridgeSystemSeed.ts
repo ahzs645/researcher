@@ -41,6 +41,8 @@ const seed = async (): Promise<void> => {
         id:
           (mockedUserData.currentWorkspace as { id?: string }).id ??
           BRIDGE_SYSTEM_KEYS.WORKSPACE,
+        // Re-skin the default CRM workspace as a research workspace.
+        displayName: 'Research Workspace',
       }
     : { id: BRIDGE_SYSTEM_KEYS.WORKSPACE };
 

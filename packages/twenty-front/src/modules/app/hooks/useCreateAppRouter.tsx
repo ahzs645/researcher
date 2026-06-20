@@ -31,6 +31,12 @@ const RecordIndexPage = lazy(() =>
   })),
 );
 
+const DiscoveryPage = lazy(() =>
+  import('@/local-db/research/components/DiscoveryPage').then((module) => ({
+    default: module.DiscoveryPage,
+  })),
+);
+
 const RecordShowPage = lazy(() =>
   import('~/pages/object-record/RecordShowPage').then((module) => ({
     default: module.RecordShowPage,
@@ -303,6 +309,14 @@ export const useCreateAppRouter = (
             element={
               <LazyRoute>
                 <StandalonePageLayoutPage />
+              </LazyRoute>
+            }
+          />
+          <Route
+            path="/discovery"
+            element={
+              <LazyRoute>
+                <DiscoveryPage />
               </LazyRoute>
             }
           />

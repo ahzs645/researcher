@@ -16,6 +16,7 @@ import { ErrorMessageEffect } from '@/error-handler/components/ErrorMessageEffec
 import { PromiseRejectionEffect } from '@/error-handler/components/PromiseRejectionEffect';
 import { BridgeApolloCoreProvider } from '@/local-db/data-source/BridgeApolloCoreProvider';
 import { BridgeApolloMetadataProvider } from '@/local-db/data-source/BridgeApolloMetadataProvider';
+import { ResearchWorkspaceSetupModal } from '@/local-db/research/components/ResearchWorkspaceSetupModal';
 import { ConvexBridgeConfigError } from '@/local-db/twenty-local/ConvexBridgeConfigError';
 import {
   getTwentyDataBridgeConfig,
@@ -126,6 +127,7 @@ export const AppRouterProviders = () => {
                                   <PageTitle title={pageTitle} />
                                   <PageFavicon />
                                   <Outlet />
+                                  <ResearchWorkspaceSetupModal />
                                   <GlobalFilePreviewModal />
                                   <CommandMenuConfirmationModalManager />
                                   <CommandRunner />

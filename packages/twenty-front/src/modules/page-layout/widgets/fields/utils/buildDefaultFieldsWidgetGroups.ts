@@ -1,6 +1,6 @@
 import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
 import { type FieldsWidgetGroup } from '@/page-layout/widgets/fields/types/FieldsWidgetGroup';
-import { FieldMetadataType } from 'twenty-shared/types';
+import { FieldMetadataType, RelationType } from 'twenty-shared/types';
 import { isFieldMetadataEligibleForFieldsWidget } from 'twenty-shared/utils';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -24,12 +24,20 @@ export const buildDefaultFieldsWidgetGroups = ({
   const standardFields = eligibleFields.filter((field) => !field.isCustom);
   const customFields = eligibleFields.filter((field) => field.isCustom);
 
-  // Surface RELATION fields on the record detail (lead/team/project chips,
-  // and one-to-many related lists). The bridge has no parent-scoped relation
-  // tab widget, so showing them in the Fields widget is how related records
-  // surface on the show page. Morph relations stay hidden (no inline display).
-  const isFieldVisible = (fieldType: FieldMetadataType) =>
-    fieldType !== FieldMetadataType.MORPH_RELATION;
+  // Surface many-to-one RELATION fields inline (lead/team/project chips).
+  // One-to-many relations get their own tabs on the record page
+  // (buildRecordPageRelationTabs), so keep them out of the Fields widget.
+  // Morph relations stay hidden (no inline display).
+  const isFieldVisible = (field: FieldMetadataItem) => {
+    if (field.type === FieldMetadataType.MORPH_RELATION) return false;
+    if (
+      field.type === FieldMetadataType.RELATION &&
+      field.settings?.relationType === RelationType.ONE_TO_MANY
+    ) {
+      return false;
+    }
+    return true;
+  };
 
   const groups: FieldsWidgetGroup[] = [];
   let globalIndex = 0;
@@ -43,7 +51,7 @@ export const buildDefaultFieldsWidgetGroups = ({
       fields: standardFields.map((field, index) => ({
         fieldMetadataItem: field,
         position: index,
-        isVisible: isFieldVisible(field.type),
+        isVisible: isFieldVisible(field),
         globalIndex: globalIndex++,
       })),
     });
@@ -58,7 +66,7 @@ export const buildDefaultFieldsWidgetGroups = ({
       fields: customFields.map((field, index) => ({
         fieldMetadataItem: field,
         position: index,
-        isVisible: isFieldVisible(field.type),
+        isVisible: isFieldVisible(field),
         globalIndex: globalIndex++,
       })),
     });

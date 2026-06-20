@@ -1,5 +1,10 @@
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
 import { useBasePageLayout } from '@/page-layout/hooks/useBasePageLayout';
 import { useSetIsPageLayoutInEditMode } from '@/page-layout/hooks/useSetIsPageLayoutInEditMode';
+import { augmentRecordPageLayoutWithRelationTabs } from '@/page-layout/utils/buildRecordPageRelationTabs';
+import { useLayoutRenderingContext } from '@/ui/layout/contexts/LayoutRenderingContext';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useMemo } from 'react';
 import { pageLayoutCurrentLayoutsComponentState } from '@/page-layout/states/pageLayoutCurrentLayoutsComponentState';
 import { pageLayoutDraftComponentState } from '@/page-layout/states/pageLayoutDraftComponentState';
 import { pageLayoutIsInitializedComponentState } from '@/page-layout/states/pageLayoutIsInitializedComponentState';
@@ -23,7 +28,26 @@ type PageLayoutInitializationQueryEffectProps = {
 export const PageLayoutInitializationQueryEffect = ({
   pageLayoutId,
 }: PageLayoutInitializationQueryEffectProps) => {
-  const pageLayout = useBasePageLayout(pageLayoutId);
+  const basePageLayout = useBasePageLayout(pageLayoutId);
+
+  // On a record page, graft a tab per one-to-many relation onto the default
+  // layout so related records (a project's grants, milestones, …) get their own
+  // tabs. No-op for dashboards and objects with a bespoke default layout.
+  const { targetRecordIdentifier } = useLayoutRenderingContext();
+  const objectMetadataItems = useAtomStateValue(objectMetadataItemsSelector);
+
+  const pageLayout = useMemo(() => {
+    if (!isDefined(basePageLayout)) return basePageLayout;
+    const objectNameSingular = targetRecordIdentifier?.targetObjectNameSingular;
+    if (!isDefined(objectNameSingular)) return basePageLayout;
+    const objectMetadataItem = objectMetadataItems.find(
+      (item) => item.nameSingular === objectNameSingular,
+    );
+    return augmentRecordPageLayoutWithRelationTabs(
+      basePageLayout,
+      objectMetadataItem,
+    );
+  }, [basePageLayout, targetRecordIdentifier, objectMetadataItems]);
 
   const [pageLayoutIsInitialized, setPageLayoutIsInitialized] =
     useAtomComponentState(pageLayoutIsInitializedComponentState);

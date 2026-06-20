@@ -26,6 +26,26 @@ them:
 | Navigation item     | `buildResearchNavigationMenuItems`| `bridgeSystemSeed`                           |
 | Seed records        | `getResearchSeedRecords`          | `buildBridgeDataSource` (Dexie seed)         |
 
+## Nav layout & CRM re-skin
+
+`bridgeResearchAugmentation.ts` also reshapes the *vanilla* nav so the drawer
+reads as a research workspace rather than the demo CRM:
+
+- **Four folders** group the research objects — **Lab** (teams, researchers),
+  **Work** (projects, milestones, datasets, manuscripts), **Funding** (grants,
+  applications, cycles, requirements), **Discovery** (grant sources +
+  opportunities). Folders sort to the top (positions 0–3).
+- **Repurposed CRM:** People → *Collaborators* and Companies → *Institutions*
+  (label/icon re-skinned in `augmentObjectMetadataWithResearch`, so the rename
+  shows on record pages and search too), re-homed into **Lab**; Tasks/Notes move
+  under **Work**.
+- **Hidden demo objects:** Rockets, Pets, Survey results, Employment histories,
+  Pet care agreements are filtered out of the nav (records stay queryable).
+
+Returning visitors already have a seeded nav, so `bridgeSystemSeed` carries a
+`BRIDGE_NAV_LAYOUT_VERSION`; bump it when the layout changes and `migrateNavLayout`
+rebuilds the `navigationMenuItem` table on next boot.
+
 Object metadata also flows into the Convex schema generator
 (`scripts/generate-convex-schema.ts`) so the `convex` runtime mode stays at
 parity with `local`.

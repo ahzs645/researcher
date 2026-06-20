@@ -1,7 +1,9 @@
 import {
   RESEARCH_OBJECT_SPECS,
   type ResearchFieldSpec,
+  type ResearchNavSection,
   type ResearchObjectSpec,
+  type ResearchOptionColor,
 } from './researchObjectModel';
 import { RESEARCH_RELATIONS } from './researchRelations';
 
@@ -53,7 +55,9 @@ const objectId = (spec: ResearchObjectSpec) =>
   researchDeterministicUuid(`research:object:${spec.nameSingular}`);
 
 const fieldId = (objectNameSingular: string, fieldName: string) =>
-  researchDeterministicUuid(`research:field:${objectNameSingular}:${fieldName}`);
+  researchDeterministicUuid(
+    `research:field:${objectNameSingular}:${fieldName}`,
+  );
 
 const universalId = (kind: string, name: string) =>
   researchDeterministicUuid(`research:universal:${kind}:${name}`);
@@ -409,11 +413,64 @@ const buildView = (spec: ResearchObjectSpec, position: number) => {
 export const buildResearchViews = () =>
   RESEARCH_OBJECT_SPECS.map((spec, index) => buildView(spec, 1000 + index));
 
-// All research objects live under one collapsible "Research" nav folder.
-const RESEARCH_NAV_FOLDER_ID = researchDeterministicUuid('research:nav:folder');
+// Research objects are grouped into four collapsible nav folders that frame the
+// workspace around how a lab actually works: who's in the lab (Lab), the
+// research and its outputs (Work), the money (Funding), and where new funding is
+// found (Discovery). Folders sort to the top of the drawer (positions 0–3).
+type ResearchNavFolderConfig = {
+  key: ResearchNavSection;
+  name: string;
+  icon: string;
+  color: ResearchOptionColor;
+  position: number;
+};
 
-const buildResearchNavFolder = () => ({
-  id: RESEARCH_NAV_FOLDER_ID,
+const RESEARCH_NAV_FOLDERS: ResearchNavFolderConfig[] = [
+  {
+    key: 'LAB',
+    name: 'Lab',
+    icon: 'IconUsersGroup',
+    color: 'blue',
+    position: 0,
+  },
+  {
+    key: 'WORK',
+    name: 'Work',
+    icon: 'IconFolder',
+    color: 'green',
+    position: 1,
+  },
+  {
+    key: 'FUNDING',
+    name: 'Funding',
+    icon: 'IconReportMoney',
+    color: 'purple',
+    position: 2,
+  },
+  {
+    key: 'DISCOVERY',
+    name: 'Discovery',
+    icon: 'IconRadar',
+    color: 'pink',
+    position: 3,
+  },
+];
+
+const researchNavFolderId = (key: ResearchNavSection): string =>
+  researchDeterministicUuid(`research:nav:folder:${key}`);
+
+// Stable folder ids so the augmentation layer can re-parent the kept vanilla
+// objects (collaborators / institutions / tasks / notes) into these same
+// folders without re-deriving the seed hash.
+export const RESEARCH_NAV_FOLDER_IDS: Record<ResearchNavSection, string> = {
+  LAB: researchNavFolderId('LAB'),
+  WORK: researchNavFolderId('WORK'),
+  FUNDING: researchNavFolderId('FUNDING'),
+  DISCOVERY: researchNavFolderId('DISCOVERY'),
+};
+
+const buildResearchNavFolder = (folder: ResearchNavFolderConfig) => ({
+  id: researchNavFolderId(folder.key),
   userWorkspaceId: null,
   targetRecordId: null,
   targetObjectMetadataId: null,
@@ -421,24 +478,27 @@ const buildResearchNavFolder = () => ({
   folderId: null,
   // The nav components key off `type`; FOLDER groups its children.
   type: 'FOLDER',
-  name: 'Research',
+  name: folder.name,
   link: null,
-  icon: 'IconFlask',
-  color: 'purple',
-  position: 990,
+  icon: folder.icon,
+  color: folder.color,
+  position: folder.position,
   applicationId: CORE_APPLICATION_ID,
   createdAt: SEED_TIMESTAMP,
   updatedAt: SEED_TIMESTAMP,
   targetRecordIdentifier: null,
 });
 
-const buildNavigationMenuItem = (spec: ResearchObjectSpec, position: number) => ({
+const buildNavigationMenuItem = (
+  spec: ResearchObjectSpec,
+  position: number,
+) => ({
   id: researchDeterministicUuid(`research:nav:${spec.nameSingular}`),
   userWorkspaceId: null,
   targetRecordId: null,
   targetObjectMetadataId: objectId(spec),
   viewId: null,
-  folderId: RESEARCH_NAV_FOLDER_ID,
+  folderId: RESEARCH_NAV_FOLDER_IDS[spec.navSection],
   type: 'OBJECT',
   name: null,
   link: null,
@@ -451,19 +511,22 @@ const buildNavigationMenuItem = (spec: ResearchObjectSpec, position: number) => 
   targetRecordIdentifier: null,
 });
 
-export const buildResearchNavigationMenuItems = () => [
-  buildResearchNavFolder(),
-  ...RESEARCH_OBJECT_SPECS.map((spec, index) =>
-    buildNavigationMenuItem(spec, 1000 + index),
-  ),
-];
+export const buildResearchNavigationMenuItems = () => {
+  // Position each object by its order among same-folder specs so the in-folder
+  // ordering is stable and leaves room for re-parented vanilla items after it.
+  const positionInFolder = new Map<ResearchNavSection, number>();
+  const objectItems = RESEARCH_OBJECT_SPECS.map((spec) => {
+    const next = positionInFolder.get(spec.navSection) ?? 0;
+    positionInFolder.set(spec.navSection, next + 1);
+    return buildNavigationMenuItem(spec, next);
+  });
+  return [...RESEARCH_NAV_FOLDERS.map(buildResearchNavFolder), ...objectItems];
+};
 
 // Lookup helpers used by the seed-record builders so seeds reference the same
 // deterministic object/field ids as the metadata.
 export const getResearchObjectId = (nameSingular: string) =>
   researchDeterministicUuid(`research:object:${nameSingular}`);
 
-export const getResearchFieldId = (
-  nameSingular: string,
-  fieldName: string,
-) => fieldId(nameSingular, fieldName);
+export const getResearchFieldId = (nameSingular: string, fieldName: string) =>
+  fieldId(nameSingular, fieldName);

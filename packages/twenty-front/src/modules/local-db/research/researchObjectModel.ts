@@ -427,7 +427,7 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: CALENDAR_ICON,
       },
       { name: 'amountText', label: 'Amount', type: 'TEXT', icon: MONEY_ICON },
-      { name: 'fitScore', label: 'Fit score', type: 'RATING', icon: 'IconStar' },
+      { name: 'fitScore', label: 'Fit score (1-5)', type: 'NUMBER', icon: 'IconStar' },
       {
         name: 'confidence',
         label: 'Confidence',

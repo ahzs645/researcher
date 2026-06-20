@@ -1,5 +1,10 @@
 import { splitObjectMetadataGqlResponse } from '@/metadata-store/utils/splitObjectMetadataGqlResponse';
 import { splitViewWithRelated } from '@/metadata-store/utils/splitViewWithRelated';
+import {
+  augmentNavigationMenuItemsWithResearch,
+  augmentObjectMetadataWithResearch,
+  augmentViewsWithResearch,
+} from '@/local-db/research/bridgeResearchAugmentation';
 
 import { type FlatFieldMetadataItem } from '@/metadata-store/types/FlatFieldMetadataItem';
 import { type FlatIndexMetadataItem } from '@/metadata-store/types/FlatIndexMetadataItem';
@@ -43,8 +48,15 @@ export const preloadMockedMetadata =
       ),
     ]);
 
+    // Graft the research objects onto the same metadata the Jotai store loads,
+    // so the router, navigation, and record pages know about them (the bridge
+    // metadata store is fed from here, not from the Apollo mock link).
     const { flatObjects, flatFields, flatIndexes } =
-      splitObjectMetadataGqlResponse(mockedStandardObjectMetadataQueryResult);
+      splitObjectMetadataGqlResponse(
+        augmentObjectMetadataWithResearch(
+          mockedStandardObjectMetadataQueryResult,
+        ),
+      );
 
     const {
       flatViews,
@@ -54,7 +66,7 @@ export const preloadMockedMetadata =
       flatViewGroups,
       flatViewFilterGroups,
       flatViewFieldGroups,
-    } = splitViewWithRelated(mockedViews);
+    } = splitViewWithRelated(augmentViewsWithResearch(mockedViews));
 
     return {
       flatObjects,
@@ -67,6 +79,8 @@ export const preloadMockedMetadata =
       flatViewGroups,
       flatViewFilterGroups,
       flatViewFieldGroups,
-      navigationMenuItems: mockedNavigationMenuItems,
+      navigationMenuItems: augmentNavigationMenuItemsWithResearch(
+        mockedNavigationMenuItems,
+      ),
     };
   };

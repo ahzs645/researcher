@@ -5,7 +5,8 @@ import { RESEARCH_GRANT_SOURCE_SEEDS } from './researchGrantSourceData';
 // standard CRM (company/person/…) so a fresh local workspace opens with a
 // coherent research team, live grant sources, and a few grants/opportunities to
 // click through. Keys are object `nameSingular` to match the DataSource seed
-// map.
+// map. Relations are wired via `<field>Id` join columns pointing at parent
+// record ids (see researchRelations.ts).
 
 type SeedRecord = Record<string, unknown> & { id: string };
 
@@ -18,13 +19,18 @@ const ACTOR = {
 
 const SEED_TIMESTAMP = '2026-04-10T08:55:57.800Z';
 
+// Stable id for a seed record, by object + key. Used both as a record's own id
+// and as the join-column value on related records.
+const recordId = (objectNameSingular: string, key: string): string =>
+  researchDeterministicUuid(`research:record:${objectNameSingular}:${key}`);
+
 const makeRecord = (
   objectNameSingular: string,
   key: string,
   position: number,
   fields: Record<string, unknown>,
 ): SeedRecord => ({
-  id: researchDeterministicUuid(`research:record:${objectNameSingular}:${key}`),
+  id: recordId(objectNameSingular, key),
   createdAt: SEED_TIMESTAMP,
   updatedAt: SEED_TIMESTAMP,
   deletedAt: null,
@@ -33,6 +39,28 @@ const makeRecord = (
   updatedBy: ACTOR,
   ...fields,
 });
+
+const TEAM = recordId('researchTeam', 'quantum-materials-lab');
+const RESEARCHER = {
+  maya: recordId('researcher', 'maya-okafor'),
+  liam: recordId('researcher', 'liam-tran'),
+  sofia: recordId('researcher', 'sofia-reyes'),
+  noah: recordId('researcher', 'noah-bell'),
+};
+const PROJECT = {
+  topological: recordId('project', 'topological-insulators'),
+  spintronic: recordId('project', 'spintronic-memory'),
+  cryo: recordId('project', 'cryo-instrumentation'),
+};
+const GRANT = {
+  nserc: recordId('grant', 'nserc-discovery'),
+  innovate: recordId('grant', 'innovate-bc-ignite'),
+};
+const CYCLE = {
+  fall: recordId('applicationCycle', 'fall-2026-tri-agency'),
+  spring: recordId('applicationCycle', 'spring-2026-industry'),
+};
+const SOURCE = (libraryKey: string) => recordId('grantSource', libraryKey);
 
 const grantSourceRecords = (): SeedRecord[] =>
   RESEARCH_GRANT_SOURCE_SEEDS.map((source, index) =>
@@ -70,7 +98,7 @@ const researcherRecords = (): SeedRecord[] => [
     name: 'Dr. Maya Okafor',
     email: 'maya.okafor@example.ubc.ca',
     role: 'PI',
-    team: 'Quantum Materials Lab',
+    teamId: TEAM,
     orcid: '0000-0002-1825-0097',
     institution: 'University of British Columbia',
     status: 'ACTIVE',
@@ -80,7 +108,7 @@ const researcherRecords = (): SeedRecord[] => [
     name: 'Liam Tran',
     email: 'liam.tran@example.ubc.ca',
     role: 'POSTDOC',
-    team: 'Quantum Materials Lab',
+    teamId: TEAM,
     orcid: '0000-0001-7300-1234',
     institution: 'University of British Columbia',
     status: 'ACTIVE',
@@ -90,7 +118,7 @@ const researcherRecords = (): SeedRecord[] => [
     name: 'Sofia Reyes',
     email: 'sofia.reyes@example.ubc.ca',
     role: 'PHD',
-    team: 'Quantum Materials Lab',
+    teamId: TEAM,
     orcid: '0000-0003-4444-9876',
     institution: 'University of British Columbia',
     status: 'ACTIVE',
@@ -100,7 +128,7 @@ const researcherRecords = (): SeedRecord[] => [
     name: 'Noah Bell',
     email: 'noah.bell@example.ubc.ca',
     role: 'RESEARCH_ASSISTANT',
-    team: 'Quantum Materials Lab',
+    teamId: TEAM,
     orcid: '',
     institution: 'University of British Columbia',
     status: 'ACTIVE',
@@ -111,8 +139,8 @@ const researcherRecords = (): SeedRecord[] => [
 const projectRecords = (): SeedRecord[] => [
   makeRecord('project', 'topological-insulators', 0, {
     name: 'Topological insulators for fault-tolerant qubits',
-    lead: 'Sofia Reyes',
-    team: 'Quantum Materials Lab',
+    leadId: RESEARCHER.sofia,
+    teamId: TEAM,
     status: 'ACTIVE',
     fundingStatus: 'PARTIALLY_FUNDED',
     summary:
@@ -123,8 +151,8 @@ const projectRecords = (): SeedRecord[] => [
   }),
   makeRecord('project', 'spintronic-memory', 1, {
     name: 'Low-power spintronic memory devices',
-    lead: 'Liam Tran',
-    team: 'Quantum Materials Lab',
+    leadId: RESEARCHER.liam,
+    teamId: TEAM,
     status: 'ACTIVE',
     fundingStatus: 'SEEKING',
     summary: 'Prototyping energy-efficient magnetic memory cells.',
@@ -134,8 +162,8 @@ const projectRecords = (): SeedRecord[] => [
   }),
   makeRecord('project', 'cryo-instrumentation', 2, {
     name: 'Shared cryogenic measurement platform',
-    lead: 'Dr. Maya Okafor',
-    team: 'Quantum Materials Lab',
+    leadId: RESEARCHER.maya,
+    teamId: TEAM,
     status: 'PLANNING',
     fundingStatus: 'UNFUNDED',
     summary: 'Infrastructure project for a shared dilution-refrigerator setup.',
@@ -152,8 +180,8 @@ const grantRecords = (): SeedRecord[] => [
     program: 'Discovery Grants',
     status: 'ACTIVE',
     priority: 'HIGH',
-    project: 'Topological insulators for fault-tolerant qubits',
-    owner: 'Dr. Maya Okafor',
+    projectId: PROJECT.topological,
+    leadId: RESEARCHER.maya,
     amountRequested: 600000,
     amountAwarded: 540000,
     fitScore: 5,
@@ -173,8 +201,8 @@ const grantRecords = (): SeedRecord[] => [
     program: 'Project Grant',
     status: 'SUBMITTED',
     priority: 'HIGH',
-    project: 'Low-power spintronic memory devices',
-    owner: 'Liam Tran',
+    projectId: PROJECT.spintronic,
+    leadId: RESEARCHER.liam,
     amountRequested: 450000,
     amountAwarded: null,
     fitScore: 3,
@@ -194,8 +222,8 @@ const grantRecords = (): SeedRecord[] => [
     program: 'Ignite',
     status: 'DRAFTING',
     priority: 'MEDIUM',
-    project: 'Low-power spintronic memory devices',
-    owner: 'Liam Tran',
+    projectId: PROJECT.spintronic,
+    leadId: RESEARCHER.liam,
     amountRequested: 300000,
     amountAwarded: null,
     fitScore: 4,
@@ -215,8 +243,8 @@ const grantRecords = (): SeedRecord[] => [
     program: 'John R. Evans Leaders Fund',
     status: 'PROSPECTING',
     priority: 'MEDIUM',
-    project: 'Shared cryogenic measurement platform',
-    owner: 'Dr. Maya Okafor',
+    projectId: PROJECT.cryo,
+    leadId: RESEARCHER.maya,
     amountRequested: 250000,
     amountAwarded: null,
     fitScore: 4,
@@ -236,8 +264,8 @@ const grantRecords = (): SeedRecord[] => [
     program: 'Exploration',
     status: 'DECLINED',
     priority: 'LOW',
-    project: 'Topological insulators for fault-tolerant qubits',
-    owner: 'Sofia Reyes',
+    projectId: PROJECT.topological,
+    leadId: RESEARCHER.sofia,
     amountRequested: 250000,
     amountAwarded: null,
     fitScore: 2,
@@ -258,7 +286,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     name: 'Quantum technologies for health',
     funder: 'Canadian Institutes of Health Research',
     program: 'Team Grant',
-    source: 'CIHR ResearchNet current funding opportunities',
+    sourceId: SOURCE('cihr-researchnet'),
     opportunityUrl: 'https://www.researchnet-recherchenet.ca/',
     applicationDueDate: '2026-09-15T00:00:00.000Z',
     registrationDueDate: '2026-07-01T00:00:00.000Z',
@@ -275,7 +303,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     name: 'Fall 2026 commercialization intake',
     funder: 'Innovate BC',
     program: 'Ignite',
-    source: 'Innovate BC programs',
+    sourceId: SOURCE('innovate-bc'),
     opportunityUrl: 'https://www.innovatebc.ca/',
     applicationDueDate: '2026-07-15T00:00:00.000Z',
     registrationDueDate: null,
@@ -291,7 +319,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     name: 'Grant writing support reimbursement',
     funder: 'Northern Development Initiative Trust',
     program: 'Grant Writing Support',
-    source: 'Northern Development Initiative Trust',
+    sourceId: SOURCE('northern-development-initiative-trust'),
     opportunityUrl: 'https://www.northerndevelopment.bc.ca/',
     applicationDueDate: null,
     registrationDueDate: null,
@@ -307,7 +335,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     name: 'Collaborative R&D with NRC labs',
     funder: 'National Research Council Canada',
     program: 'Collaborative R&D',
-    source: 'NRC research collaboration',
+    sourceId: SOURCE('nrc-research-collaboration'),
     opportunityUrl: 'https://nrc.canada.ca/',
     applicationDueDate: '2026-08-30T00:00:00.000Z',
     registrationDueDate: null,
@@ -323,7 +351,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     name: 'Graduate internship with industry partner',
     funder: 'Mitacs',
     program: 'Accelerate',
-    source: 'Innovate BC programs',
+    sourceId: SOURCE('innovate-bc'),
     opportunityUrl: 'https://www.mitacs.ca/',
     applicationDueDate: null,
     registrationDueDate: null,
@@ -339,7 +367,7 @@ const grantOpportunityRecords = (): SeedRecord[] => [
     name: 'First Nations clean energy stream',
     funder: 'Province of British Columbia',
     program: 'Clean Energy Business Fund',
-    source: 'First Nations Clean Energy Business Fund',
+    sourceId: SOURCE('first-nations-clean-energy-business-fund'),
     opportunityUrl: 'https://www2.gov.bc.ca/',
     applicationDueDate: '2026-06-30T00:00:00.000Z',
     registrationDueDate: null,
@@ -378,11 +406,11 @@ const applicationCycleRecords = (): SeedRecord[] => [
 const grantApplicationRecords = (): SeedRecord[] => [
   makeRecord('grantApplication', 'cihr-team-app', 0, {
     name: 'Quantum sensing platform for early diagnostics',
-    applicant: 'Dr. Maya Okafor',
+    applicantId: RESEARCHER.maya,
     organization: 'Quantum Materials Lab',
     email: 'maya.okafor@example.ubc.ca',
-    grant: 'Quantum technologies for health',
-    cycle: 'Fall 2026 Tri-Agency push',
+    grantId: null,
+    cycleId: CYCLE.fall,
     amountRequested: 1500000,
     projectSummary: 'Interdisciplinary team proposal for quantum-enabled diagnostics.',
     status: 'REVIEWING',
@@ -392,11 +420,11 @@ const grantApplicationRecords = (): SeedRecord[] => [
   }),
   makeRecord('grantApplication', 'innovate-ignite-app', 1, {
     name: 'Spintronic memory commercialization',
-    applicant: 'Liam Tran',
+    applicantId: RESEARCHER.liam,
     organization: 'Quantum Materials Lab',
     email: 'liam.tran@example.ubc.ca',
-    grant: 'Spintronic memory commercialization',
-    cycle: 'Spring 2026 industry partnerships',
+    grantId: GRANT.innovate,
+    cycleId: CYCLE.spring,
     amountRequested: 300000,
     projectSummary: 'Late-stage development with a hardware partner.',
     status: 'SHORTLISTED',
@@ -406,11 +434,11 @@ const grantApplicationRecords = (): SeedRecord[] => [
   }),
   makeRecord('grantApplication', 'mitacs-app', 2, {
     name: 'Graduate internship — topological thin films',
-    applicant: 'Sofia Reyes',
+    applicantId: RESEARCHER.sofia,
     organization: 'Quantum Materials Lab',
     email: 'sofia.reyes@example.ubc.ca',
-    grant: 'Graduate internship with industry partner',
-    cycle: 'Spring 2026 industry partnerships',
+    grantId: null,
+    cycleId: CYCLE.spring,
     amountRequested: 60000,
     projectSummary: 'Four internship units co-supervised with an industry partner.',
     status: 'APPROVED',
@@ -420,11 +448,11 @@ const grantApplicationRecords = (): SeedRecord[] => [
   }),
   makeRecord('grantApplication', 'nserc-renewal-app', 3, {
     name: 'Discovery program renewal',
-    applicant: 'Dr. Maya Okafor',
+    applicantId: RESEARCHER.maya,
     organization: 'Quantum Materials Lab',
     email: 'maya.okafor@example.ubc.ca',
-    grant: 'Quantum materials core program',
-    cycle: 'Fall 2026 Tri-Agency push',
+    grantId: GRANT.nserc,
+    cycleId: CYCLE.fall,
     amountRequested: 600000,
     projectSummary: 'Renewal of the lab’s flagship Discovery program.',
     status: 'SUBMITTED',
@@ -437,8 +465,8 @@ const grantApplicationRecords = (): SeedRecord[] => [
 const milestoneRecords = (): SeedRecord[] => [
   makeRecord('milestone', 'ti-film-growth', 0, {
     name: 'Achieve reproducible TI thin-film growth',
-    project: 'Topological insulators for fault-tolerant qubits',
-    owner: 'Sofia Reyes',
+    projectId: PROJECT.topological,
+    ownerId: RESEARCHER.sofia,
     status: 'IN_PROGRESS',
     dueDate: '2026-09-30T00:00:00.000Z',
     progress: 60,
@@ -446,8 +474,8 @@ const milestoneRecords = (): SeedRecord[] => [
   }),
   makeRecord('milestone', 'spintronic-prototype', 1, {
     name: 'First spintronic memory prototype',
-    project: 'Low-power spintronic memory devices',
-    owner: 'Liam Tran',
+    projectId: PROJECT.spintronic,
+    ownerId: RESEARCHER.liam,
     status: 'NOT_STARTED',
     dueDate: '2026-12-15T00:00:00.000Z',
     progress: 0,
@@ -455,8 +483,8 @@ const milestoneRecords = (): SeedRecord[] => [
   }),
   makeRecord('milestone', 'cryo-procurement', 2, {
     name: 'Dilution refrigerator procurement',
-    project: 'Shared cryogenic measurement platform',
-    owner: 'Dr. Maya Okafor',
+    projectId: PROJECT.cryo,
+    ownerId: RESEARCHER.maya,
     status: 'BLOCKED',
     dueDate: '2026-11-01T00:00:00.000Z',
     progress: 10,
@@ -464,8 +492,8 @@ const milestoneRecords = (): SeedRecord[] => [
   }),
   makeRecord('milestone', 'year1-report', 3, {
     name: 'NSERC year-1 progress report',
-    project: 'Topological insulators for fault-tolerant qubits',
-    owner: 'Dr. Maya Okafor',
+    projectId: PROJECT.topological,
+    ownerId: RESEARCHER.maya,
     status: 'IN_PROGRESS',
     dueDate: '2026-12-31T00:00:00.000Z',
     progress: 25,
@@ -473,8 +501,8 @@ const milestoneRecords = (): SeedRecord[] => [
   }),
   makeRecord('milestone', 'sample-pipeline', 4, {
     name: 'Standardize sample fabrication pipeline',
-    project: 'Low-power spintronic memory devices',
-    owner: 'Noah Bell',
+    projectId: PROJECT.spintronic,
+    ownerId: RESEARCHER.noah,
     status: 'DONE',
     dueDate: '2026-03-31T00:00:00.000Z',
     progress: 100,
@@ -485,7 +513,7 @@ const milestoneRecords = (): SeedRecord[] => [
 const datasetRecords = (): SeedRecord[] => [
   makeRecord('dataset', 'arpes-spectra', 0, {
     name: 'ARPES spectra — TI thin films',
-    project: 'Topological insulators for fault-tolerant qubits',
+    projectId: PROJECT.topological,
     dataType: 'IMAGING',
     status: 'ANALYSIS',
     storageLocation: 'Lab NAS / arpes/2026',
@@ -496,7 +524,7 @@ const datasetRecords = (): SeedRecord[] => [
   }),
   makeRecord('dataset', 'transport-measurements', 1, {
     name: 'Magnetotransport measurements',
-    project: 'Low-power spintronic memory devices',
+    projectId: PROJECT.spintronic,
     dataType: 'TABULAR',
     status: 'COLLECTING',
     storageLocation: 'Lab NAS / transport/2026',
@@ -507,7 +535,7 @@ const datasetRecords = (): SeedRecord[] => [
   }),
   makeRecord('dataset', 'fabrication-logs', 2, {
     name: 'Sample fabrication logbook',
-    project: 'Low-power spintronic memory devices',
+    projectId: PROJECT.spintronic,
     dataType: 'TEXT',
     status: 'COLLECTING',
     storageLocation: 'Electronic lab notebook',
@@ -518,7 +546,7 @@ const datasetRecords = (): SeedRecord[] => [
   }),
   makeRecord('dataset', 'dft-simulations', 3, {
     name: 'DFT simulation outputs',
-    project: 'Topological insulators for fault-tolerant qubits',
+    projectId: PROJECT.topological,
     dataType: 'OTHER',
     status: 'ARCHIVED',
     storageLocation: 'Compute cluster / scratch archived to NAS',
@@ -532,8 +560,8 @@ const datasetRecords = (): SeedRecord[] => [
 const manuscriptRecords = (): SeedRecord[] => [
   makeRecord('manuscript', 'ti-qubit-substrates', 0, {
     name: 'Topological insulator substrates for robust qubits',
-    project: 'Topological insulators for fault-tolerant qubits',
-    leadAuthor: 'Sofia Reyes',
+    projectId: PROJECT.topological,
+    leadAuthorId: RESEARCHER.sofia,
     manuscriptType: 'JOURNAL_PAPER',
     status: 'DRAFTING',
     targetVenue: 'Nature Materials',
@@ -544,8 +572,8 @@ const manuscriptRecords = (): SeedRecord[] => [
   }),
   makeRecord('manuscript', 'reyes-thesis', 1, {
     name: 'PhD thesis — Topological materials for quantum computing',
-    project: 'Topological insulators for fault-tolerant qubits',
-    leadAuthor: 'Sofia Reyes',
+    projectId: PROJECT.topological,
+    leadAuthorId: RESEARCHER.sofia,
     manuscriptType: 'THESIS',
     status: 'OUTLINE',
     targetVenue: 'UBC',
@@ -556,8 +584,8 @@ const manuscriptRecords = (): SeedRecord[] => [
   }),
   makeRecord('manuscript', 'spintronic-preprint', 2, {
     name: 'Energy-efficient spintronic memory: a preprint',
-    project: 'Low-power spintronic memory devices',
-    leadAuthor: 'Liam Tran',
+    projectId: PROJECT.spintronic,
+    leadAuthorId: RESEARCHER.liam,
     manuscriptType: 'PREPRINT',
     status: 'SUBMITTED',
     targetVenue: 'arXiv',
@@ -568,8 +596,8 @@ const manuscriptRecords = (): SeedRecord[] => [
   }),
   makeRecord('manuscript', 'cryo-methods', 3, {
     name: 'A shared cryogenic measurement platform (methods)',
-    project: 'Shared cryogenic measurement platform',
-    leadAuthor: 'Dr. Maya Okafor',
+    projectId: PROJECT.cryo,
+    leadAuthorId: RESEARCHER.maya,
     manuscriptType: 'CONFERENCE_PAPER',
     status: 'INTERNAL_REVIEW',
     targetVenue: 'APS March Meeting',

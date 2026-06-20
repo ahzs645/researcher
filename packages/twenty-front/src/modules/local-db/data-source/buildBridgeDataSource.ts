@@ -85,10 +85,11 @@ export const getBridgeDataSource = () => {
     cachedDataSource = createDexieDataSource({
       bundle: getBridgeDataSourceBundle(),
       databaseName: 'twenty-bridge-data-source',
-      // Bumped from 1 → 2 when the research objects were added so existing
-      // visitors get an additive Dexie upgrade (new stores created, CRM data
-      // preserved) instead of a same-version schema-diff error.
-      schemaVersion: 2,
+      // Bumped as the research schema evolves so existing visitors get an
+      // additive Dexie upgrade instead of a same-version schema-diff error:
+      //   1 → 2  research objects added
+      //   2 → 3  research relations added (new `<field>Id` join-column indexes)
+      schemaVersion: 3,
     });
   }
   return cachedDataSource;

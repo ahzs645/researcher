@@ -3,6 +3,14 @@ import {
   type ResearchFieldSpec,
   type ResearchObjectSpec,
 } from './researchObjectModel';
+import { RESEARCH_RELATIONS } from './researchRelations';
+
+const SPEC_BY_NAME = new Map(
+  RESEARCH_OBJECT_SPECS.map((spec) => [spec.nameSingular, spec]),
+);
+
+const namePluralOf = (nameSingular: string): string =>
+  SPEC_BY_NAME.get(nameSingular)?.namePlural ?? `${nameSingular}s`;
 
 // Expands the compact research object specs into the verbose shapes the bridge
 // consumes: full `ObjectMetadataItemsQuery` nodes, default TABLE views, and
@@ -202,10 +210,116 @@ const buildBusinessField = (
   };
 };
 
+type RelationFieldArgs = {
+  thisObject: string;
+  fieldName: string;
+  label: string;
+  icon: string;
+  relationType: 'MANY_TO_ONE' | 'ONE_TO_MANY';
+  targetObject: string;
+  inverseFieldName: string;
+};
+
+const buildRelationFieldNode = ({
+  thisObject,
+  fieldName,
+  label,
+  icon,
+  relationType,
+  targetObject,
+  inverseFieldName,
+}: RelationFieldArgs): MetadataFieldNode => ({
+  __typename: 'Field',
+  id: fieldId(thisObject, fieldName),
+  universalIdentifier: universalId(`${thisObject}:field`, fieldName),
+  type: 'RELATION',
+  name: fieldName,
+  label,
+  description: label,
+  icon,
+  isCustom: true,
+  isActive: true,
+  isSystem: false,
+  isUIReadOnly: false,
+  isNullable: true,
+  isUnique: false,
+  createdAt: SEED_TIMESTAMP,
+  updatedAt: SEED_TIMESTAMP,
+  defaultValue: null,
+  options: null,
+  settings: { relationType },
+  isLabelSyncedWithName: false,
+  morphId: null,
+  applicationId: CORE_APPLICATION_ID,
+  relation: {
+    __typename: 'Relation',
+    type: relationType,
+    sourceObjectMetadata: {
+      __typename: 'Object',
+      id: getResearchObjectId(thisObject),
+      nameSingular: thisObject,
+      namePlural: namePluralOf(thisObject),
+    },
+    targetObjectMetadata: {
+      __typename: 'Object',
+      id: getResearchObjectId(targetObject),
+      nameSingular: targetObject,
+      namePlural: namePluralOf(targetObject),
+    },
+    sourceFieldMetadata: {
+      __typename: 'Field',
+      id: fieldId(thisObject, fieldName),
+      name: fieldName,
+    },
+    targetFieldMetadata: {
+      __typename: 'Field',
+      id: fieldId(targetObject, inverseFieldName),
+      name: inverseFieldName,
+    },
+  },
+  morphRelations: null,
+});
+
+// Paired relation fields for one object: a MANY_TO_ONE where it is the child,
+// and a ONE_TO_MANY where it is the parent.
+const buildRelationFields = (nameSingular: string): MetadataFieldNode[] => {
+  const fields: MetadataFieldNode[] = [];
+  for (const relation of RESEARCH_RELATIONS) {
+    if (relation.many === nameSingular) {
+      fields.push(
+        buildRelationFieldNode({
+          thisObject: relation.many,
+          fieldName: relation.manyField,
+          label: relation.manyFieldLabel,
+          icon: relation.manyFieldIcon,
+          relationType: 'MANY_TO_ONE',
+          targetObject: relation.one,
+          inverseFieldName: relation.oneField,
+        }),
+      );
+    }
+    if (relation.one === nameSingular) {
+      fields.push(
+        buildRelationFieldNode({
+          thisObject: relation.one,
+          fieldName: relation.oneField,
+          label: relation.oneFieldLabel,
+          icon: relation.oneFieldIcon,
+          relationType: 'ONE_TO_MANY',
+          targetObject: relation.many,
+          inverseFieldName: relation.manyField,
+        }),
+      );
+    }
+  }
+  return fields;
+};
+
 const buildObjectNode = (spec: ResearchObjectSpec) => {
   const fieldsList = [
     ...buildBaseFields(spec),
     ...spec.fields.map((field) => buildBusinessField(spec, field)),
+    ...buildRelationFields(spec.nameSingular),
   ];
 
   return {
@@ -295,13 +409,34 @@ const buildView = (spec: ResearchObjectSpec, position: number) => {
 export const buildResearchViews = () =>
   RESEARCH_OBJECT_SPECS.map((spec, index) => buildView(spec, 1000 + index));
 
+// All research objects live under one collapsible "Research" nav folder.
+const RESEARCH_NAV_FOLDER_ID = researchDeterministicUuid('research:nav:folder');
+
+const buildResearchNavFolder = () => ({
+  id: RESEARCH_NAV_FOLDER_ID,
+  userWorkspaceId: null,
+  targetRecordId: null,
+  targetObjectMetadataId: null,
+  viewId: null,
+  folderId: null,
+  name: 'Research',
+  link: null,
+  icon: 'IconFlask',
+  color: 'purple',
+  position: 990,
+  applicationId: CORE_APPLICATION_ID,
+  createdAt: SEED_TIMESTAMP,
+  updatedAt: SEED_TIMESTAMP,
+  targetRecordIdentifier: null,
+});
+
 const buildNavigationMenuItem = (spec: ResearchObjectSpec, position: number) => ({
   id: researchDeterministicUuid(`research:nav:${spec.nameSingular}`),
   userWorkspaceId: null,
   targetRecordId: null,
   targetObjectMetadataId: objectId(spec),
   viewId: null,
-  folderId: null,
+  folderId: RESEARCH_NAV_FOLDER_ID,
   name: null,
   link: null,
   icon: null,
@@ -313,10 +448,12 @@ const buildNavigationMenuItem = (spec: ResearchObjectSpec, position: number) => 
   targetRecordIdentifier: null,
 });
 
-export const buildResearchNavigationMenuItems = () =>
-  RESEARCH_OBJECT_SPECS.map((spec, index) =>
+export const buildResearchNavigationMenuItems = () => [
+  buildResearchNavFolder(),
+  ...RESEARCH_OBJECT_SPECS.map((spec, index) =>
     buildNavigationMenuItem(spec, 1000 + index),
-  );
+  ),
+];
 
 // Lookup helpers used by the seed-record builders so seeds reference the same
 // deterministic object/field ids as the metadata.

@@ -129,6 +129,88 @@ describe('research executable schema', () => {
     expect(data.grantOpportunities.totalCount).toBe(6);
   });
 
+  it('resolves relations in both directions', async () => {
+    const client = makeClient();
+
+    // MANY_TO_ONE: grant -> project, grant -> lead (researcher)
+    const grantResult = await client.query({
+      query: gql`
+        query ActiveGrantWithRelations {
+          grants(filter: { status: { eq: "ACTIVE" } }) {
+            edges {
+              node {
+                name
+                project {
+                  name
+                }
+                lead {
+                  name
+                }
+              }
+            }
+          }
+        }
+      `,
+    });
+    const grantNode = (
+      grantResult.data as {
+        grants: {
+          edges: Array<{
+            node: {
+              name: string;
+              project: { name: string } | null;
+              lead: { name: string } | null;
+            };
+          }>;
+        };
+      }
+    ).grants.edges[0].node;
+    expect(grantNode.project?.name).toBe(
+      'Topological insulators for fault-tolerant qubits',
+    );
+    expect(grantNode.lead?.name).toBe('Dr. Maya Okafor');
+
+    // ONE_TO_MANY: project -> grants (the topological project has 2 grants)
+    const projectResult = await client.query({
+      query: gql`
+        query ProjectGrants {
+          projects(filter: { status: { eq: "ACTIVE" } }) {
+            edges {
+              node {
+                name
+                grants {
+                  totalCount
+                }
+                milestones {
+                  totalCount
+                }
+              }
+            }
+          }
+        }
+      `,
+      fetchPolicy: 'network-only',
+    });
+    const projects = (
+      projectResult.data as {
+        projects: {
+          edges: Array<{
+            node: {
+              name: string;
+              grants: { totalCount: number };
+              milestones: { totalCount: number };
+            };
+          }>;
+        };
+      }
+    ).projects.edges.map((edge) => edge.node);
+    const topological = projects.find((project) =>
+      project.name.startsWith('Topological insulators'),
+    );
+    expect(topological?.grants.totalCount).toBe(2);
+    expect(topological?.milestones.totalCount).toBe(2);
+  });
+
   it('creates a grant through the schema link', async () => {
     const client = makeClient();
 

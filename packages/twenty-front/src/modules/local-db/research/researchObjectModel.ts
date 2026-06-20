@@ -5,13 +5,11 @@
 // datasets, manuscripts, …). A builder expands each spec into the full
 // `ObjectMetadataItemsQuery` node shape, a default TABLE view, and a
 // navigation menu item, then merges them into the bridge's static metadata
-// bundle. Keeping the source of truth here (instead of editing the generated
-// `mock-objects-metadata.ts`) means the standard 33-object bundle stays
-// untouched and regenerable.
+// bundle.
 //
-// Only flat field types are used on purpose — relations are the one genuinely
-// hard part of the bridge SDL surface, so the first cut links records with
-// plain text/select fields and graduates to real relations later.
+// Scalar fields live here; cross-object links (grant ↔ project ↔ researcher ↔
+// application, …) are declared as real relations in `researchRelations.ts` and
+// generated as paired RELATION fields by the metadata builder.
 
 export type ResearchFieldType =
   | 'TEXT'
@@ -70,8 +68,8 @@ export type ResearchObjectSpec = {
   nameFieldLabel: string;
   nameFieldIcon: string;
   fields: ResearchFieldSpec[];
-  // Ordered business-field names shown as columns in the default table view.
-  // `name` is always prepended automatically.
+  // Ordered field names shown as columns in the default table view. May include
+  // relation field names (generated separately) — `name` is always prepended.
   defaultColumns: string[];
 };
 
@@ -147,7 +145,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
           { value: 'COLLABORATOR', label: 'Collaborator', color: 'gray' },
         ],
       },
-      { name: 'team', label: 'Team', type: 'TEXT', icon: 'IconUsersGroup' },
       { name: 'orcid', label: 'ORCID', type: 'TEXT', icon: 'IconId' },
       { name: 'institution', label: 'Institution', type: 'TEXT', icon: 'IconBuildingBank' },
       {
@@ -176,8 +173,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     nameFieldLabel: 'Title',
     nameFieldIcon: 'IconFolder',
     fields: [
-      { name: 'lead', label: 'Lead', type: 'TEXT', icon: 'IconUser' },
-      { name: 'team', label: 'Team', type: 'TEXT', icon: 'IconUsersGroup' },
       {
         name: 'status',
         label: 'Status',
@@ -250,8 +245,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
           { value: 'CRITICAL', label: 'Critical', color: 'red' },
         ],
       },
-      { name: 'project', label: 'Project', type: 'TEXT', icon: 'IconFolder' },
-      { name: 'owner', label: 'Owner', type: 'TEXT', icon: 'IconUser' },
       {
         name: 'amountRequested',
         label: 'Amount requested',
@@ -291,9 +284,9 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
       'status',
       'priority',
       'amountRequested',
-      'amountAwarded',
-      'applicationDueDate',
       'project',
+      'lead',
+      'applicationDueDate',
     ],
   },
   {
@@ -412,7 +405,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     fields: [
       { name: 'funder', label: 'Funder', type: 'TEXT', icon: 'IconBuildingBank' },
       { name: 'program', label: 'Program', type: 'TEXT', icon: 'IconFileDescription' },
-      { name: 'source', label: 'Source', type: 'TEXT', icon: 'IconDatabase' },
       { name: 'opportunityUrl', label: 'Opportunity URL', type: 'TEXT', icon: 'IconLink' },
       {
         name: 'applicationDueDate',
@@ -464,7 +456,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     ],
     defaultColumns: [
       'funder',
-      'program',
       'source',
       'applicationDueDate',
       'amountText',
@@ -484,11 +475,8 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     nameFieldLabel: 'Project title',
     nameFieldIcon: 'IconFileText',
     fields: [
-      { name: 'applicant', label: 'Applicant', type: 'TEXT', icon: 'IconUser' },
       { name: 'organization', label: 'Organization', type: 'TEXT', icon: 'IconBuilding' },
       { name: 'email', label: 'Email', type: 'TEXT', icon: 'IconMail' },
-      { name: 'grant', label: 'Grant', type: 'TEXT', icon: 'IconReportMoney' },
-      { name: 'cycle', label: 'Application cycle', type: 'TEXT', icon: 'IconCalendarStats' },
       {
         name: 'amountRequested',
         label: 'Amount requested',
@@ -530,7 +518,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
       'cycle',
       'amountRequested',
       'status',
-      'source',
       'submittedAt',
     ],
   },
@@ -577,8 +564,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     nameFieldLabel: 'Title',
     nameFieldIcon: 'IconFlag',
     fields: [
-      { name: 'project', label: 'Project', type: 'TEXT', icon: 'IconFolder' },
-      { name: 'owner', label: 'Owner', type: 'TEXT', icon: 'IconUser' },
       {
         name: 'status',
         label: 'Status',
@@ -608,7 +593,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     nameFieldLabel: 'Name',
     nameFieldIcon: 'IconDatabaseExport',
     fields: [
-      { name: 'project', label: 'Project', type: 'TEXT', icon: 'IconFolder' },
       {
         name: 'dataType',
         label: 'Data type',
@@ -660,8 +644,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     nameFieldLabel: 'Title',
     nameFieldIcon: 'IconBook',
     fields: [
-      { name: 'project', label: 'Project', type: 'TEXT', icon: 'IconFolder' },
-      { name: 'leadAuthor', label: 'Lead author', type: 'TEXT', icon: 'IconUser' },
       {
         name: 'manuscriptType',
         label: 'Type',

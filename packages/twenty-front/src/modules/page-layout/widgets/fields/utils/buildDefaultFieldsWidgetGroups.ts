@@ -24,8 +24,11 @@ export const buildDefaultFieldsWidgetGroups = ({
   const standardFields = eligibleFields.filter((field) => !field.isCustom);
   const customFields = eligibleFields.filter((field) => field.isCustom);
 
+  // Surface RELATION fields on the record detail (lead/team/project chips,
+  // and one-to-many related lists). The bridge has no parent-scoped relation
+  // tab widget, so showing them in the Fields widget is how related records
+  // surface on the show page. Morph relations stay hidden (no inline display).
   const isFieldVisible = (fieldType: FieldMetadataType) =>
-    fieldType !== FieldMetadataType.RELATION &&
     fieldType !== FieldMetadataType.MORPH_RELATION;
 
   const groups: FieldsWidgetGroup[] = [];

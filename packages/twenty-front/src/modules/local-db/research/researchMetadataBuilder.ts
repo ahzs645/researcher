@@ -419,6 +419,8 @@ const buildResearchNavFolder = () => ({
   targetObjectMetadataId: null,
   viewId: null,
   folderId: null,
+  // The nav components key off `type`; FOLDER groups its children.
+  type: 'FOLDER',
   name: 'Research',
   link: null,
   icon: 'IconFlask',
@@ -437,6 +439,7 @@ const buildNavigationMenuItem = (spec: ResearchObjectSpec, position: number) => 
   targetObjectMetadataId: objectId(spec),
   viewId: null,
   folderId: RESEARCH_NAV_FOLDER_ID,
+  type: 'OBJECT',
   name: null,
   link: null,
   icon: null,

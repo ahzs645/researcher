@@ -7,5 +7,10 @@ export const getLinkNavigationMenuItemComputedLink = (
   if (linkUrl.startsWith('http://') || linkUrl.startsWith('https://')) {
     return linkUrl;
   }
+  // Internal app route (e.g. /discovery) — NavigationDrawerItem renders these as
+  // react-router links rather than external https links.
+  if (linkUrl.startsWith('/')) {
+    return linkUrl;
+  }
   return linkUrl ? `https://${linkUrl}` : '';
 };

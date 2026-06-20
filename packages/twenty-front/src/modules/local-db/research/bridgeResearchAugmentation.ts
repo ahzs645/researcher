@@ -4,6 +4,7 @@ import {
   buildResearchObjectEdges,
   buildResearchViews,
 } from './researchMetadataBuilder';
+import { type WorkspaceMode } from './researchObjectModel';
 import { getResearchSeedRecords } from './researchSeedRecords';
 
 // Single integration point that grafts the research object model onto the
@@ -185,12 +186,15 @@ const applyNavReparenting = <TItem>(item: TItem): TItem => {
 
 export const augmentNavigationMenuItemsWithResearch = <TItem>(
   baseItems: TItem[],
+  options?: { workspaceMode?: WorkspaceMode },
 ): TItem[] =>
   [
     ...baseItems
       .filter((item) => !HIDDEN_NAV_OBJECT_IDS.has(navItemObjectId(item)))
       .map(applyNavReparenting),
-    ...(buildResearchNavigationMenuItems() as unknown as TItem[]),
+    ...(buildResearchNavigationMenuItems(
+      options?.workspaceMode,
+    ) as unknown as TItem[]),
   ].map(deriveNavigationMenuItemType);
 
 export { getResearchSeedRecords };

@@ -59,6 +59,10 @@ export type ResearchFieldSpec = {
 // new funding is discovered.
 export type ResearchNavSection = 'LAB' | 'WORK' | 'FUNDING' | 'DISCOVERY';
 
+// Whether the workspace is a single researcher or a lab managing several
+// researchers. Chosen at first-run setup; drives nav adaptation + individualMode.
+export type WorkspaceMode = 'SOLO' | 'LAB';
+
 export type ResearchObjectSpec = {
   nameSingular: string;
   namePlural: string;

@@ -2,7 +2,11 @@ import {
   BRIDGE_SYSTEM_KEYS,
   getBridgeSystemDexie,
 } from '@/local-db/data-source/bridgeSystemDexie';
-import { ensureBridgeSystemSeeded } from '@/local-db/data-source/bridgeSystemSeed';
+import {
+  ensureBridgeSystemSeeded,
+  rebuildBridgeNavForMode,
+} from '@/local-db/data-source/bridgeSystemSeed';
+import { type WorkspaceMode } from '@/local-db/research/researchObjectModel';
 import {
   createConvexSystemStore,
   type ConvexSystemStore,
@@ -59,15 +63,21 @@ const rehydrateView = async (
 ): Promise<Record<string, unknown>> => {
   const db = getBridgeSystemDexie();
   const viewId = view.id as string;
-  const [viewFields, viewFilters, viewSorts, viewGroups, viewFilterGroups, viewFieldGroups] =
-    await Promise.all([
-      db.viewField.where({ viewId }).toArray(),
-      db.viewFilter.where({ viewId }).toArray(),
-      db.viewSort.where({ viewId }).toArray(),
-      db.viewGroup.where({ viewId }).toArray(),
-      db.viewFilterGroup.where({ viewId }).toArray(),
-      db.viewFieldGroup.where({ viewId }).toArray(),
-    ]);
+  const [
+    viewFields,
+    viewFilters,
+    viewSorts,
+    viewGroups,
+    viewFilterGroups,
+    viewFieldGroups,
+  ] = await Promise.all([
+    db.viewField.where({ viewId }).toArray(),
+    db.viewFilter.where({ viewId }).toArray(),
+    db.viewSort.where({ viewId }).toArray(),
+    db.viewGroup.where({ viewId }).toArray(),
+    db.viewFilterGroup.where({ viewId }).toArray(),
+    db.viewFieldGroup.where({ viewId }).toArray(),
+  ]);
   return {
     ...view,
     viewFields,
@@ -79,7 +89,8 @@ const rehydrateView = async (
       ...fieldGroup,
       viewFields: viewFields.filter(
         (field) =>
-          'viewFieldGroupId' in field && field.viewFieldGroupId === fieldGroup.id,
+          'viewFieldGroupId' in field &&
+          field.viewFieldGroupId === fieldGroup.id,
       ),
     })),
   };
@@ -106,9 +117,29 @@ export const getCurrentUser = (): Promise<Record<string, unknown> | null> => {
   });
 };
 
-export const getPublicWorkspaceDataByDomain = (): Promise<
-  Record<string, unknown> | null
-> => {
+// First-run setup: persist the chosen persona on the workspace singleton and
+// rebuild the nav for that mode. Local-bridge only — in convex mode the
+// workspace + nav live on the backend, so this is a no-op there for now.
+export const setBridgeWorkspaceSetup = async (
+  workspaceMode: WorkspaceMode,
+): Promise<void> => {
+  if (resolveBackend()) return;
+  await ensureBridgeSystemSeeded();
+  const db = getBridgeSystemDexie();
+  const workspace = await db.workspace.toCollection().first();
+  if (workspace) {
+    await db.workspace.update((workspace as { id: string }).id, {
+      workspaceMode,
+      setupCompleted: true,
+    });
+  }
+  await rebuildBridgeNavForMode(workspaceMode);
+};
+
+export const getPublicWorkspaceDataByDomain = (): Promise<Record<
+  string,
+  unknown
+> | null> => {
   const remote = resolveBackend();
   if (remote) return remote.getPublicWorkspaceDataByDomain();
   return withSeed(async () => {
@@ -120,9 +151,10 @@ export const getPublicWorkspaceDataByDomain = (): Promise<
   });
 };
 
-export const getCurrentWorkspaceMember = (): Promise<
-  Record<string, unknown> | null
-> => {
+export const getCurrentWorkspaceMember = (): Promise<Record<
+  string,
+  unknown
+> | null> => {
   const remote = resolveBackend();
   if (remote) return remote.getCurrentWorkspaceMember();
   return withSeed(async () => {
@@ -168,7 +200,9 @@ export const getPageLayouts = (filter?: {
   });
 };
 
-export const getNavigationMenuItems = (): Promise<Record<string, unknown>[]> => {
+export const getNavigationMenuItems = (): Promise<
+  Record<string, unknown>[]
+> => {
   const remote = resolveBackend();
   if (remote) return remote.getNavigationMenuItems();
   return withSeed(async () =>
@@ -313,7 +347,9 @@ export const getWebhooks = (): Promise<Record<string, unknown>[]> => {
   return withSeed(async () => getBridgeSystemDexie().webhook.toArray());
 };
 
-export const getWebhook = (id: string): Promise<Record<string, unknown> | null> => {
+export const getWebhook = (
+  id: string,
+): Promise<Record<string, unknown> | null> => {
   const remote = resolveBackend();
   if (remote) return remote.getWebhook(id);
   return withSeed(async () => {

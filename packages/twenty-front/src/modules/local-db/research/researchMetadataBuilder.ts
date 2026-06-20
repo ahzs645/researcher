@@ -4,8 +4,12 @@ import {
   type ResearchNavSection,
   type ResearchObjectSpec,
   type ResearchOptionColor,
+  type WorkspaceMode,
 } from './researchObjectModel';
 import { RESEARCH_RELATIONS } from './researchRelations';
+
+// Internal route the "Find grants" nav link points at (the Discovery page).
+export const RESEARCH_DISCOVERY_PATH = '/discovery';
 
 const SPEC_BY_NAME = new Map(
   RESEARCH_OBJECT_SPECS.map((spec) => [spec.nameSingular, spec]),
@@ -511,16 +515,48 @@ const buildNavigationMenuItem = (
   targetRecordIdentifier: null,
 });
 
-export const buildResearchNavigationMenuItems = () => {
+// An internal LINK item that opens the Discovery page. Lives at the bottom of
+// the Discovery folder (high position) so it sits under the two object items.
+const buildDiscoveryLinkItem = () => ({
+  id: researchDeterministicUuid('research:nav:link:discovery'),
+  userWorkspaceId: null,
+  targetRecordId: null,
+  targetObjectMetadataId: null,
+  viewId: null,
+  folderId: RESEARCH_NAV_FOLDER_IDS.DISCOVERY,
+  type: 'LINK',
+  name: 'Find grants',
+  link: RESEARCH_DISCOVERY_PATH,
+  icon: 'IconSparkles',
+  color: 'pink',
+  position: 100,
+  applicationId: CORE_APPLICATION_ID,
+  createdAt: SEED_TIMESTAMP,
+  updatedAt: SEED_TIMESTAMP,
+  targetRecordIdentifier: null,
+});
+
+export const buildResearchNavigationMenuItems = (
+  workspaceMode: WorkspaceMode = 'LAB',
+) => {
+  // Solo workspaces are a team of one, so the multi-team manager is hidden.
+  const specs = RESEARCH_OBJECT_SPECS.filter(
+    (spec) =>
+      !(workspaceMode === 'SOLO' && spec.nameSingular === 'researchTeam'),
+  );
   // Position each object by its order among same-folder specs so the in-folder
   // ordering is stable and leaves room for re-parented vanilla items after it.
   const positionInFolder = new Map<ResearchNavSection, number>();
-  const objectItems = RESEARCH_OBJECT_SPECS.map((spec) => {
+  const objectItems = specs.map((spec) => {
     const next = positionInFolder.get(spec.navSection) ?? 0;
     positionInFolder.set(spec.navSection, next + 1);
     return buildNavigationMenuItem(spec, next);
   });
-  return [...RESEARCH_NAV_FOLDERS.map(buildResearchNavFolder), ...objectItems];
+  return [
+    ...RESEARCH_NAV_FOLDERS.map(buildResearchNavFolder),
+    ...objectItems,
+    buildDiscoveryLinkItem(),
+  ];
 };
 
 // Lookup helpers used by the seed-record builders so seeds reference the same

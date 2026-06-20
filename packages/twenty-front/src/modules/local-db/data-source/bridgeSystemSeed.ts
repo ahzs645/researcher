@@ -9,6 +9,7 @@ import {
   augmentNavigationMenuItemsWithResearch,
   augmentViewsWithResearch,
 } from '@/local-db/research/bridgeResearchAugmentation';
+import { type WorkspaceMode } from '@/local-db/research/researchObjectModel';
 import { mockedApiKeys } from '~/testing/mock-data/generated/metadata/api-keys/mock-api-keys-data';
 import { mockedBackendCommandMenuItems } from '~/testing/mock-data/command-menu-items';
 import { mockedNavigationMenuItems } from '~/testing/mock-data/generated/metadata/navigation-menu-items/mock-navigation-menu-items-data';
@@ -23,8 +24,12 @@ import { mockedViews } from '~/testing/mock-data/generated/metadata/views/mock-v
 // alone so mutations (CreateApiKey, RevokeApiKey, …) survive reload.
 
 // Bump when the nav layout changes (folders, hidden demo objects, repurposed
-// CRM) so already-seeded visitors rebuild their nav. See `migrateNavLayout`.
-const BRIDGE_NAV_LAYOUT_VERSION = 2;
+// CRM, the Discovery link) so already-seeded visitors rebuild their nav. See
+// `migrateNavLayout`.
+const BRIDGE_NAV_LAYOUT_VERSION = 3;
+
+// Default workspace persona until the first-run setup chooses one.
+const DEFAULT_WORKSPACE_MODE: WorkspaceMode = 'LAB';
 
 let seedPromise: Promise<void> | undefined;
 
@@ -50,10 +55,14 @@ const seed = async (): Promise<void> => {
         // Re-skin the default CRM workspace as a research workspace.
         displayName: 'Research Workspace',
         navLayoutVersion: BRIDGE_NAV_LAYOUT_VERSION,
+        workspaceMode: DEFAULT_WORKSPACE_MODE,
+        setupCompleted: false,
       }
     : {
         id: BRIDGE_SYSTEM_KEYS.WORKSPACE,
         navLayoutVersion: BRIDGE_NAV_LAYOUT_VERSION,
+        workspaceMode: DEFAULT_WORKSPACE_MODE,
+        setupCompleted: false,
       };
 
   const workspaceMemberRecord = mockedUserData.workspaceMember
@@ -145,23 +154,43 @@ const seed = async (): Promise<void> => {
 // BRIDGE_NAV_LAYOUT_VERSION and rebuild just the navigationMenuItem table from
 // the current augmentation. This resets nav customizations — acceptable while
 // the layout is still evolving — and is a no-op once versions match.
+const writeNavForMode = async (workspaceMode: WorkspaceMode): Promise<void> => {
+  const db = getBridgeSystemDexie();
+  const navItems = augmentNavigationMenuItemsWithResearch(
+    mockedNavigationMenuItems,
+    { workspaceMode },
+  ).map((item) => item as { id: string });
+  await db.navigationMenuItem.clear();
+  await db.navigationMenuItem.bulkPut(navItems);
+};
+
 const migrateNavLayout = async (): Promise<void> => {
   const db = getBridgeSystemDexie();
   const workspaces = await db.workspace.toArray();
   const workspace = workspaces[0] as
-    | ({ id: string; navLayoutVersion?: number } & Record<string, unknown>)
+    | ({
+        id: string;
+        navLayoutVersion?: number;
+        workspaceMode?: WorkspaceMode;
+      } & Record<string, unknown>)
     | undefined;
   if (!workspace) return;
   if (workspace.navLayoutVersion === BRIDGE_NAV_LAYOUT_VERSION) return;
 
-  const navItems = augmentNavigationMenuItemsWithResearch(
-    mockedNavigationMenuItems,
-  ).map((item) => item as { id: string });
-  await db.navigationMenuItem.clear();
-  await db.navigationMenuItem.bulkPut(navItems);
+  await writeNavForMode(workspace.workspaceMode ?? DEFAULT_WORKSPACE_MODE);
   await db.workspace.update(workspace.id, {
     navLayoutVersion: BRIDGE_NAV_LAYOUT_VERSION,
   });
+};
+
+// Rebuild the nav for a chosen persona (called when first-run setup picks a
+// mode). Returning visitors keep their mode because `migrateNavLayout` reads it
+// back from the persisted workspace record.
+export const rebuildBridgeNavForMode = async (
+  workspaceMode: WorkspaceMode,
+): Promise<void> => {
+  await ensureBridgeSystemSeeded();
+  await writeNavForMode(workspaceMode);
 };
 
 const seedAndMigrate = async (): Promise<void> => {

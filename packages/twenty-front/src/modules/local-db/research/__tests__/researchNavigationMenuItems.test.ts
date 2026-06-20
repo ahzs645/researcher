@@ -95,16 +95,45 @@ describe('research navigation menu items', () => {
     ).toBe(RESEARCH_NAV_FOLDER_IDS.WORK);
   });
 
-  it('keeps the research folders + objects through the drawer filter', () => {
+  it('adds the internal "Find grants" Discovery link', () => {
+    const link = augmented.find((item) => item.name === 'Find grants');
+    expect(link).toBeDefined();
+    expect(link?.type).toBe('LINK');
+    expect(link?.link).toBe('/discovery');
+    expect(link?.folderId).toBe(RESEARCH_NAV_FOLDER_IDS.DISCOVERY);
+  });
+
+  it('hides the team roster in solo mode', () => {
+    const soloItems = augmentNavigationMenuItemsWithResearch<
+      Record<string, unknown>
+    >([], { workspaceMode: 'SOLO' });
+    const researchTeamObjectId = getResearchObjectId('researchTeam');
+    const soloObjectItems = soloItems.filter((item) =>
+      Boolean(item.targetObjectMetadataId),
+    );
+    expect(soloObjectItems).toHaveLength(RESEARCH_OBJECT_SPECS.length - 1);
+    expect(
+      soloItems.some(
+        (item) => item.targetObjectMetadataId === researchTeamObjectId,
+      ),
+    ).toBe(false);
+    // The lab default still shows it.
+    expect(
+      augmented.some(
+        (item) => item.targetObjectMetadataId === researchTeamObjectId,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps the research folders + objects + link through the drawer filter', () => {
     const kept = filterAndSortNavigationMenuItems(
       augmented as never,
       [],
       researchObjectMetadataItems as never,
     );
     const folderCount = Object.keys(RESEARCH_NAV_FOLDER_IDS).length;
-    // all research objects + the four folders survive (folders by type, objects
-    // by active metadata).
-    expect(kept).toHaveLength(RESEARCH_OBJECT_SPECS.length + folderCount);
+    // all research objects + the four folders + the Discovery link survive.
+    expect(kept).toHaveLength(RESEARCH_OBJECT_SPECS.length + folderCount + 1);
     expect(
       kept.some((item) => (item as { name?: string }).name === 'Funding'),
     ).toBe(true);

@@ -60,6 +60,12 @@ const CYCLE = {
   fall: recordId('applicationCycle', 'fall-2026-tri-agency'),
   spring: recordId('applicationCycle', 'spring-2026-industry'),
 };
+const APP = {
+  cihrTeam: recordId('grantApplication', 'cihr-team-app'),
+  innovate: recordId('grantApplication', 'innovate-ignite-app'),
+  mitacs: recordId('grantApplication', 'mitacs-app'),
+  nsercRenewal: recordId('grantApplication', 'nserc-renewal-app'),
+};
 const SOURCE = (libraryKey: string) => recordId('grantSource', libraryKey);
 
 const grantSourceRecords = (): SeedRecord[] =>
@@ -608,6 +614,121 @@ const manuscriptRecords = (): SeedRecord[] => [
   }),
 ];
 
+const applicationRequirementRecords = (): SeedRecord[] => [
+  // CIHR Team Grant application checklist
+  makeRecord('applicationRequirement', 'cihr-narrative', 0, {
+    name: 'Research narrative (10 pages)',
+    applicationId: APP.cihrTeam,
+    category: 'NARRATIVE',
+    status: 'READY',
+    dueDate: '2026-09-01T00:00:00.000Z',
+    formNumber: '',
+    notes: '',
+  }),
+  makeRecord('applicationRequirement', 'cihr-budget', 1, {
+    name: 'Budget and justification',
+    applicationId: APP.cihrTeam,
+    category: 'BUDGET',
+    status: 'NEEDED',
+    dueDate: '2026-09-05T00:00:00.000Z',
+    formNumber: '',
+    notes: 'Coordinate with finance office.',
+  }),
+  makeRecord('applicationRequirement', 'cihr-ccv', 2, {
+    name: 'Common CV for all team members',
+    applicationId: APP.cihrTeam,
+    category: 'CV',
+    status: 'REQUESTED',
+    dueDate: '2026-09-01T00:00:00.000Z',
+    formNumber: 'CCV',
+    notes: '',
+  }),
+  makeRecord('applicationRequirement', 'cihr-ethics', 3, {
+    name: 'Ethics approval (REB)',
+    applicationId: APP.cihrTeam,
+    category: 'ETHICS',
+    status: 'NEEDED',
+    dueDate: '2026-09-10T00:00:00.000Z',
+    formNumber: '',
+    notes: '',
+  }),
+  // Innovate BC Ignite checklist
+  makeRecord('applicationRequirement', 'ignite-commercialization', 4, {
+    name: 'Commercialization plan',
+    applicationId: APP.innovate,
+    category: 'NARRATIVE',
+    status: 'READY',
+    dueDate: '2026-07-10T00:00:00.000Z',
+    formNumber: '',
+    notes: '',
+  }),
+  makeRecord('applicationRequirement', 'ignite-partner-letter', 5, {
+    name: 'Industry partner letter of support',
+    applicationId: APP.innovate,
+    category: 'LETTER_OF_SUPPORT',
+    status: 'ATTACHED',
+    dueDate: '2026-07-01T00:00:00.000Z',
+    formNumber: '',
+    notes: '',
+  }),
+  makeRecord('applicationRequirement', 'ignite-budget', 6, {
+    name: 'Matched-funding budget',
+    applicationId: APP.innovate,
+    category: 'BUDGET',
+    status: 'READY',
+    dueDate: '2026-07-10T00:00:00.000Z',
+    formNumber: '',
+    notes: '',
+  }),
+  // Mitacs internship checklist
+  makeRecord('applicationRequirement', 'mitacs-proposal', 7, {
+    name: 'Internship research proposal',
+    applicationId: APP.mitacs,
+    category: 'NARRATIVE',
+    status: 'ATTACHED',
+    dueDate: '2026-01-25T00:00:00.000Z',
+    formNumber: '',
+    notes: '',
+  }),
+  makeRecord('applicationRequirement', 'mitacs-partner-form', 8, {
+    name: 'Partner organization form',
+    applicationId: APP.mitacs,
+    category: 'FORM',
+    status: 'ATTACHED',
+    dueDate: '2026-01-25T00:00:00.000Z',
+    formNumber: 'MITACS-PO',
+    notes: '',
+  }),
+  // NSERC Discovery renewal checklist
+  makeRecord('applicationRequirement', 'nserc-proposal', 9, {
+    name: 'Discovery proposal (5 pages)',
+    applicationId: APP.nsercRenewal,
+    category: 'NARRATIVE',
+    status: 'READY',
+    dueDate: '2026-06-15T00:00:00.000Z',
+    formNumber: 'Form 101',
+    notes: '',
+  }),
+  makeRecord('applicationRequirement', 'nserc-ccv', 10, {
+    name: 'NSERC CCV',
+    applicationId: APP.nsercRenewal,
+    category: 'CV',
+    status: 'ATTACHED',
+    dueDate: '2026-06-10T00:00:00.000Z',
+    formNumber: 'CCV',
+    notes: '',
+  }),
+  makeRecord('applicationRequirement', 'nserc-hqp', 11, {
+    name: 'HQP training plan',
+    applicationId: APP.nsercRenewal,
+    category: 'OTHER',
+    status: 'REQUESTED',
+    dueDate: '2026-06-15T00:00:00.000Z',
+    formNumber: '',
+    notes: '',
+  }),
+];
+
 // Seed map keyed by object `nameSingular`, matching the DataSource seed shape.
 export const getResearchSeedRecords = (): Record<string, SeedRecord[]> => ({
   researchTeam: researchTeamRecords(),
@@ -621,4 +742,5 @@ export const getResearchSeedRecords = (): Record<string, SeedRecord[]> => ({
   milestone: milestoneRecords(),
   dataset: datasetRecords(),
   manuscript: manuscriptRecords(),
+  applicationRequirement: applicationRequirementRecords(),
 });

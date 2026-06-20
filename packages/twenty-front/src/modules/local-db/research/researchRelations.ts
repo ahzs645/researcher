@@ -164,4 +164,15 @@ export const RESEARCH_RELATIONS: ResearchRelation[] = [
     manyFieldLabel: 'Source',
     manyFieldIcon: 'IconDatabase',
   },
+  // Application ↔ requirement checklist
+  {
+    one: 'grantApplication',
+    oneField: 'requirements',
+    oneFieldLabel: 'Requirements',
+    oneFieldIcon: 'IconChecklist',
+    many: 'applicationRequirement',
+    manyField: 'application',
+    manyFieldLabel: 'Application',
+    manyFieldIcon: 'IconFileText',
+  },
 ];

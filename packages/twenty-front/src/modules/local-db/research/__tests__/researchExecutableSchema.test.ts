@@ -211,6 +211,55 @@ describe('research executable schema', () => {
     expect(topological?.milestones.totalCount).toBe(2);
   });
 
+  it('resolves the application requirement checklist', async () => {
+    const client = makeClient();
+
+    const result = await client.query({
+      query: gql`
+        query ApplicationChecklist {
+          grantApplications(filter: { status: { eq: "REVIEWING" } }) {
+            edges {
+              node {
+                name
+                requirements {
+                  totalCount
+                  edges {
+                    node {
+                      name
+                      status
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `,
+    });
+
+    const application = (
+      result.data as {
+        grantApplications: {
+          edges: Array<{
+            node: {
+              name: string;
+              requirements: {
+                totalCount: number;
+                edges: Array<{ node: { name: string; status: string } }>;
+              };
+            };
+          }>;
+        };
+      }
+    ).grantApplications.edges[0].node;
+    expect(application.requirements.totalCount).toBe(4);
+    const statuses = application.requirements.edges.map(
+      (edge) => edge.node.status,
+    );
+    expect(statuses).toContain('READY');
+    expect(statuses).toContain('NEEDED');
+  });
+
   it('creates a grant through the schema link', async () => {
     const client = makeClient();
 

@@ -89,7 +89,8 @@ export const getBridgeDataSource = () => {
       // additive Dexie upgrade instead of a same-version schema-diff error:
       //   1 → 2  research objects added
       //   2 → 3  research relations added (new `<field>Id` join-column indexes)
-      schemaVersion: 3,
+      //   3 → 4  applicationRequirement checklist object + relation
+      schemaVersion: 4,
     });
   }
   return cachedDataSource;

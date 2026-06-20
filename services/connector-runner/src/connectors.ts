@@ -2,6 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "playwright";
 import { z } from "zod";
+import { ConnectorActionError } from "./connectorActionError.js";
+import {
+  applicationAutofillConnector,
+  applicationAutofillProvider,
+} from "./applicationAutofill.js";
+
+export { ConnectorActionError };
 
 export type ConnectorManifest = {
   id: string;
@@ -52,30 +59,21 @@ export type ConnectorActionContext = {
   profileKey: string;
 };
 
-type ConnectorActionDefinition = {
+export type ConnectorActionDefinition = {
   inputSchema: z.ZodTypeAny;
   activeInputSchema?: z.ZodTypeAny;
   run: (page: Page, input: any, context: ConnectorActionContext) => Promise<Record<string, unknown>>;
 };
 
-type ConnectorProvider = {
+export type ConnectorProvider = {
   manifest: ConnectorManifest;
   verifyAuth?: (page: Page, input: ConnectorProfileInput) => Promise<Record<string, unknown>>;
   authIncompleteMessage?: (auth: Record<string, unknown>) => string;
   actions: Record<string, ConnectorActionDefinition>;
 };
 
-export class ConnectorActionError extends Error {
-  constructor(
-    readonly statusCode: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
 export const connectors: ConnectorManifest[] = [
+  applicationAutofillConnector,
   {
     id: "wave",
     name: "Wave",
@@ -1702,6 +1700,7 @@ async function downloadGcosAgreementDocuments(page: Page, links: Array<{ href: s
 }
 
 export const connectorProviders: ConnectorProvider[] = [
+  applicationAutofillProvider,
   {
     manifest: WAVE_CONNECTOR,
     verifyAuth: (page) => verifyWaveAuth(page),

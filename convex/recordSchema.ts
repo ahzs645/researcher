@@ -713,4 +713,309 @@ export const recordTables = {
 .index('by_updatedAt', ['updatedAt'])
 .index('by_createdAt', ['createdAt'])
 .index('by_deletedAt', ['deletedAt']),
+  researchTeam: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    principalInvestigator: v.optional(v.string()),
+    institution: v.optional(v.string()),
+    department: v.optional(v.string()),
+    focusAreas: v.optional(v.array(v.string())),
+    individualMode: v.optional(v.boolean()),
+    website: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  researcher: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    email: v.optional(v.string()),
+    role: v.optional(v.string()),
+    orcid: v.optional(v.string()),
+    institution: v.optional(v.string()),
+    status: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    teamId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_team_id', ['teamId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  project: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    status: v.optional(v.string()),
+    fundingStatus: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    teamId: v.optional(v.string()),
+    leadId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_team_id', ['teamId'])
+.index('by_lead_id', ['leadId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  grant: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    funder: v.optional(v.string()),
+    program: v.optional(v.string()),
+    status: v.optional(v.string()),
+    priority: v.optional(v.string()),
+    amountRequested: v.optional(v.number()),
+    amountAwarded: v.optional(v.number()),
+    fitScore: v.optional(v.number()),
+    applicationDueDate: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+    decisionAt: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    nextReportDue: v.optional(v.string()),
+    opportunityUrl: v.optional(v.string()),
+    nextAction: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    leadId: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_lead_id', ['leadId'])
+.index('by_project_id', ['projectId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  grantSource: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    url: v.optional(v.string()),
+    sourceType: v.optional(v.string()),
+    jurisdiction: v.optional(v.string()),
+    funderType: v.optional(v.string()),
+    topicTags: v.optional(v.array(v.string())),
+    eligibilityTags: v.optional(v.array(v.string())),
+    scrapeCadence: v.optional(v.string()),
+    trustLevel: v.optional(v.string()),
+    status: v.optional(v.string()),
+    lastScrapedAt: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  grantOpportunity: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    funder: v.optional(v.string()),
+    program: v.optional(v.string()),
+    opportunityUrl: v.optional(v.string()),
+    applicationDueDate: v.optional(v.string()),
+    registrationDueDate: v.optional(v.string()),
+    amountText: v.optional(v.string()),
+    fitScore: v.optional(v.number()),
+    confidence: v.optional(v.string()),
+    status: v.optional(v.string()),
+    eligibility: v.optional(v.string()),
+    topicTags: v.optional(v.array(v.string())),
+    description: v.optional(v.string()),
+    sourceId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_source_id', ['sourceId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  grantApplication: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    organization: v.optional(v.string()),
+    email: v.optional(v.string()),
+    amountRequested: v.optional(v.number()),
+    projectSummary: v.optional(v.string()),
+    status: v.optional(v.string()),
+    source: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    applicantId: v.optional(v.string()),
+    grantId: v.optional(v.string()),
+    cycleId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_applicant_id', ['applicantId'])
+.index('by_grant_id', ['grantId'])
+.index('by_cycle_id', ['cycleId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  applicationCycle: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    status: v.optional(v.string()),
+    openDate: v.optional(v.string()),
+    closeDate: v.optional(v.string()),
+    focus: v.optional(v.string()),
+    owner: v.optional(v.string()),
+    description: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  milestone: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    status: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
+    progress: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    ownerId: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_owner_id', ['ownerId'])
+.index('by_project_id', ['projectId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  dataset: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    dataType: v.optional(v.string()),
+    status: v.optional(v.string()),
+    storageLocation: v.optional(v.string()),
+    sizeGb: v.optional(v.number()),
+    hasEthicsApproval: v.optional(v.boolean()),
+    collectedAt: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_project_id', ['projectId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  manuscript: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    manuscriptType: v.optional(v.string()),
+    status: v.optional(v.string()),
+    targetVenue: v.optional(v.string()),
+    progress: v.optional(v.number()),
+    targetDate: v.optional(v.string()),
+    doi: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    leadAuthorId: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_leadAuthor_id', ['leadAuthorId'])
+.index('by_project_id', ['projectId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  applicationRequirement: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    category: v.optional(v.string()),
+    status: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
+    formNumber: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    applicationId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_application_id', ['applicationId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
 };

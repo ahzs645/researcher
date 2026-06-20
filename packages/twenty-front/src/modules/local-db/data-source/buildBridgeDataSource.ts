@@ -5,6 +5,10 @@ import {
 } from 'twenty-shared/data-source';
 
 import { createDexieDataSource } from '@/local-db/data-source/createDexieDataSource';
+import {
+  augmentObjectMetadataWithResearch,
+  getResearchSeedRecords,
+} from '@/local-db/research/bridgeResearchAugmentation';
 
 import { mockedCompanyRecords } from '~/testing/mock-data/generated/data/companies/mock-companies-data';
 import { mockedNoteRecords } from '~/testing/mock-data/generated/data/notes/mock-notes-data';
@@ -24,7 +28,9 @@ let seedPromise: Promise<void> | undefined;
 export const getBridgeDataSourceBundle = (): DataSourceBundle => {
   if (cachedBundle === undefined) {
     cachedBundle = buildDataSourceBundle(
-      mockedStandardObjectMetadataQueryResult as never,
+      augmentObjectMetadataWithResearch(
+        mockedStandardObjectMetadataQueryResult as never,
+      ) as never,
     );
   }
   return cachedBundle;
@@ -69,6 +75,9 @@ const buildSeed = (): Record<string, DataSourceRecord[]> => ({
   note: mockedNoteRecords.map(toDataSourceRecord),
   task: mockedTaskRecords.map(toDataSourceRecord),
   workspaceMember: mockedWorkspaceMemberRecords.map(toDataSourceRecord),
+  // Research objects are authored as flat DataSource records already, so they
+  // bypass the GraphQL-shape normalizer above.
+  ...(getResearchSeedRecords() as Record<string, DataSourceRecord[]>),
 });
 
 export const getBridgeDataSource = () => {
@@ -76,6 +85,12 @@ export const getBridgeDataSource = () => {
     cachedDataSource = createDexieDataSource({
       bundle: getBridgeDataSourceBundle(),
       databaseName: 'twenty-bridge-data-source',
+      // Bumped as the research schema evolves so existing visitors get an
+      // additive Dexie upgrade instead of a same-version schema-diff error:
+      //   1 → 2  research objects added
+      //   2 → 3  research relations added (new `<field>Id` join-column indexes)
+      //   3 → 4  applicationRequirement checklist object + relation
+      schemaVersion: 4,
     });
   }
   return cachedDataSource;

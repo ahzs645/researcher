@@ -3,6 +3,10 @@ import {
   BRIDGE_SYSTEM_KEYS,
   getBridgeSystemDexie,
 } from '@/local-db/data-source/bridgeSystemDexie';
+import {
+  augmentNavigationMenuItemsWithResearch,
+  augmentViewsWithResearch,
+} from '@/local-db/research/bridgeResearchAugmentation';
 import { mockedApiKeys } from '~/testing/mock-data/generated/metadata/api-keys/mock-api-keys-data';
 import { mockedBackendCommandMenuItems } from '~/testing/mock-data/command-menu-items';
 import { mockedNavigationMenuItems } from '~/testing/mock-data/generated/metadata/navigation-menu-items/mock-navigation-menu-items-data';
@@ -37,6 +41,8 @@ const seed = async (): Promise<void> => {
         id:
           (mockedUserData.currentWorkspace as { id?: string }).id ??
           BRIDGE_SYSTEM_KEYS.WORKSPACE,
+        // Re-skin the default CRM workspace as a research workspace.
+        displayName: 'Research Workspace',
       }
     : { id: BRIDGE_SYSTEM_KEYS.WORKSPACE };
 
@@ -73,7 +79,7 @@ const seed = async (): Promise<void> => {
     flatViewGroups,
     flatViewFilterGroups,
     flatViewFieldGroups,
-  } = splitViewWithRelated(mockedViews);
+  } = splitViewWithRelated(augmentViewsWithResearch(mockedViews));
 
   await db.view.bulkPut(flatViews as { id: string }[]);
   await db.viewField.bulkPut(
@@ -108,7 +114,9 @@ const seed = async (): Promise<void> => {
   );
 
   await db.navigationMenuItem.bulkPut(
-    mockedNavigationMenuItems.map((item) => item as { id: string }),
+    augmentNavigationMenuItemsWithResearch(mockedNavigationMenuItems).map(
+      (item) => item as { id: string },
+    ),
   );
   await db.commandMenuItem.bulkPut(
     mockedBackendCommandMenuItems as { id: string }[],

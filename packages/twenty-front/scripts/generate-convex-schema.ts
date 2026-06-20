@@ -18,10 +18,13 @@ import {
 } from 'twenty-shared/data-source';
 
 import { mockedStandardObjectMetadataQueryResult } from '../src/testing/mock-data/generated/metadata/objects/mock-objects-metadata';
+import { augmentObjectMetadataWithResearch } from '../src/modules/local-db/research/bridgeResearchAugmentation';
 
 const main = async () => {
   const bundle = buildDataSourceBundle(
-    mockedStandardObjectMetadataQueryResult as never,
+    augmentObjectMetadataWithResearch(
+      mockedStandardObjectMetadataQueryResult as never,
+    ) as never,
   );
   // Auto-generated record tables live in `convex/recordSchema.ts`; the
   // combined `schema.ts` is hand-written and spreads them alongside the

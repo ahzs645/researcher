@@ -1,0 +1,821 @@
+import express, { NextFunction, Request, Response } from "express";
+import crypto from "node:crypto";
+import net from "node:net";
+import type { IncomingMessage } from "node:http";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { WebSocket, WebSocketServer } from "ws";
+import { z } from "zod";
+import { createBrowserBackend } from "./browserBackend.js";
+import {
+  ConnectorActionError,
+  connectorAuthIncompleteMessage,
+  connectors,
+  parseConnectorActionInput,
+  connectorOriginStatus,
+  requireKnownConnector,
+  runConnectorAction,
+  verifyConnectorAuth,
+} from "./connectors.js";
+
+const port = Number(process.env.CONNECTOR_RUNNER_PORT ?? 8890);
+const runnerSecret = process.env.CONNECTOR_RUNNER_SECRET;
+const exposeCdpUrl = process.env.CONNECTOR_DEBUG_EXPOSE_CDP_URL === "true";
+const publicWebSocketBaseUrl = process.env.CONNECTOR_RUNNER_PUBLIC_WS_URL ?? `ws://127.0.0.1:${port}`;
+const backend = createBrowserBackend();
+
+type ActiveSession = {
+  sessionId: string;
+  connectorId?: string;
+  providerSessionId: string;
+  profileKey: string;
+  startedAtISO: string;
+  dashboardUrl?: string;
+  browser: Browser;
+  context: BrowserContext;
+  page: Page;
+  vncHost?: string;
+  vncPort?: number;
+};
+
+const activeSessions = new Map<string, ActiveSession>();
+
+const sessionStartSchema = z.object({
+  profileKey: z.string().min(1),
+  startUrl: z.string().url().optional(),
+  liveView: z.boolean().default(true),
+  timezone: z.string().optional(),
+  locale: z.string().optional(),
+  viewport: z.object({
+    width: z.number().int().min(800).max(3840),
+    height: z.number().int().min(600).max(2160),
+  }).optional(),
+  browserVersion: z.string().optional(),
+  proxyUrl: z.string().url().optional(),
+});
+
+const profilePageSchema = z.object({
+  profileKey: z.string().min(1),
+  url: z.string().url(),
+  readOnly: z.boolean().default(true),
+  liveView: z.boolean().default(false),
+  waitForSelector: z.string().optional(),
+  authenticatedSelector: z.string().optional(),
+  unauthenticatedSelector: z.string().optional(),
+  includeBodyText: z.boolean().default(false),
+  timezone: z.string().optional(),
+  locale: z.string().optional(),
+  viewport: z.object({
+    width: z.number().int().min(800).max(3840),
+    height: z.number().int().min(600).max(2160),
+  }).optional(),
+  browserVersion: z.string().optional(),
+  proxyUrl: z.string().url().optional(),
+});
+type ProfilePageInput = z.infer<typeof profilePageSchema>;
+
+const sessionPasteSchema = z.object({
+  text: z.string().min(1).max(20_000),
+  pressEnter: z.boolean().default(false),
+  selector: z.string().optional(),
+});
+
+function requireRunnerSecret(req: Request, res: Response, next: NextFunction) {
+  if (!runnerSecret) {
+    if (process.env.NODE_ENV === "production") {
+      res.status(500).json({ error: "CONNECTOR_RUNNER_SECRET is required in production." });
+      return;
+    }
+    next();
+    return;
+  }
+
+  const bearer = req.headers.authorization?.startsWith("Bearer ")
+    ? req.headers.authorization.slice("Bearer ".length)
+    : undefined;
+  const provided = req.headers["x-connector-runner-secret"] ?? bearer;
+  if (provided !== runnerSecret) {
+    res.status(401).json({ error: "Unauthorized connector runner request." });
+    return;
+  }
+  next();
+}
+
+function asyncRoute(
+  handler: (req: Request, res: Response) => Promise<void>,
+): (req: Request, res: Response, next: NextFunction) => void {
+  return (req, res, next) => {
+    handler(req, res).catch(next);
+  };
+}
+
+async function connectSession(cdpUrl: string) {
+  const browser = await chromium.connectOverCDP(cdpUrl);
+  const context = browser.contexts()[0] ?? await browser.newContext();
+  const pages = context.pages();
+  const page = pages[0] ?? await context.newPage();
+  await Promise.all(
+    pages
+      .filter((candidate) => candidate !== page)
+      .map((candidate) => candidate.close().catch(() => undefined)),
+  );
+  await page.bringToFront().catch(() => undefined);
+  return { browser, context, page };
+}
+
+type BrowserSessionDefaults = {
+  timezone?: string;
+  locale?: string;
+  viewport?: { width: number; height: number };
+  browserVersion?: string;
+};
+
+function connectorBrowserDefaults(connectorId?: string): BrowserSessionDefaults {
+  const connectorDefaults = connectorId ? requireKnownConnector(connectorId).browserDefaults ?? {} : {};
+  return {
+    ...connectorDefaults,
+    browserVersion: connectorDefaults.browserVersion
+      ?? (connectorId === "gcos" ? process.env.GCOS_BROWSER_VERSION : undefined)
+      ?? process.env.CONNECTOR_CHROME_VERSION
+      ?? undefined,
+  };
+}
+
+function mergeBrowserDefaults<T extends BrowserSessionDefaults>(input: T, connectorId?: string): T {
+  const defaults = connectorBrowserDefaults(connectorId);
+  return {
+    ...input,
+    timezone: input.timezone ?? defaults.timezone,
+    locale: input.locale ?? defaults.locale,
+    viewport: input.viewport ?? defaults.viewport,
+    browserVersion: input.browserVersion ?? defaults.browserVersion,
+  };
+}
+
+async function applyBrowserSessionDefaults(
+  context: BrowserContext,
+  page: Page,
+  input: BrowserSessionDefaults,
+) {
+  if (input.locale) {
+    await context.setExtraHTTPHeaders({ "Accept-Language": `${input.locale},en;q=0.9` }).catch(() => undefined);
+    const client = await context.newCDPSession(page).catch(() => undefined);
+    await client?.send("Emulation.setLocaleOverride", { locale: input.locale }).catch(() => undefined);
+    await client?.detach().catch(() => undefined);
+  }
+  if (input.viewport) {
+    await page.setViewportSize(input.viewport).catch(() => undefined);
+  }
+}
+
+async function closeActiveSession(session: ActiveSession) {
+  await session.browser.close().catch(() => undefined);
+  await backend.stopSession(session.providerSessionId).catch(() => undefined);
+  activeSessions.delete(session.sessionId);
+}
+
+function isAuthRiskUrl(url: string) {
+  return /gckey|clegc-gckey|interac|sign-?in|signin|login|credential|auth/i.test(url);
+}
+
+function isGcosAuthenticatedArea(url: string) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "srv136.services.gc.ca" && parsed.pathname.startsWith("/OSR/pro");
+  } catch {
+    return false;
+  }
+}
+
+function assertGcosActionReady(url: string) {
+  if (!isGcosAuthenticatedArea(url) || isAuthRiskUrl(url)) {
+    throw new ConnectorActionError(
+      409,
+      "gcos_login_in_progress",
+      "GCOS connector actions are disabled until the live browser is signed in and already on srv136.services.gc.ca/OSR/pro. Finish login manually first.",
+    );
+  }
+}
+
+function blitzVncHost() {
+  try {
+    return new URL(process.env.BLITZBROWSER_CDP_URL ?? "ws://127.0.0.1:9999").hostname;
+  } catch {
+    return "127.0.0.1";
+  }
+}
+
+async function canConnect(host: string, port: number) {
+  return await new Promise<boolean>((resolve) => {
+    const socket = net.createConnection({ host, port });
+    const done = (ok: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(150);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false));
+    socket.once("error", () => done(false));
+  });
+}
+
+async function discoverVncPorts(host: string) {
+  const checks: Array<Promise<number | undefined>> = [];
+  for (let candidate = 13001; candidate <= 13099; candidate += 2) {
+    checks.push(canConnect(host, candidate).then((open) => open ? candidate : undefined));
+  }
+  const ports = await Promise.all(checks);
+  return new Set(ports.filter((candidate): candidate is number => typeof candidate === "number"));
+}
+
+async function detectNewVncPort(before: Set<number>, host: string) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const after = await discoverVncPorts(host);
+    const assigned = new Set([...activeSessions.values()].map((session) => session.vncPort).filter(Boolean));
+    const fresh = [...after].filter((candidate) => !before.has(candidate) && !assigned.has(candidate));
+    if (fresh.length > 0) return fresh[0];
+    const unassigned = [...after].filter((candidate) => !assigned.has(candidate));
+    if (unassigned.length === 1) return unassigned[0];
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return undefined;
+}
+
+async function selectorVisible(page: Page, selector?: string) {
+  if (!selector) return undefined;
+  try {
+    return await page.locator(selector).first().isVisible({ timeout: 2_000 });
+  } catch {
+    return false;
+  }
+}
+
+function publicSession(session: ActiveSession) {
+  const vncWebSocketUrl = session.vncPort
+    ? `${publicWebSocketBaseUrl.replace(/\/$/, "")}/sessions/${encodeURIComponent(session.sessionId)}/vnc`
+    : undefined;
+  return {
+    sessionId: session.sessionId,
+    connectorId: session.connectorId,
+    profileKey: session.profileKey,
+    provider: backend.provider,
+    startedAtISO: session.startedAtISO,
+    currentUrl: session.page.url(),
+    dashboardUrl: session.dashboardUrl,
+    vncWebSocketUrl,
+  };
+}
+
+const app = express();
+app.use(express.json({ limit: "1mb" }));
+
+app.get("/healthz", asyncRoute(async (_req, res) => {
+  res.json({
+    ok: true,
+    runner: "connector-runner",
+    browser: await backend.healthCheck(),
+    activeSessions: activeSessions.size,
+  });
+}));
+
+app.use(requireRunnerSecret);
+
+app.get("/connectors", (_req, res) => {
+  res.json({ connectors });
+});
+
+app.get("/sessions", (_req, res) => {
+  res.json({ sessions: [...activeSessions.values()].map(publicSession) });
+});
+
+app.post("/sessions/start-login", asyncRoute(async (req, res) => {
+  const input = sessionStartSchema.parse(req.body);
+  const browserInput = mergeBrowserDefaults(input);
+  const vncHost = blitzVncHost();
+  const beforeVncPorts = browserInput.liveView ? await discoverVncPorts(vncHost) : new Set<number>();
+  const browserSession = await backend.createSession({
+    profileKey: browserInput.profileKey,
+    persist: true,
+    liveView: browserInput.liveView,
+    timezone: browserInput.timezone,
+    locale: browserInput.locale,
+    viewport: browserInput.viewport,
+    browserVersion: browserInput.browserVersion,
+    proxyUrl: browserInput.proxyUrl,
+  });
+
+  const { browser, context, page } = await connectSession(browserSession.cdpUrl);
+  await applyBrowserSessionDefaults(context, page, browserInput);
+  if (browserInput.startUrl) {
+    await page.goto(browserInput.startUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  }
+  const vncPort = browserInput.liveView ? await detectNewVncPort(beforeVncPorts, vncHost) : undefined;
+
+  const session: ActiveSession = {
+    sessionId: crypto.randomUUID(),
+    providerSessionId: browserSession.providerSessionId,
+    profileKey: browserSession.profileKey,
+    startedAtISO: new Date().toISOString(),
+    dashboardUrl: browserSession.dashboardUrl,
+    browser,
+    context,
+    page,
+    vncHost: vncPort ? vncHost : undefined,
+    vncPort,
+  };
+  activeSessions.set(session.sessionId, session);
+
+  res.json({
+    ...publicSession(session),
+    liveViewEnabled: browserSession.liveViewEnabled,
+    cdpUrl: exposeCdpUrl ? browserSession.cdpUrl : undefined,
+  });
+}));
+
+app.post("/sessions/:sessionId/finish-login", asyncRoute(async (req, res) => {
+  const sessionId = String(req.params.sessionId);
+  const session = activeSessions.get(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "Session not found." });
+    return;
+  }
+
+  const result = {
+    sessionId: session.sessionId,
+    profileKey: session.profileKey,
+    finalUrl: session.page.url(),
+    title: await session.page.title().catch(() => undefined),
+    savedAtISO: new Date().toISOString(),
+  };
+  await closeActiveSession(session);
+  res.json(result);
+}));
+
+app.post("/sessions/:sessionId/stop", asyncRoute(async (req, res) => {
+  const sessionId = String(req.params.sessionId);
+  const session = activeSessions.get(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "Session not found." });
+    return;
+  }
+
+  await closeActiveSession(session);
+  res.json({ sessionId, stoppedAtISO: new Date().toISOString() });
+}));
+
+app.post("/sessions/:sessionId/paste", asyncRoute(async (req, res) => {
+  const sessionId = String(req.params.sessionId);
+  const session = activeSessions.get(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "Session not found." });
+    return;
+  }
+
+  const input = sessionPasteSchema.parse(req.body);
+  const result: any = await session.page.evaluate(`(() => {
+    const payload = ${JSON.stringify({ selector: input.selector, text: input.text })};
+    const selector = payload.selector;
+    const text = payload.text;
+    const editableSelector = "input:not([type='hidden']):not([disabled]), textarea:not([disabled]), [contenteditable='true']";
+    const isVisible = (element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+    };
+    const isEditable = (element) => {
+      if (!element) return false;
+      if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+        return !element.disabled && element.type !== "hidden";
+      }
+      return element instanceof HTMLElement && element.isContentEditable;
+    };
+    const describe = (element, beforeLength, afterLength) => ({
+      tag: element?.tagName ?? null,
+      type: element instanceof HTMLInputElement ? element.type : null,
+      name: element?.getAttribute("name"),
+      id: element instanceof HTMLElement ? element.id : undefined,
+      placeholder: element?.getAttribute("placeholder"),
+      beforeLength,
+      afterLength,
+    });
+
+    const element = selector ? document.querySelector(selector) : document.activeElement;
+    if (!isEditable(element)) {
+      return { inserted: false, reason: "No focused editable field was found.", target: describe(document.activeElement) };
+    }
+    if (!selector && !isVisible(element)) {
+      return { inserted: false, reason: "The focused editable field is not visible.", target: describe(element) };
+    }
+
+    element.focus();
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+      const before = element.value.length;
+      const start = element.selectionStart ?? element.value.length;
+      const end = element.selectionEnd ?? element.value.length;
+      const nextValue = element.value.slice(0, start) + text + element.value.slice(end);
+      const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const valueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+      if (valueSetter) valueSetter.call(element, nextValue);
+      else element.value = nextValue;
+      const caret = start + text.length;
+      try {
+        element.setSelectionRange(caret, caret);
+      } catch {
+        // Some input types, including email in Chromium, do not support programmatic selection ranges.
+      }
+      element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      return { inserted: true, target: describe(element, before, element.value.length) };
+    }
+
+    const before = element.textContent?.length ?? 0;
+    document.execCommand("insertText", false, text);
+    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+    return { inserted: true, target: describe(element, before, element.textContent?.length ?? 0) };
+  })()`);
+
+  if (!result.inserted) {
+    throw new ConnectorActionError(409, "paste_target_not_found", result.reason ?? "No editable field is focused in the browser.");
+  }
+  if (input.pressEnter) {
+    await session.page.keyboard.press("Enter");
+  }
+
+  res.json({
+    sessionId,
+    insertedCharacterCount: input.text.length,
+    pressedEnter: input.pressEnter,
+    target: result.target,
+    currentUrl: session.page.url(),
+    pastedAtISO: new Date().toISOString(),
+  });
+}));
+
+app.post("/connectors/:connectorId/auth/start", asyncRoute(async (req, res) => {
+  const connector = requireKnownConnector(String(req.params.connectorId));
+  const input = sessionStartSchema.parse({
+    ...req.body,
+    startUrl: req.body?.startUrl ?? connector.auth.startUrl,
+  });
+  const browserInput = mergeBrowserDefaults(input, connector.id);
+  const vncHost = blitzVncHost();
+  const beforeVncPorts = browserInput.liveView ? await discoverVncPorts(vncHost) : new Set<number>();
+  const browserSession = await backend.createSession({
+    profileKey: browserInput.profileKey,
+    persist: true,
+    liveView: browserInput.liveView,
+    timezone: browserInput.timezone,
+    locale: browserInput.locale,
+    viewport: browserInput.viewport,
+    browserVersion: browserInput.browserVersion,
+    proxyUrl: browserInput.proxyUrl,
+  });
+
+  const { browser, context, page } = await connectSession(browserSession.cdpUrl);
+  await applyBrowserSessionDefaults(context, page, browserInput);
+  await page.goto(browserInput.startUrl!, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  const vncPort = browserInput.liveView ? await detectNewVncPort(beforeVncPorts, vncHost) : undefined;
+
+  const session: ActiveSession = {
+    sessionId: crypto.randomUUID(),
+    connectorId: connector.id,
+    providerSessionId: browserSession.providerSessionId,
+    profileKey: browserSession.profileKey,
+    startedAtISO: new Date().toISOString(),
+    dashboardUrl: browserSession.dashboardUrl,
+    browser,
+    context,
+    page,
+    vncHost: vncPort ? vncHost : undefined,
+    vncPort,
+  };
+  activeSessions.set(session.sessionId, session);
+
+  res.json({
+    ...publicSession(session),
+    liveViewEnabled: browserSession.liveViewEnabled,
+    cdpUrl: exposeCdpUrl ? browserSession.cdpUrl : undefined,
+  });
+}));
+
+app.post("/connectors/:connectorId/auth/verify", asyncRoute(async (req, res) => {
+  const connector = requireKnownConnector(String(req.params.connectorId));
+  const input = profilePageSchema.parse({
+    ...req.body,
+    url: req.body?.url ?? connector.auth.startUrl,
+    readOnly: req.body?.readOnly ?? true,
+    liveView: req.body?.liveView ?? false,
+  });
+  const browserInput = mergeBrowserDefaults(input, connector.id);
+  const browserSession = await backend.createSession({
+    profileKey: browserInput.profileKey,
+    persist: true,
+    liveView: browserInput.liveView,
+    readOnly: browserInput.readOnly,
+    timezone: browserInput.timezone,
+    locale: browserInput.locale,
+    viewport: browserInput.viewport,
+    browserVersion: browserInput.browserVersion,
+    proxyUrl: browserInput.proxyUrl,
+  });
+
+  const { browser, context, page } = await connectSession(browserSession.cdpUrl);
+  try {
+    await applyBrowserSessionDefaults(context, page, browserInput);
+    res.json(await verifyConnectorAuth(page, connector, browserInput));
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}));
+
+app.post("/connectors/:connectorId/auth/sessions/:sessionId/confirm", asyncRoute(async (req, res) => {
+  const connector = requireKnownConnector(String(req.params.connectorId));
+  const sessionId = String(req.params.sessionId);
+  const session = activeSessions.get(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "Session not found." });
+    return;
+  }
+
+  if (session.connectorId && session.connectorId !== connector.id) {
+    res.status(409).json({ error: `Session belongs to ${session.connectorId}, not ${connector.id}.` });
+    return;
+  }
+
+  const finalUrl = session.page.url();
+  const title = await session.page.title().catch(() => undefined);
+  const auth = connector.auth.confirmMode === "verified"
+    ? await verifyConnectorAuth(session.page, connector, {
+      profileKey: session.profileKey,
+      url: connector.auth.startUrl,
+    })
+    : {
+      connectorId: connector.id,
+      currentUrl: finalUrl,
+      title,
+      authenticated: undefined,
+      reauthRequired: undefined,
+      ...connectorOriginStatus(connector, finalUrl),
+      checkedAtISO: new Date().toISOString(),
+    };
+
+  if (connector.auth.confirmMode === "verified" && !auth.authenticated) {
+    const message = connectorAuthIncompleteMessage(connector, auth);
+    res.status(409).json({
+      ...auth,
+      sessionId: session.sessionId,
+      profileKey: session.profileKey,
+      saved: false,
+      error: message,
+      message,
+    });
+    return;
+  }
+
+  const result = {
+    ...auth,
+    sessionId: session.sessionId,
+    profileKey: session.profileKey,
+    saved: true,
+    savedAtISO: new Date().toISOString(),
+    finalUrl: session.page.url(),
+    title: auth.title ?? title,
+  };
+  await closeActiveSession(session);
+  res.json(result);
+}));
+
+app.post("/connectors/:connectorId/auth/sessions/:sessionId/actions/:actionId", asyncRoute(async (req, res) => {
+  const connector = requireKnownConnector(String(req.params.connectorId));
+  const sessionId = String(req.params.sessionId);
+  const actionId = String(req.params.actionId);
+  const session = activeSessions.get(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "Session not found." });
+    return;
+  }
+  if (session.connectorId && session.connectorId !== connector.id) {
+    res.status(409).json({ error: `Session belongs to ${session.connectorId}, not ${connector.id}.` });
+    return;
+  }
+
+  const input = parseConnectorActionInput(connector.id, actionId, "session", req.body);
+  if (connector.id === "gcos") assertGcosActionReady(session.page.url());
+  await applyBrowserSessionDefaults(session.context, session.page, connectorBrowserDefaults(connector.id));
+  const startedAtISO = new Date().toISOString();
+  const output = await runConnectorAction(session.page, connector.id, actionId, "session", input, session.profileKey);
+  res.json({
+    runId: crypto.randomUUID(),
+    connectorId: connector.id,
+    actionId,
+    sessionId: session.sessionId,
+    profileKey: session.profileKey,
+    provider: backend.provider,
+    startedAtISO,
+    completedAtISO: new Date().toISOString(),
+    currentUrl: session.page.url(),
+    title: await session.page.title().catch(() => undefined),
+    ...output,
+  });
+}));
+
+app.post("/connectors/:connectorId/actions/:actionId", asyncRoute(async (req, res) => {
+  const connector = requireKnownConnector(String(req.params.connectorId));
+  const actionId = String(req.params.actionId);
+  const input: any = parseConnectorActionInput(connector.id, actionId, "profile", req.body);
+  const browserInput = mergeBrowserDefaults(input, connector.id);
+  const browserSession = await backend.createSession({
+    profileKey: browserInput.profileKey,
+    persist: true,
+    liveView: false,
+    readOnly: true,
+    timezone: browserInput.timezone,
+    locale: browserInput.locale,
+    viewport: browserInput.viewport,
+    browserVersion: browserInput.browserVersion,
+    proxyUrl: browserInput.proxyUrl,
+  });
+
+  const { browser, context, page } = await connectSession(browserSession.cdpUrl);
+  const runId = crypto.randomUUID();
+  const startedAtISO = new Date().toISOString();
+  try {
+    await applyBrowserSessionDefaults(context, page, browserInput);
+    if (connector.id === "gcos") assertGcosActionReady(page.url());
+    const output = await runConnectorAction(page, connector.id, actionId, "profile", input, browserSession.profileKey);
+    res.json({
+      runId,
+      connectorId: connector.id,
+      actionId,
+      profileKey: browserSession.profileKey,
+      provider: backend.provider,
+      startedAtISO,
+      completedAtISO: new Date().toISOString(),
+      currentUrl: page.url(),
+      title: await page.title().catch(() => undefined),
+      ...output,
+    });
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}));
+
+app.post("/profiles/validate", asyncRoute(async (req, res) => {
+  const input = profilePageSchema.parse(req.body);
+  const browserInput = mergeBrowserDefaults(input);
+  const browserSession = await backend.createSession({
+    profileKey: browserInput.profileKey,
+    persist: true,
+    liveView: browserInput.liveView,
+    readOnly: browserInput.readOnly,
+    timezone: browserInput.timezone,
+    locale: browserInput.locale,
+    viewport: browserInput.viewport,
+    browserVersion: browserInput.browserVersion,
+    proxyUrl: browserInput.proxyUrl,
+  });
+
+  const { browser, context, page } = await connectSession(browserSession.cdpUrl);
+  try {
+    await applyBrowserSessionDefaults(context, page, browserInput);
+    await page.goto(browserInput.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    if (browserInput.waitForSelector) {
+      await page.waitForSelector(browserInput.waitForSelector, { timeout: 10_000 });
+    }
+
+    const unauthenticated = await selectorVisible(page, browserInput.unauthenticatedSelector);
+    const authenticated = await selectorVisible(page, browserInput.authenticatedSelector);
+    const bodyText = browserInput.includeBodyText
+      ? (await page.locator("body").innerText({ timeout: 5_000 }).catch(() => "")).slice(0, 4000)
+      : undefined;
+
+    res.json({
+      profileKey: browserSession.profileKey,
+      provider: backend.provider,
+      currentUrl: page.url(),
+      title: await page.title().catch(() => undefined),
+      authenticated:
+        authenticated === true ? true :
+        unauthenticated === true ? false :
+        undefined,
+      checkedAtISO: new Date().toISOString(),
+      bodyText,
+    });
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}));
+
+app.post("/runs/open-page", asyncRoute(async (req, res) => {
+  const input = profilePageSchema.parse(req.body);
+  const browserInput = mergeBrowserDefaults(input);
+  const browserSession = await backend.createSession({
+    profileKey: browserInput.profileKey,
+    persist: true,
+    liveView: browserInput.liveView,
+    readOnly: browserInput.readOnly,
+    timezone: browserInput.timezone,
+    locale: browserInput.locale,
+    viewport: browserInput.viewport,
+    browserVersion: browserInput.browserVersion,
+    proxyUrl: browserInput.proxyUrl,
+  });
+
+  const { browser, context, page } = await connectSession(browserSession.cdpUrl);
+  const startedAtISO = new Date().toISOString();
+  try {
+    await applyBrowserSessionDefaults(context, page, browserInput);
+    await page.goto(browserInput.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    if (browserInput.waitForSelector) {
+      await page.waitForSelector(browserInput.waitForSelector, { timeout: 10_000 });
+    }
+    const bodyText = browserInput.includeBodyText
+      ? (await page.locator("body").innerText({ timeout: 5_000 }).catch(() => "")).slice(0, 4000)
+      : undefined;
+
+    res.json({
+      runId: crypto.randomUUID(),
+      profileKey: browserSession.profileKey,
+      provider: backend.provider,
+      startedAtISO,
+      completedAtISO: new Date().toISOString(),
+      currentUrl: page.url(),
+      title: await page.title().catch(() => undefined),
+      bodyText,
+    });
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}));
+
+app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
+  if (error instanceof z.ZodError) {
+    res.status(400).json({ error: "Invalid request body.", issues: error.issues });
+    return;
+  }
+  if (error instanceof ConnectorActionError) {
+    res.status(error.statusCode).json({ error: error.message, code: error.code });
+    return;
+  }
+  res.status(500).json({ error: error?.message ?? "Connector runner error." });
+});
+
+const vncWebSocketServer = new WebSocketServer({ noServer: true });
+
+function toBuffer(data: WebSocket.RawData) {
+  if (Buffer.isBuffer(data)) return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(data);
+  if (Array.isArray(data)) return Buffer.concat(data);
+  return Buffer.from(data as any);
+}
+
+function attachVncProxy(ws: WebSocket, _request: IncomingMessage, session: ActiveSession) {
+  if (!session.vncHost || !session.vncPort) {
+    ws.close(1011, "VNC stream is unavailable for this session.");
+    return;
+  }
+
+  const vnc = net.createConnection({ host: session.vncHost, port: session.vncPort });
+  const closeBoth = () => {
+    vnc.destroy();
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      ws.close();
+    }
+  };
+
+  vnc.on("data", (chunk) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
+  });
+  vnc.on("error", closeBoth);
+  vnc.on("close", closeBoth);
+  ws.on("message", (data) => {
+    if (!vnc.destroyed) vnc.write(toBuffer(data));
+  });
+  ws.on("error", closeBoth);
+  ws.on("close", closeBoth);
+}
+
+vncWebSocketServer.on("connection", attachVncProxy);
+
+const server = app.listen(port, () => {
+  console.log(`[connector-runner] listening on http://127.0.0.1:${port} provider=${backend.provider}`);
+});
+
+server.on("upgrade", (request, socket, head) => {
+  const url = new URL(request.url ?? "/", "http://connector-runner.local");
+  const match = url.pathname.match(/^\/sessions\/([^/]+)\/vnc$/);
+  if (!match) {
+    socket.destroy();
+    return;
+  }
+
+  const session = activeSessions.get(decodeURIComponent(match[1]));
+  if (!session?.vncPort) {
+    socket.destroy();
+    return;
+  }
+
+  vncWebSocketServer.handleUpgrade(request, socket, head, (ws) => {
+    vncWebSocketServer.emit("connection", ws, request, session);
+  });
+});

@@ -95,6 +95,11 @@ const handlers: Record<string, MockHandler> = {
     frontComponents: await getFrontComponents(),
   }),
 
+  // The AI chat panel queries threads on boot. The bridge has no AI backend,
+  // so return an empty list instead of forwarding (which would terminate the
+  // link chain without a value and surface a spurious error toast).
+  GetChatThreads: () => ({ chatThreads: [] }),
+
   // Object metadata + minimal metadata aren't yet persisted — they're large,
   // static, and read once at boot into the Jotai metadata-store. Stub the
   // Apollo metadata-client return so any caller that still goes through it

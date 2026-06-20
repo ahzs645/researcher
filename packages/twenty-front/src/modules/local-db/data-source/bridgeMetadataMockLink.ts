@@ -23,9 +23,17 @@ import {
   revokeApiKey,
   updateApiKey,
 } from '@/local-db/data-source/bridgeSystemStore';
+import { augmentObjectMetadataWithResearch } from '@/local-db/research/bridgeResearchAugmentation';
 import { mockedClientConfig } from '~/testing/mock-data/config';
 import { mockedMinimalMetadata } from '~/testing/mock-data/generated/metadata/minimal/mock-minimal-metadata';
 import { mockedStandardObjectMetadataQueryResult } from '~/testing/mock-data/generated/metadata/objects/mock-objects-metadata';
+
+// Standard 33-object bundle plus the appended research objects. Computed once
+// at module load — object metadata is read into the Jotai metadata store at
+// boot, so callers must see the same merged payload every time.
+const bridgeObjectMetadataQueryResult = augmentObjectMetadataWithResearch(
+  mockedStandardObjectMetadataQueryResult as never,
+);
 
 // Apollo Link that short-circuits known metadata / auth operations against the
 // bridge's persistent system Dexie database (`bridgeSystemStore`). Mutations
@@ -91,7 +99,7 @@ const handlers: Record<string, MockHandler> = {
   // static, and read once at boot into the Jotai metadata-store. Stub the
   // Apollo metadata-client return so any caller that still goes through it
   // gets the same payload.
-  FindManyObjectMetadataItems: () => mockedStandardObjectMetadataQueryResult,
+  FindManyObjectMetadataItems: () => bridgeObjectMetadataQueryResult,
   FindMinimalMetadata: () => ({ minimalMetadata: mockedMinimalMetadata }),
 
   FindAllViews: async () => ({ getViews: await getViews() }),

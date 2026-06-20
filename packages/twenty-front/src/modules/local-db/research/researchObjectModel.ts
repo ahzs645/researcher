@@ -1,0 +1,701 @@
+// Research platform object model.
+//
+// Compact, hand-authored description of the native Twenty objects that turn
+// this CRM into a research-team workspace (grants, applications, projects,
+// datasets, manuscripts, …). A builder expands each spec into the full
+// `ObjectMetadataItemsQuery` node shape, a default TABLE view, and a
+// navigation menu item, then merges them into the bridge's static metadata
+// bundle. Keeping the source of truth here (instead of editing the generated
+// `mock-objects-metadata.ts`) means the standard 33-object bundle stays
+// untouched and regenerable.
+//
+// Only flat field types are used on purpose — relations are the one genuinely
+// hard part of the bridge SDL surface, so the first cut links records with
+// plain text/select fields and graduates to real relations later.
+
+export type ResearchFieldType =
+  | 'TEXT'
+  | 'NUMBER'
+  | 'BOOLEAN'
+  | 'DATE_TIME'
+  | 'SELECT'
+  | 'MULTI_SELECT'
+  | 'ARRAY';
+
+// `value` must be a valid GraphQL enum identifier (the SDL generator drops any
+// option whose value does not match /^[A-Za-z_][A-Za-z0-9_]*$/), so values are
+// UPPER_SNAKE while labels stay human-readable.
+export type ResearchSelectOption = {
+  value: string;
+  label: string;
+  color: ResearchOptionColor;
+};
+
+// Mirrors Twenty's ThemeColor union used by select option chips.
+export type ResearchOptionColor =
+  | 'green'
+  | 'turquoise'
+  | 'sky'
+  | 'blue'
+  | 'purple'
+  | 'pink'
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'gray';
+
+export type ResearchFieldSpec = {
+  name: string;
+  label: string;
+  type: ResearchFieldType;
+  icon?: string;
+  description?: string;
+  options?: ResearchSelectOption[];
+  // ARRAY/MULTI_SELECT have no inline editor in the bridge record table yet —
+  // mark them read-only rather than render a broken input.
+  readOnly?: boolean;
+};
+
+export type ResearchObjectSpec = {
+  nameSingular: string;
+  namePlural: string;
+  labelSingular: string;
+  labelPlural: string;
+  icon: string;
+  description: string;
+  navColor: ResearchOptionColor;
+  // The label-identifier field is always a TEXT field literally named `name`
+  // (so the standard searchVector expression on "name" stays valid). These
+  // control how that identifier column is presented.
+  nameFieldLabel: string;
+  nameFieldIcon: string;
+  fields: ResearchFieldSpec[];
+  // Ordered business-field names shown as columns in the default table view.
+  // `name` is always prepended automatically.
+  defaultColumns: string[];
+};
+
+const STATUS_ICON = 'IconProgressCheck';
+const CALENDAR_ICON = 'IconCalendar';
+const MONEY_ICON = 'IconCoin';
+const TAG_ICON = 'IconTag';
+const TEXT_ICON = 'IconFileText';
+
+export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
+  {
+    nameSingular: 'researchTeam',
+    namePlural: 'researchTeams',
+    labelSingular: 'Research team',
+    labelPlural: 'Research teams',
+    icon: 'IconUsersGroup',
+    description: 'A lab, group, or individual research workspace',
+    navColor: 'blue',
+    nameFieldLabel: 'Team name',
+    nameFieldIcon: 'IconUsersGroup',
+    fields: [
+      {
+        name: 'principalInvestigator',
+        label: 'Principal investigator',
+        type: 'TEXT',
+        icon: 'IconUser',
+      },
+      { name: 'institution', label: 'Institution', type: 'TEXT', icon: 'IconBuildingBank' },
+      { name: 'department', label: 'Department', type: 'TEXT', icon: 'IconBuilding' },
+      {
+        name: 'focusAreas',
+        label: 'Focus areas',
+        type: 'ARRAY',
+        icon: TAG_ICON,
+        readOnly: true,
+      },
+      {
+        name: 'individualMode',
+        label: 'Individual mode',
+        type: 'BOOLEAN',
+        icon: 'IconUserCircle',
+        description: 'A single-researcher workspace rather than a team',
+      },
+      { name: 'website', label: 'Website', type: 'TEXT', icon: 'IconLink' },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: ['principalInvestigator', 'institution', 'individualMode', 'focusAreas'],
+  },
+  {
+    nameSingular: 'researcher',
+    namePlural: 'researchers',
+    labelSingular: 'Researcher',
+    labelPlural: 'Researchers',
+    icon: 'IconUser',
+    description: 'A member of a research team',
+    navColor: 'turquoise',
+    nameFieldLabel: 'Full name',
+    nameFieldIcon: 'IconUser',
+    fields: [
+      { name: 'email', label: 'Email', type: 'TEXT', icon: 'IconMail' },
+      {
+        name: 'role',
+        label: 'Role',
+        type: 'SELECT',
+        icon: 'IconBriefcase',
+        options: [
+          { value: 'PI', label: 'Principal investigator', color: 'blue' },
+          { value: 'CO_INVESTIGATOR', label: 'Co-investigator', color: 'sky' },
+          { value: 'POSTDOC', label: 'Postdoc', color: 'turquoise' },
+          { value: 'PHD', label: 'PhD student', color: 'purple' },
+          { value: 'MSC', label: 'MSc student', color: 'pink' },
+          { value: 'RESEARCH_ASSISTANT', label: 'Research assistant', color: 'green' },
+          { value: 'COLLABORATOR', label: 'Collaborator', color: 'gray' },
+        ],
+      },
+      { name: 'team', label: 'Team', type: 'TEXT', icon: 'IconUsersGroup' },
+      { name: 'orcid', label: 'ORCID', type: 'TEXT', icon: 'IconId' },
+      { name: 'institution', label: 'Institution', type: 'TEXT', icon: 'IconBuildingBank' },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'ACTIVE', label: 'Active', color: 'green' },
+          { value: 'INACTIVE', label: 'Inactive', color: 'gray' },
+          { value: 'ALUMNI', label: 'Alumni', color: 'orange' },
+        ],
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: ['role', 'team', 'email', 'institution', 'status'],
+  },
+  {
+    nameSingular: 'project',
+    namePlural: 'projects',
+    labelSingular: 'Project',
+    labelPlural: 'Projects',
+    icon: 'IconFolder',
+    description: 'A research project or study',
+    navColor: 'green',
+    nameFieldLabel: 'Title',
+    nameFieldIcon: 'IconFolder',
+    fields: [
+      { name: 'lead', label: 'Lead', type: 'TEXT', icon: 'IconUser' },
+      { name: 'team', label: 'Team', type: 'TEXT', icon: 'IconUsersGroup' },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'PLANNING', label: 'Planning', color: 'gray' },
+          { value: 'ACTIVE', label: 'Active', color: 'green' },
+          { value: 'ON_HOLD', label: 'On hold', color: 'yellow' },
+          { value: 'COMPLETED', label: 'Completed', color: 'blue' },
+          { value: 'ARCHIVED', label: 'Archived', color: 'gray' },
+        ],
+      },
+      {
+        name: 'fundingStatus',
+        label: 'Funding status',
+        type: 'SELECT',
+        icon: MONEY_ICON,
+        options: [
+          { value: 'UNFUNDED', label: 'Unfunded', color: 'red' },
+          { value: 'SEEKING', label: 'Seeking funding', color: 'orange' },
+          { value: 'PARTIALLY_FUNDED', label: 'Partially funded', color: 'yellow' },
+          { value: 'FUNDED', label: 'Funded', color: 'green' },
+        ],
+      },
+      { name: 'summary', label: 'Summary', type: 'TEXT', icon: TEXT_ICON },
+      { name: 'startDate', label: 'Start date', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      { name: 'endDate', label: 'End date', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: ['lead', 'team', 'status', 'fundingStatus', 'startDate', 'endDate'],
+  },
+  {
+    nameSingular: 'grant',
+    namePlural: 'grants',
+    labelSingular: 'Grant',
+    labelPlural: 'Grants',
+    icon: 'IconReportMoney',
+    description: 'A grant the team is pursuing, holding, or reporting on',
+    navColor: 'purple',
+    nameFieldLabel: 'Title',
+    nameFieldIcon: 'IconReportMoney',
+    fields: [
+      { name: 'funder', label: 'Funder', type: 'TEXT', icon: 'IconBuildingBank' },
+      { name: 'program', label: 'Program', type: 'TEXT', icon: 'IconFileDescription' },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'PROSPECTING', label: 'Prospecting', color: 'gray' },
+          { value: 'DRAFTING', label: 'Drafting', color: 'sky' },
+          { value: 'SUBMITTED', label: 'Submitted', color: 'blue' },
+          { value: 'AWARDED', label: 'Awarded', color: 'green' },
+          { value: 'DECLINED', label: 'Declined', color: 'red' },
+          { value: 'ACTIVE', label: 'Active', color: 'turquoise' },
+          { value: 'CLOSED', label: 'Closed', color: 'gray' },
+        ],
+      },
+      {
+        name: 'priority',
+        label: 'Priority',
+        type: 'SELECT',
+        icon: 'IconFlag',
+        options: [
+          { value: 'LOW', label: 'Low', color: 'gray' },
+          { value: 'MEDIUM', label: 'Medium', color: 'yellow' },
+          { value: 'HIGH', label: 'High', color: 'orange' },
+          { value: 'CRITICAL', label: 'Critical', color: 'red' },
+        ],
+      },
+      { name: 'project', label: 'Project', type: 'TEXT', icon: 'IconFolder' },
+      { name: 'owner', label: 'Owner', type: 'TEXT', icon: 'IconUser' },
+      {
+        name: 'amountRequested',
+        label: 'Amount requested',
+        type: 'NUMBER',
+        icon: MONEY_ICON,
+      },
+      {
+        name: 'amountAwarded',
+        label: 'Amount awarded',
+        type: 'NUMBER',
+        icon: MONEY_ICON,
+      },
+      { name: 'fitScore', label: 'Fit score (1-5)', type: 'NUMBER', icon: 'IconStar' },
+      {
+        name: 'applicationDueDate',
+        label: 'Application due',
+        type: 'DATE_TIME',
+        icon: 'IconCalendarDue',
+      },
+      { name: 'submittedAt', label: 'Submitted', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      { name: 'decisionAt', label: 'Decision', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      { name: 'startDate', label: 'Start date', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      { name: 'endDate', label: 'End date', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      {
+        name: 'nextReportDue',
+        label: 'Next report due',
+        type: 'DATE_TIME',
+        icon: 'IconCalendarStats',
+      },
+      { name: 'opportunityUrl', label: 'Opportunity URL', type: 'TEXT', icon: 'IconLink' },
+      { name: 'nextAction', label: 'Next action', type: 'TEXT', icon: 'IconChecklist' },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'funder',
+      'program',
+      'status',
+      'priority',
+      'amountRequested',
+      'amountAwarded',
+      'applicationDueDate',
+      'project',
+    ],
+  },
+  {
+    nameSingular: 'grantSource',
+    namePlural: 'grantSources',
+    labelSingular: 'Grant source',
+    labelPlural: 'Grant sources',
+    icon: 'IconDatabase',
+    description: 'An external database or funder site scanned for opportunities',
+    navColor: 'orange',
+    nameFieldLabel: 'Source name',
+    nameFieldIcon: 'IconDatabase',
+    fields: [
+      { name: 'url', label: 'URL', type: 'TEXT', icon: 'IconLink' },
+      {
+        name: 'sourceType',
+        label: 'Source type',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: [
+          { value: 'FUNDER_SITE', label: 'Funder site', color: 'blue' },
+          { value: 'GOVERNMENT_PORTAL', label: 'Government portal', color: 'sky' },
+          { value: 'AGGREGATOR', label: 'Aggregator', color: 'purple' },
+          { value: 'RSS', label: 'RSS feed', color: 'orange' },
+          { value: 'SPREADSHEET', label: 'Spreadsheet', color: 'green' },
+          { value: 'CUSTOM', label: 'Custom', color: 'gray' },
+        ],
+      },
+      { name: 'jurisdiction', label: 'Jurisdiction', type: 'TEXT', icon: 'IconMapPin' },
+      {
+        name: 'funderType',
+        label: 'Funder type',
+        type: 'SELECT',
+        icon: 'IconBuildingBank',
+        options: [
+          { value: 'GOVERNMENT', label: 'Government', color: 'blue' },
+          { value: 'FOUNDATION', label: 'Foundation', color: 'purple' },
+          { value: 'CORPORATE', label: 'Corporate', color: 'orange' },
+          { value: 'UNIVERSITY', label: 'University', color: 'turquoise' },
+          { value: 'OTHER', label: 'Other', color: 'gray' },
+        ],
+      },
+      {
+        name: 'topicTags',
+        label: 'Topic tags',
+        type: 'ARRAY',
+        icon: TAG_ICON,
+        readOnly: true,
+      },
+      {
+        name: 'eligibilityTags',
+        label: 'Eligibility tags',
+        type: 'ARRAY',
+        icon: TAG_ICON,
+        readOnly: true,
+      },
+      {
+        name: 'scrapeCadence',
+        label: 'Scan cadence',
+        type: 'SELECT',
+        icon: 'IconRefresh',
+        options: [
+          { value: 'MANUAL', label: 'Manual', color: 'gray' },
+          { value: 'DAILY', label: 'Daily', color: 'green' },
+          { value: 'WEEKLY', label: 'Weekly', color: 'blue' },
+          { value: 'MONTHLY', label: 'Monthly', color: 'purple' },
+        ],
+      },
+      {
+        name: 'trustLevel',
+        label: 'Trust level',
+        type: 'SELECT',
+        icon: 'IconShieldCheck',
+        options: [
+          { value: 'OFFICIAL', label: 'Official', color: 'green' },
+          { value: 'PARTNER', label: 'Partner', color: 'blue' },
+          { value: 'AGGREGATOR', label: 'Aggregator', color: 'yellow' },
+          { value: 'UNKNOWN', label: 'Unknown', color: 'gray' },
+        ],
+      },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'ACTIVE', label: 'Active', color: 'green' },
+          { value: 'PAUSED', label: 'Paused', color: 'yellow' },
+          { value: 'BROKEN', label: 'Broken', color: 'red' },
+          { value: 'ARCHIVED', label: 'Archived', color: 'gray' },
+        ],
+      },
+      { name: 'lastScrapedAt', label: 'Last scanned', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'sourceType',
+      'funderType',
+      'jurisdiction',
+      'topicTags',
+      'scrapeCadence',
+      'trustLevel',
+      'status',
+    ],
+  },
+  {
+    nameSingular: 'grantOpportunity',
+    namePlural: 'grantOpportunities',
+    labelSingular: 'Grant opportunity',
+    labelPlural: 'Grant opportunities',
+    icon: 'IconTargetArrow',
+    description: 'A funding opportunity discovered from a grant source',
+    navColor: 'pink',
+    nameFieldLabel: 'Title',
+    nameFieldIcon: 'IconTargetArrow',
+    fields: [
+      { name: 'funder', label: 'Funder', type: 'TEXT', icon: 'IconBuildingBank' },
+      { name: 'program', label: 'Program', type: 'TEXT', icon: 'IconFileDescription' },
+      { name: 'source', label: 'Source', type: 'TEXT', icon: 'IconDatabase' },
+      { name: 'opportunityUrl', label: 'Opportunity URL', type: 'TEXT', icon: 'IconLink' },
+      {
+        name: 'applicationDueDate',
+        label: 'Application due',
+        type: 'DATE_TIME',
+        icon: 'IconCalendarDue',
+      },
+      {
+        name: 'registrationDueDate',
+        label: 'Registration due',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      { name: 'amountText', label: 'Amount', type: 'TEXT', icon: MONEY_ICON },
+      { name: 'fitScore', label: 'Fit score', type: 'RATING', icon: 'IconStar' },
+      {
+        name: 'confidence',
+        label: 'Confidence',
+        type: 'SELECT',
+        icon: 'IconGauge',
+        options: [
+          { value: 'LOW', label: 'Low', color: 'gray' },
+          { value: 'MEDIUM', label: 'Medium', color: 'yellow' },
+          { value: 'HIGH', label: 'High', color: 'green' },
+        ],
+      },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'NEW', label: 'New', color: 'sky' },
+          { value: 'REVIEWING', label: 'Reviewing', color: 'yellow' },
+          { value: 'ACCEPTED', label: 'Accepted', color: 'green' },
+          { value: 'REJECTED', label: 'Rejected', color: 'red' },
+          { value: 'DUPLICATE', label: 'Duplicate', color: 'gray' },
+        ],
+      },
+      { name: 'eligibility', label: 'Eligibility', type: 'TEXT', icon: 'IconCheckbox' },
+      {
+        name: 'topicTags',
+        label: 'Topic tags',
+        type: 'ARRAY',
+        icon: TAG_ICON,
+        readOnly: true,
+      },
+      { name: 'description', label: 'Description', type: 'TEXT', icon: TEXT_ICON },
+    ],
+    defaultColumns: [
+      'funder',
+      'program',
+      'source',
+      'applicationDueDate',
+      'amountText',
+      'fitScore',
+      'confidence',
+      'status',
+    ],
+  },
+  {
+    nameSingular: 'grantApplication',
+    namePlural: 'grantApplications',
+    labelSingular: 'Grant application',
+    labelPlural: 'Grant applications',
+    icon: 'IconFileText',
+    description: 'An application submitted in an application cycle',
+    navColor: 'sky',
+    nameFieldLabel: 'Project title',
+    nameFieldIcon: 'IconFileText',
+    fields: [
+      { name: 'applicant', label: 'Applicant', type: 'TEXT', icon: 'IconUser' },
+      { name: 'organization', label: 'Organization', type: 'TEXT', icon: 'IconBuilding' },
+      { name: 'email', label: 'Email', type: 'TEXT', icon: 'IconMail' },
+      { name: 'grant', label: 'Grant', type: 'TEXT', icon: 'IconReportMoney' },
+      { name: 'cycle', label: 'Application cycle', type: 'TEXT', icon: 'IconCalendarStats' },
+      {
+        name: 'amountRequested',
+        label: 'Amount requested',
+        type: 'NUMBER',
+        icon: MONEY_ICON,
+      },
+      { name: 'projectSummary', label: 'Project summary', type: 'TEXT', icon: TEXT_ICON },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'SUBMITTED', label: 'Submitted', color: 'blue' },
+          { value: 'REVIEWING', label: 'Reviewing', color: 'yellow' },
+          { value: 'SHORTLISTED', label: 'Shortlisted', color: 'purple' },
+          { value: 'APPROVED', label: 'Approved', color: 'green' },
+          { value: 'DECLINED', label: 'Declined', color: 'red' },
+          { value: 'CONVERTED', label: 'Converted to grant', color: 'turquoise' },
+        ],
+      },
+      {
+        name: 'source',
+        label: 'Source',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: [
+          { value: 'PUBLIC', label: 'Public portal', color: 'sky' },
+          { value: 'PORTAL', label: 'Member portal', color: 'blue' },
+          { value: 'ADMIN', label: 'Admin', color: 'gray' },
+        ],
+      },
+      { name: 'submittedAt', label: 'Submitted', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'applicant',
+      'grant',
+      'cycle',
+      'amountRequested',
+      'status',
+      'source',
+      'submittedAt',
+    ],
+  },
+  {
+    nameSingular: 'applicationCycle',
+    namePlural: 'applicationCycles',
+    labelSingular: 'Application cycle',
+    labelPlural: 'Application cycles',
+    icon: 'IconCalendarStats',
+    description: 'An intake window grouping applications by the team’s needs',
+    navColor: 'yellow',
+    nameFieldLabel: 'Cycle name',
+    nameFieldIcon: 'IconCalendarStats',
+    fields: [
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'PLANNED', label: 'Planned', color: 'gray' },
+          { value: 'OPEN', label: 'Open', color: 'green' },
+          { value: 'REVIEWING', label: 'Reviewing', color: 'yellow' },
+          { value: 'DECIDED', label: 'Decided', color: 'blue' },
+          { value: 'CLOSED', label: 'Closed', color: 'gray' },
+        ],
+      },
+      { name: 'openDate', label: 'Opens', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      { name: 'closeDate', label: 'Closes', type: 'DATE_TIME', icon: 'IconCalendarDue' },
+      { name: 'focus', label: 'Focus / needs', type: 'TEXT', icon: 'IconTargetArrow' },
+      { name: 'owner', label: 'Owner', type: 'TEXT', icon: 'IconUser' },
+      { name: 'description', label: 'Description', type: 'TEXT', icon: TEXT_ICON },
+    ],
+    defaultColumns: ['status', 'openDate', 'closeDate', 'focus', 'owner'],
+  },
+  {
+    nameSingular: 'milestone',
+    namePlural: 'milestones',
+    labelSingular: 'Milestone',
+    labelPlural: 'Milestones',
+    icon: 'IconFlag',
+    description: 'A milestone or deliverable on a project',
+    navColor: 'red',
+    nameFieldLabel: 'Title',
+    nameFieldIcon: 'IconFlag',
+    fields: [
+      { name: 'project', label: 'Project', type: 'TEXT', icon: 'IconFolder' },
+      { name: 'owner', label: 'Owner', type: 'TEXT', icon: 'IconUser' },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'NOT_STARTED', label: 'Not started', color: 'gray' },
+          { value: 'IN_PROGRESS', label: 'In progress', color: 'blue' },
+          { value: 'BLOCKED', label: 'Blocked', color: 'red' },
+          { value: 'DONE', label: 'Done', color: 'green' },
+        ],
+      },
+      { name: 'dueDate', label: 'Due date', type: 'DATE_TIME', icon: 'IconCalendarDue' },
+      { name: 'progress', label: 'Progress %', type: 'NUMBER', icon: 'IconPercentage' },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: ['project', 'owner', 'status', 'dueDate', 'progress'],
+  },
+  {
+    nameSingular: 'dataset',
+    namePlural: 'datasets',
+    labelSingular: 'Dataset',
+    labelPlural: 'Datasets',
+    icon: 'IconDatabaseExport',
+    description: 'Research data collected or produced by a project',
+    navColor: 'turquoise',
+    nameFieldLabel: 'Name',
+    nameFieldIcon: 'IconDatabaseExport',
+    fields: [
+      { name: 'project', label: 'Project', type: 'TEXT', icon: 'IconFolder' },
+      {
+        name: 'dataType',
+        label: 'Data type',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: [
+          { value: 'TABULAR', label: 'Tabular', color: 'blue' },
+          { value: 'IMAGING', label: 'Imaging', color: 'purple' },
+          { value: 'GENOMIC', label: 'Genomic', color: 'green' },
+          { value: 'SURVEY', label: 'Survey', color: 'orange' },
+          { value: 'TEXT', label: 'Text / corpus', color: 'sky' },
+          { value: 'OTHER', label: 'Other', color: 'gray' },
+        ],
+      },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'PLANNED', label: 'Planned', color: 'gray' },
+          { value: 'COLLECTING', label: 'Collecting', color: 'yellow' },
+          { value: 'CLEANING', label: 'Cleaning', color: 'orange' },
+          { value: 'ANALYSIS', label: 'In analysis', color: 'blue' },
+          { value: 'ARCHIVED', label: 'Archived', color: 'green' },
+        ],
+      },
+      { name: 'storageLocation', label: 'Storage location', type: 'TEXT', icon: 'IconFolder' },
+      { name: 'sizeGb', label: 'Size (GB)', type: 'NUMBER', icon: 'IconDatabase' },
+      {
+        name: 'hasEthicsApproval',
+        label: 'Ethics approved',
+        type: 'BOOLEAN',
+        icon: 'IconShieldCheck',
+      },
+      { name: 'collectedAt', label: 'Collected', type: 'DATE_TIME', icon: CALENDAR_ICON },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: ['project', 'dataType', 'status', 'storageLocation', 'sizeGb'],
+  },
+  {
+    nameSingular: 'manuscript',
+    namePlural: 'manuscripts',
+    labelSingular: 'Manuscript',
+    labelPlural: 'Manuscripts',
+    icon: 'IconBook',
+    description: 'A paper, preprint, thesis, or chapter in progress',
+    navColor: 'blue',
+    nameFieldLabel: 'Title',
+    nameFieldIcon: 'IconBook',
+    fields: [
+      { name: 'project', label: 'Project', type: 'TEXT', icon: 'IconFolder' },
+      { name: 'leadAuthor', label: 'Lead author', type: 'TEXT', icon: 'IconUser' },
+      {
+        name: 'manuscriptType',
+        label: 'Type',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: [
+          { value: 'JOURNAL_PAPER', label: 'Journal paper', color: 'blue' },
+          { value: 'CONFERENCE_PAPER', label: 'Conference paper', color: 'sky' },
+          { value: 'PREPRINT', label: 'Preprint', color: 'purple' },
+          { value: 'THESIS', label: 'Thesis', color: 'orange' },
+          { value: 'CHAPTER', label: 'Book chapter', color: 'green' },
+        ],
+      },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'OUTLINE', label: 'Outline', color: 'gray' },
+          { value: 'DRAFTING', label: 'Drafting', color: 'yellow' },
+          { value: 'INTERNAL_REVIEW', label: 'Internal review', color: 'orange' },
+          { value: 'SUBMITTED', label: 'Submitted', color: 'blue' },
+          { value: 'REVISION', label: 'In revision', color: 'purple' },
+          { value: 'ACCEPTED', label: 'Accepted', color: 'turquoise' },
+          { value: 'PUBLISHED', label: 'Published', color: 'green' },
+        ],
+      },
+      { name: 'targetVenue', label: 'Target venue', type: 'TEXT', icon: 'IconBuildingBank' },
+      { name: 'progress', label: 'Progress %', type: 'NUMBER', icon: 'IconPercentage' },
+      { name: 'targetDate', label: 'Target date', type: 'DATE_TIME', icon: 'IconCalendarDue' },
+      { name: 'doi', label: 'DOI', type: 'TEXT', icon: 'IconId' },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: ['project', 'leadAuthor', 'manuscriptType', 'status', 'targetVenue', 'progress'],
+  },
+];

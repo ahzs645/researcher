@@ -136,6 +136,28 @@ export const setBridgeWorkspaceSetup = async (
   await rebuildBridgeNavForMode(workspaceMode);
 };
 
+// Read the first-run persona state back from the persisted workspace singleton.
+// The setup modal can't rely on `currentWorkspaceState` for this: `setupCompleted`
+// / `workspaceMode` are bridge-only columns that aren't in Twenty's shared
+// `currentWorkspace` GraphQL fragment, so Apollo masks them out before they reach
+// the atom. Returns null in convex mode (setup lives on the backend there).
+export const getBridgeWorkspaceSetup = async (): Promise<{
+  setupCompleted: boolean;
+  workspaceMode: WorkspaceMode;
+} | null> => {
+  if (resolveBackend()) return null;
+  await ensureBridgeSystemSeeded();
+  const db = getBridgeSystemDexie();
+  const workspace = (await db.workspace.toCollection().first()) as
+    | { setupCompleted?: boolean; workspaceMode?: WorkspaceMode }
+    | undefined;
+  if (!workspace) return null;
+  return {
+    setupCompleted: workspace.setupCompleted === true,
+    workspaceMode: workspace.workspaceMode ?? 'LAB',
+  };
+};
+
 export const getPublicWorkspaceDataByDomain = (): Promise<Record<
   string,
   unknown

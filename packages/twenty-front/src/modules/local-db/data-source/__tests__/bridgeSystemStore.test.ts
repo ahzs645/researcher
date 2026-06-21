@@ -8,12 +8,14 @@ import {
   createApiKey,
   getApiKey,
   getApiKeys,
+  getBridgeWorkspaceSetup,
   getCurrentUser,
   getNavigationMenuItems,
   getPageLayouts,
   getPublicWorkspaceDataByDomain,
   getViews,
   revokeApiKey,
+  setBridgeWorkspaceSetup,
 } from '@/local-db/data-source/bridgeSystemStore';
 
 const resetDexie = async () => {
@@ -100,6 +102,17 @@ describe('bridgeSystemStore', () => {
     expect((created as { id: string }).id).toBeTruthy();
     const fetched = await getApiKey((created as { id: string }).id);
     expect(fetched).toEqual(created);
+  });
+
+  it('reports an incomplete first-run setup on a fresh workspace', async () => {
+    const setup = await getBridgeWorkspaceSetup();
+    expect(setup).toEqual({ setupCompleted: false, workspaceMode: 'LAB' });
+  });
+
+  it('persists the chosen persona so setup no longer shows', async () => {
+    await setBridgeWorkspaceSetup('SOLO');
+    const setup = await getBridgeWorkspaceSetup();
+    expect(setup).toEqual({ setupCompleted: true, workspaceMode: 'SOLO' });
   });
 
   it('marks an API key as revoked', async () => {

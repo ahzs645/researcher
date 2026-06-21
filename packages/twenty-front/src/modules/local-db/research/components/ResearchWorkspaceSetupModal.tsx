@@ -1,12 +1,15 @@
 import { styled } from '@linaria/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { Button } from 'twenty-ui/input';
 import { ModalBackdrop } from 'twenty-ui/layout';
 import { MOBILE_VIEWPORT, themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
-import { setBridgeWorkspaceSetup } from '@/local-db/data-source/bridgeSystemStore';
+import {
+  getBridgeWorkspaceSetup,
+  setBridgeWorkspaceSetup,
+} from '@/local-db/data-source/bridgeSystemStore';
 import { type WorkspaceMode } from '@/local-db/research/researchObjectModel';
 import { getTwentyDataBridgeConfig } from '@/local-db/twenty-local/getTwentyDataBridgeConfig';
 import { RootStackingContextZIndices } from '@/ui/layout/constants/RootStackingContextZIndices';
@@ -92,10 +95,6 @@ const StyledChoiceDescription = styled.span`
   line-height: 1.4;
 `;
 
-type WorkspaceWithSetup = {
-  setupCompleted?: boolean;
-} | null;
-
 // First-run persona picker for the local bridge: asks whether this is a solo
 // researcher or a lab, persists the choice, adapts the nav, then reloads so the
 // rebuilt nav + persona take effect. Renders nothing once setup is done (or in
@@ -103,12 +102,30 @@ type WorkspaceWithSetup = {
 export const ResearchWorkspaceSetupModal = () => {
   const currentWorkspace = useAtomStateValue(currentWorkspaceState);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // `undefined` while the bridge read is in flight — keeps the modal hidden
+  // until we know the real state instead of flashing it on every boot.
+  const [setupCompleted, setSetupCompleted] = useState<boolean | undefined>(
+    undefined,
+  );
 
   const isLocalBridge = getTwentyDataBridgeConfig()?.mode === 'local';
-  const setupCompleted = (currentWorkspace as WorkspaceWithSetup)
-    ?.setupCompleted;
+
+  // Read `setupCompleted` straight from the bridge store: it's a bridge-only
+  // field that Apollo strips out of `currentWorkspaceState`, so reading it from
+  // the atom would leave this stuck at "not set up" and reload forever.
+  useEffect(() => {
+    if (!isLocalBridge) return;
+    let isMounted = true;
+    void getBridgeWorkspaceSetup().then((setup) => {
+      if (isMounted) setSetupCompleted(setup?.setupCompleted ?? true);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [isLocalBridge]);
+
   const shouldShow =
-    isLocalBridge && isDefined(currentWorkspace) && setupCompleted !== true;
+    isLocalBridge && isDefined(currentWorkspace) && setupCompleted === false;
 
   if (!shouldShow) {
     return null;

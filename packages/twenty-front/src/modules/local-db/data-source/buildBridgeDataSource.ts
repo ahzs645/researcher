@@ -9,6 +9,7 @@ import {
   augmentObjectMetadataWithResearch,
   getResearchSeedRecords,
 } from '@/local-db/research/bridgeResearchAugmentation';
+import { getResearchSeedMode } from '@/local-db/twenty-local/getResearchSeedMode';
 
 import { mockedCompanyRecords } from '~/testing/mock-data/generated/data/companies/mock-companies-data';
 import { mockedNoteRecords } from '~/testing/mock-data/generated/data/notes/mock-notes-data';
@@ -96,14 +97,17 @@ export const getBridgeDataSource = () => {
   return cachedDataSource;
 };
 
-// One-shot seed. If the Dexie database is empty (fresh install), populate it
-// from the generated mock records; otherwise leave existing data alone.
+// One-shot seed. A fresh install starts as a blank workspace; the sample
+// dataset is only loaded when the visitor opted into demo mode (`/demo`). An
+// already-populated database is left alone either way so mutations survive
+// reload.
 export const ensureBridgeDataSourceSeeded = async (): Promise<void> => {
   if (seedPromise !== undefined) return seedPromise;
   const dataSource = getBridgeDataSource();
   seedPromise = (async () => {
     const probe = await dataSource.findMany('company', { first: 1 }, {});
     if (probe.totalCount > 0) return;
+    if (getResearchSeedMode() !== 'demo') return;
     await dataSource.reset(buildSeed());
   })();
   return seedPromise;

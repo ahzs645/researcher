@@ -24,24 +24,31 @@ const renderApp = async () => {
       { seedTwentyBridgeAuthState },
       { getTwentyLocalObjectRoutePath, defaultTwentyLocalObjectConfig },
       { ensureBridgeDataSourceSeeded },
+      { isBridgeResetPath, resetBridgeWorkspace },
+      { getTwentyRawPathPrefix },
     ] = await Promise.all([
       import('@/local-db/twenty-local/startLocalTwentyWorker'),
       import('@/local-db/twenty-local/seedTwentyBridgeAuthState'),
       import('@/local-db/twenty-local/twentyLocalObjectConfigs'),
       import('@/local-db/data-source/buildBridgeDataSource'),
+      import('@/local-db/twenty-local/resetBridgeWorkspace'),
+      import('@/local-db/twenty-local/getTwentyPublicBasePath'),
     ]);
-
-    seedTwentyBridgeAuthState();
-    await ensureBridgeDataSourceSeeded();
-    await startLocalTwentyWorker();
-
-    const { getTwentyRawPathPrefix } = await import(
-      '@/local-db/twenty-local/getTwentyPublicBasePath'
-    );
 
     // Strip the deploy sub-path (e.g. `/researcher`) before comparing, since
     // `window.location.pathname` includes it but our route constants don't.
     const rawPathPrefix = getTwentyRawPathPrefix();
+
+    // `/reset` wipes the bridge first, while nothing holds a Dexie connection,
+    // then drops back to the index so the rest of boot re-seeds it blank.
+    if (isBridgeResetPath()) {
+      await resetBridgeWorkspace();
+      window.history.replaceState(null, '', rawPathPrefix || '/');
+    }
+
+    seedTwentyBridgeAuthState();
+    await ensureBridgeDataSourceSeeded();
+    await startLocalTwentyWorker();
     const relativePathname =
       rawPathPrefix.length > 0 &&
       window.location.pathname.startsWith(rawPathPrefix)

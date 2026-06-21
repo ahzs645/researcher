@@ -91,7 +91,10 @@ export const getBridgeDataSource = () => {
       //   1 → 2  research objects added
       //   2 → 3  research relations added (new `<field>Id` join-column indexes)
       //   3 → 4  applicationRequirement checklist object + relation
-      schemaVersion: 4,
+      //   4 → 5  applicantProfile / applicationSection / reusableAnswer objects,
+      //          project↔application + opportunity provenance relations, and
+      //          opportunityKind/eligibility fields
+      schemaVersion: 5,
     });
   }
   return cachedDataSource;

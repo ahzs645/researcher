@@ -21,6 +21,7 @@ export type DiscoverySource = {
   url?: string | null;
   funder?: string | null;
   funderType?: string | null;
+  opportunityKind?: string | null;
   topicTags?: string[] | null;
   eligibilityTags?: string[] | null;
 };
@@ -30,6 +31,7 @@ export type DiscoveredOpportunityDraft = {
   name: string;
   funder: string;
   program: string;
+  opportunityKind: string;
   opportunityUrl: string;
   amountText: string;
   fitScore: number;
@@ -109,10 +111,20 @@ type SourceCandidate = {
   title: string;
   funder: string;
   program: string;
+  opportunityKind: string;
   opportunityUrl: string;
   amountText: string;
   topicTags: string[];
   eligibility: string;
+};
+
+// The noun a synthesized candidate's title reads as, per funding kind.
+const KIND_NOUNS: Record<string, [string, string]> = {
+  GRANT: ['program', 'innovation grant'],
+  SCHOLARSHIP: ['scholarship', 'graduate award'],
+  FELLOWSHIP: ['fellowship', 'research fellowship'],
+  STUDENTSHIP: ['studentship', 'student award'],
+  PRIZE: ['prize', 'award'],
 };
 
 // Deterministically synthesize the candidate opportunities a scan of this source
@@ -131,15 +143,18 @@ export const generateCandidatesForSource = (
     (source.eligibilityTags ?? []).filter(Boolean).join(', ') ||
     'See funder site for full eligibility';
   const primaryTags = tags.length > 0 ? tags.slice(0, 2) : ['research'];
+  const opportunityKind = source.opportunityKind ?? 'GRANT';
+  const nouns = KIND_NOUNS[opportunityKind] ?? KIND_NOUNS.GRANT;
 
   return primaryTags.map((tag, index) => {
     const seed = `${source.libraryKey ?? source.name}:${tag}:${index}`;
     const amountText = AMOUNT_BANDS[fnv1a(seed) % AMOUNT_BANDS.length];
-    const kind = index === 0 ? 'program' : 'innovation grant';
+    const noun = index === 0 ? nouns[0] : nouns[1];
     return {
-      title: `${titleCase(tag)} ${kind} ${DISCOVERY_CYCLE_YEAR}`,
+      title: `${titleCase(tag)} ${noun} ${DISCOVERY_CYCLE_YEAR}`,
       funder,
       program: titleCase(tag),
+      opportunityKind,
       opportunityUrl: baseUrl
         ? `${baseUrl}/opportunities/${slugify(tag)}-${DISCOVERY_CYCLE_YEAR}`
         : `https://grants.example/${slugify(funder)}/${slugify(tag)}`,
@@ -180,6 +195,7 @@ export const scanSourceToOpportunities = (
         name: candidate.title,
         funder: candidate.funder,
         program: candidate.program,
+        opportunityKind: candidate.opportunityKind,
         opportunityUrl: candidate.opportunityUrl,
         amountText: candidate.amountText,
         fitScore: match.fitScore,

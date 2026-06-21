@@ -71,6 +71,30 @@ describe('researchDiscovery', () => {
     );
   });
 
+  it('carries the funding kind through to drafts and titles', () => {
+    const scholarshipSource: DiscoverySource = {
+      libraryKey: 'vanier-cgs',
+      name: 'Vanier CGS',
+      url: 'https://vanier.gc.ca/',
+      funder: 'Government of Canada',
+      opportunityKind: 'SCHOLARSHIP',
+      topicTags: ['doctoral'],
+      eligibilityTags: ['doctoral'],
+    };
+    const profile = buildTeamProfileFromRecords([], []);
+    const drafts = scanSourceToOpportunities(scholarshipSource, profile);
+    expect(drafts[0].opportunityKind).toBe('SCHOLARSHIP');
+    expect(drafts[0].name.toLowerCase()).toContain('scholarship');
+  });
+
+  it('defaults the kind to GRANT when a source does not set one', () => {
+    const drafts = scanSourceToOpportunities(
+      quantumSource,
+      buildTeamProfileFromRecords([], []),
+    );
+    expect(drafts[0].opportunityKind).toBe('GRANT');
+  });
+
   it('dedupes candidates already discovered (by URL)', () => {
     const profile = buildTeamProfileFromRecords([], []);
     const all = scanSourceToOpportunities(quantumSource, profile);

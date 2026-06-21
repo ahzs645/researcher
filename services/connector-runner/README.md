@@ -78,9 +78,11 @@ The pieces from the design that are now in place: the **action layer**
 of the existing **BlitzBrowser session auth**. Remaining work toward the full
 feature:
 
-1. **Profile builder** — map a `grantApplication` + researcher/team record into
-   an `ApplicantProfile` (a thin Convex/front-end adapter over
-   `applicantProfileFromRecord`).
+1. **Profile builder** — *done (front-end):* `buildApplicantProfile` in
+   `packages/twenty-front/src/modules/local-db/research/researchApplicationProfile.ts`
+   maps the canonical `applicantProfile` + researcher/team/application/project
+   records into this `ApplicantProfile` shape. Still to do: POST it to `fillForm`
+   from a review UI.
 2. **LLM planner** — feed `analyzeForm` output + the profile to a model and have
    it emit `assignments` for fields the deterministic matcher misses. The browser
    code does not change; the planner only produces assignments.

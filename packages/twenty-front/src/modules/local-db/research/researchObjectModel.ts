@@ -89,6 +89,67 @@ const MONEY_ICON = 'IconCoin';
 const TAG_ICON = 'IconTag';
 const TEXT_ICON = 'IconFileText';
 
+// Career stages an applicant can be at — shared by the canonical applicant
+// profile and the eligibility target on an opportunity. Funding eligibility is
+// most often gated on this, so it is a first-class field rather than free text.
+const CAREER_STAGE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'UNDERGRADUATE', label: 'Undergraduate', color: 'sky' },
+  { value: 'MASTERS', label: "Master's student", color: 'turquoise' },
+  { value: 'DOCTORAL', label: 'Doctoral student', color: 'purple' },
+  { value: 'POSTDOCTORAL', label: 'Postdoctoral', color: 'pink' },
+  { value: 'EARLY_CAREER', label: 'Early-career faculty', color: 'blue' },
+  { value: 'ESTABLISHED', label: 'Established faculty', color: 'green' },
+];
+
+// Same list plus an explicit "any" used when an opportunity is open to all.
+const ELIGIBLE_CAREER_STAGE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'ANY', label: 'Any career stage', color: 'gray' },
+  ...CAREER_STAGE_OPTIONS,
+];
+
+// What kind of funding an opportunity / source represents. Lets the same
+// discovery + assessment pipeline cover individual scholarships and fellowships,
+// not just team grants.
+const OPPORTUNITY_KIND_OPTIONS: ResearchSelectOption[] = [
+  { value: 'GRANT', label: 'Grant', color: 'purple' },
+  { value: 'SCHOLARSHIP', label: 'Scholarship', color: 'sky' },
+  { value: 'FELLOWSHIP', label: 'Fellowship', color: 'turquoise' },
+  { value: 'STUDENTSHIP', label: 'Studentship', color: 'green' },
+  { value: 'PRIZE', label: 'Prize / award', color: 'yellow' },
+];
+
+// AI/assessment eligibility verdict surfaced on an opportunity so "what's
+// relevant to me" is a real column, not just a hidden score.
+const RELEVANCE_VERDICT_OPTIONS: ResearchSelectOption[] = [
+  { value: 'ELIGIBLE', label: 'Eligible', color: 'green' },
+  { value: 'LIKELY', label: 'Likely eligible', color: 'turquoise' },
+  { value: 'INELIGIBLE', label: 'Ineligible', color: 'red' },
+  { value: 'UNKNOWN', label: 'Needs review', color: 'gray' },
+];
+
+// Canonical content "buckets" shared by an application's narrative sections and
+// the reusable answer library, so a saved answer of one type can be matched to a
+// section of the same type across applications.
+const CANONICAL_CONTENT_OPTIONS: ResearchSelectOption[] = [
+  { value: 'ABSTRACT', label: 'Abstract', color: 'blue' },
+  { value: 'LAY_SUMMARY', label: 'Lay summary', color: 'sky' },
+  { value: 'BACKGROUND', label: 'Background', color: 'turquoise' },
+  { value: 'OBJECTIVES', label: 'Objectives', color: 'green' },
+  { value: 'METHODOLOGY', label: 'Methodology', color: 'purple' },
+  { value: 'IMPACT', label: 'Impact / significance', color: 'pink' },
+  {
+    value: 'BUDGET_JUSTIFICATION',
+    label: 'Budget justification',
+    color: 'orange',
+  },
+  { value: 'TIMELINE', label: 'Timeline / workplan', color: 'yellow' },
+  { value: 'TEAM', label: 'Team / expertise', color: 'sky' },
+  { value: 'BIO', label: 'Biography', color: 'turquoise' },
+  { value: 'EDI', label: 'EDI statement', color: 'red' },
+  { value: 'BIBLIOGRAPHY', label: 'Bibliography', color: 'gray' },
+  { value: 'OTHER', label: 'Other', color: 'gray' },
+];
+
 export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
   {
     nameSingular: 'researchTeam',
@@ -445,6 +506,15 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         ],
       },
       {
+        name: 'opportunityKind',
+        label: 'Opportunity kind',
+        type: 'SELECT',
+        icon: 'IconAward',
+        description:
+          'What a scan of this source produces — grants, scholarships, fellowships…',
+        options: OPPORTUNITY_KIND_OPTIONS,
+      },
+      {
         name: 'topicTags',
         label: 'Topic tags',
         type: 'ARRAY',
@@ -505,6 +575,7 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     defaultColumns: [
       'sourceType',
       'funderType',
+      'opportunityKind',
       'jurisdiction',
       'topicTags',
       'scrapeCadence',
@@ -554,6 +625,13 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         type: 'DATE_TIME',
         icon: CALENDAR_ICON,
       },
+      {
+        name: 'opportunityKind',
+        label: 'Kind',
+        type: 'SELECT',
+        icon: 'IconAward',
+        options: OPPORTUNITY_KIND_OPTIONS,
+      },
       { name: 'amountText', label: 'Amount', type: 'TEXT', icon: MONEY_ICON },
       {
         name: 'fitScore',
@@ -592,6 +670,38 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconCheckbox',
       },
       {
+        name: 'careerStage',
+        label: 'Eligible career stage',
+        type: 'SELECT',
+        icon: 'IconStairsUp',
+        description:
+          'Who the opportunity is open to (drives eligibility checks)',
+        options: ELIGIBLE_CAREER_STAGE_OPTIONS,
+      },
+      {
+        name: 'eligibilityNotes',
+        label: 'Eligibility detail',
+        type: 'TEXT',
+        icon: 'IconListCheck',
+        description:
+          'Full eligibility prose the assessment reads (citizenship, enrolment, residency…)',
+      },
+      {
+        name: 'relevanceVerdict',
+        label: 'Relevance',
+        type: 'SELECT',
+        icon: 'IconScale',
+        description: 'Assessment verdict: is this worth applying to?',
+        options: RELEVANCE_VERDICT_OPTIONS,
+      },
+      {
+        name: 'relevanceReason',
+        label: 'Why relevant',
+        type: 'TEXT',
+        icon: 'IconBulb',
+        description: 'Plain-language reasoning + what you would need to apply',
+      },
+      {
         name: 'topicTags',
         label: 'Topic tags',
         type: 'ARRAY',
@@ -606,12 +716,13 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
       },
     ],
     defaultColumns: [
+      'opportunityKind',
       'funder',
       'source',
       'applicationDueDate',
       'amountText',
       'fitScore',
-      'confidence',
+      'relevanceVerdict',
       'status',
     ],
   },
@@ -652,6 +763,7 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         type: 'SELECT',
         icon: STATUS_ICON,
         options: [
+          { value: 'DRAFTING', label: 'Drafting', color: 'gray' },
           { value: 'SUBMITTED', label: 'Submitted', color: 'blue' },
           { value: 'REVIEWING', label: 'Reviewing', color: 'yellow' },
           { value: 'SHORTLISTED', label: 'Shortlisted', color: 'purple' },
@@ -686,6 +798,7 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     defaultColumns: [
       'applicant',
       'grant',
+      'project',
       'cycle',
       'amountRequested',
       'status',
@@ -1000,6 +1113,239 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
       'status',
       'dueDate',
       'formNumber',
+    ],
+  },
+  {
+    nameSingular: 'applicantProfile',
+    namePlural: 'applicantProfiles',
+    labelSingular: 'Applicant profile',
+    labelPlural: 'Applicant profiles',
+    navSection: 'LAB',
+    icon: 'IconIdBadge2',
+    description:
+      'Reusable applicant details that pre-fill portals and seed application drafts',
+    navColor: 'sky',
+    nameFieldLabel: 'Profile name',
+    nameFieldIcon: 'IconIdBadge2',
+    fields: [
+      { name: 'fullName', label: 'Full name', type: 'TEXT', icon: 'IconUser' },
+      { name: 'email', label: 'Email', type: 'TEXT', icon: 'IconMail' },
+      { name: 'phone', label: 'Phone', type: 'TEXT', icon: 'IconPhone' },
+      { name: 'orcid', label: 'ORCID', type: 'TEXT', icon: 'IconId' },
+      {
+        name: 'careerStage',
+        label: 'Career stage',
+        type: 'SELECT',
+        icon: 'IconStairsUp',
+        options: CAREER_STAGE_OPTIONS,
+      },
+      {
+        name: 'citizenship',
+        label: 'Citizenship',
+        type: 'TEXT',
+        icon: 'IconFlag',
+      },
+      {
+        name: 'residency',
+        label: 'Residency',
+        type: 'TEXT',
+        icon: 'IconHome',
+      },
+      {
+        name: 'institution',
+        label: 'Institution',
+        type: 'TEXT',
+        icon: 'IconBuildingBank',
+      },
+      {
+        name: 'department',
+        label: 'Department',
+        type: 'TEXT',
+        icon: 'IconBuilding',
+      },
+      {
+        name: 'discipline',
+        label: 'Discipline',
+        type: 'TEXT',
+        icon: 'IconAtom',
+      },
+      {
+        name: 'keywords',
+        label: 'Keywords',
+        type: 'ARRAY',
+        icon: TAG_ICON,
+        readOnly: true,
+      },
+      {
+        name: 'addressLine1',
+        label: 'Address',
+        type: 'TEXT',
+        icon: 'IconMapPin',
+      },
+      {
+        name: 'city',
+        label: 'City',
+        type: 'TEXT',
+        icon: 'IconBuildingCommunity',
+      },
+      {
+        name: 'province',
+        label: 'Province / state',
+        type: 'TEXT',
+        icon: 'IconMap',
+      },
+      {
+        name: 'postalCode',
+        label: 'Postal code',
+        type: 'TEXT',
+        icon: 'IconMailbox',
+      },
+      { name: 'country', label: 'Country', type: 'TEXT', icon: 'IconWorld' },
+      { name: 'bioShort', label: 'Short bio', type: 'TEXT', icon: TEXT_ICON },
+      { name: 'bioLong', label: 'Full bio', type: 'TEXT', icon: TEXT_ICON },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'researcher',
+      'careerStage',
+      'institution',
+      'discipline',
+      'email',
+      'orcid',
+    ],
+  },
+  {
+    nameSingular: 'applicationSection',
+    namePlural: 'applicationSections',
+    labelSingular: 'Application section',
+    labelPlural: 'Application sections',
+    navSection: 'FUNDING',
+    icon: 'IconFileDescription',
+    description:
+      'A narrative section or answer drafted for a grant application',
+    navColor: 'sky',
+    nameFieldLabel: 'Section title',
+    nameFieldIcon: 'IconFileDescription',
+    fields: [
+      {
+        name: 'sectionType',
+        label: 'Section type',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: CANONICAL_CONTENT_OPTIONS,
+      },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'NOT_STARTED', label: 'Not started', color: 'gray' },
+          { value: 'DRAFTING', label: 'Drafting', color: 'yellow' },
+          { value: 'IN_REVIEW', label: 'In review', color: 'orange' },
+          { value: 'FINAL', label: 'Final', color: 'green' },
+        ],
+      },
+      {
+        name: 'prompt',
+        label: 'Funder prompt',
+        type: 'TEXT',
+        icon: 'IconHelpCircle',
+        description: 'The exact question/instruction from the funder',
+      },
+      { name: 'content', label: 'Content', type: 'TEXT', icon: TEXT_ICON },
+      {
+        name: 'wordLimit',
+        label: 'Word limit',
+        type: 'NUMBER',
+        icon: 'IconRuler2',
+      },
+      {
+        name: 'wordCount',
+        label: 'Word count',
+        type: 'NUMBER',
+        icon: 'IconLetterCase',
+      },
+      {
+        name: 'reusedFromId',
+        label: 'Reused from',
+        type: 'TEXT',
+        icon: 'IconBookmarks',
+        description: 'Id of the reusable answer this draft started from',
+        readOnly: true,
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'application',
+      'sectionType',
+      'status',
+      'wordCount',
+      'wordLimit',
+    ],
+  },
+  {
+    nameSingular: 'reusableAnswer',
+    namePlural: 'reusableAnswers',
+    labelSingular: 'Reusable answer',
+    labelPlural: 'Reusable answers',
+    navSection: 'FUNDING',
+    icon: 'IconBookmarks',
+    description:
+      'A saved answer you can retrieve and adapt across applications',
+    navColor: 'green',
+    nameFieldLabel: 'Answer title',
+    nameFieldIcon: 'IconBookmarks',
+    fields: [
+      {
+        name: 'questionType',
+        label: 'Question type',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: CANONICAL_CONTENT_OPTIONS,
+      },
+      { name: 'content', label: 'Content', type: 'TEXT', icon: TEXT_ICON },
+      {
+        name: 'funder',
+        label: 'Funder',
+        type: 'TEXT',
+        icon: 'IconBuildingBank',
+        description: 'Funder this answer was written for, if any',
+      },
+      {
+        name: 'tags',
+        label: 'Tags',
+        type: 'ARRAY',
+        icon: TAG_ICON,
+        readOnly: true,
+      },
+      {
+        name: 'wordCount',
+        label: 'Word count',
+        type: 'NUMBER',
+        icon: 'IconLetterCase',
+      },
+      {
+        name: 'timesUsed',
+        label: 'Times used',
+        type: 'NUMBER',
+        icon: 'IconRepeat',
+      },
+      {
+        name: 'lastUsedAt',
+        label: 'Last used',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'questionType',
+      'project',
+      'author',
+      'funder',
+      'timesUsed',
+      'wordCount',
     ],
   },
 ];

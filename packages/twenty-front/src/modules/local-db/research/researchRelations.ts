@@ -175,4 +175,82 @@ export const RESEARCH_RELATIONS: ResearchRelation[] = [
     manyFieldLabel: 'Application',
     manyFieldIcon: 'IconFileText',
   },
+  // Project ↔ applications — the missing link so an application carries its
+  // research context (and reuse can be scoped by project).
+  {
+    one: 'project',
+    oneField: 'applications',
+    oneFieldLabel: 'Applications',
+    oneFieldIcon: 'IconFileText',
+    many: 'grantApplication',
+    manyField: 'project',
+    manyFieldLabel: 'Project',
+    manyFieldIcon: 'IconFolder',
+  },
+  // Opportunity → the grant it became (provenance once converted).
+  {
+    one: 'grantOpportunity',
+    oneField: 'grants',
+    oneFieldLabel: 'Grants',
+    oneFieldIcon: 'IconReportMoney',
+    many: 'grant',
+    manyField: 'opportunity',
+    manyFieldLabel: 'Opportunity',
+    manyFieldIcon: 'IconTargetArrow',
+  },
+  // Opportunity → the application started from it (the "start application" flow).
+  {
+    one: 'grantOpportunity',
+    oneField: 'applications',
+    oneFieldLabel: 'Applications',
+    oneFieldIcon: 'IconFileText',
+    many: 'grantApplication',
+    manyField: 'opportunity',
+    manyFieldLabel: 'Opportunity',
+    manyFieldIcon: 'IconTargetArrow',
+  },
+  // Application ↔ narrative sections (the authored content of the application).
+  {
+    one: 'grantApplication',
+    oneField: 'sections',
+    oneFieldLabel: 'Sections',
+    oneFieldIcon: 'IconFileDescription',
+    many: 'applicationSection',
+    manyField: 'application',
+    manyFieldLabel: 'Application',
+    manyFieldIcon: 'IconFileText',
+  },
+  // Researcher ↔ canonical applicant profile.
+  {
+    one: 'researcher',
+    oneField: 'profiles',
+    oneFieldLabel: 'Applicant profiles',
+    oneFieldIcon: 'IconIdBadge2',
+    many: 'applicantProfile',
+    manyField: 'researcher',
+    manyFieldLabel: 'Researcher',
+    manyFieldIcon: 'IconUser',
+  },
+  // Project ↔ reusable answers (reuse scoped to the project / context).
+  {
+    one: 'project',
+    oneField: 'reusableAnswers',
+    oneFieldLabel: 'Reusable answers',
+    oneFieldIcon: 'IconBookmarks',
+    many: 'reusableAnswer',
+    manyField: 'project',
+    manyFieldLabel: 'Project',
+    manyFieldIcon: 'IconFolder',
+  },
+  // Researcher ↔ reusable answers they authored.
+  {
+    one: 'researcher',
+    oneField: 'reusableAnswers',
+    oneFieldLabel: 'Reusable answers',
+    oneFieldIcon: 'IconBookmarks',
+    many: 'reusableAnswer',
+    manyField: 'author',
+    manyFieldLabel: 'Author',
+    manyFieldIcon: 'IconUser',
+  },
 ];

@@ -811,10 +811,12 @@ export const recordTables = {
     notes: v.optional(v.string()),
     leadId: v.optional(v.string()),
     projectId: v.optional(v.string()),
+    opportunityId: v.optional(v.string()),
   })
     .index('by_external_id', ['id'])
 .index('by_lead_id', ['leadId'])
 .index('by_project_id', ['projectId'])
+.index('by_opportunity_id', ['opportunityId'])
 .index('by_updatedAt', ['updatedAt'])
 .index('by_createdAt', ['createdAt'])
 .index('by_deletedAt', ['deletedAt']),
@@ -832,6 +834,7 @@ export const recordTables = {
     sourceType: v.optional(v.string()),
     jurisdiction: v.optional(v.string()),
     funderType: v.optional(v.string()),
+    opportunityKind: v.optional(v.string()),
     topicTags: v.optional(v.array(v.string())),
     eligibilityTags: v.optional(v.array(v.string())),
     scrapeCadence: v.optional(v.string()),
@@ -859,11 +862,16 @@ export const recordTables = {
     opportunityUrl: v.optional(v.string()),
     applicationDueDate: v.optional(v.string()),
     registrationDueDate: v.optional(v.string()),
+    opportunityKind: v.optional(v.string()),
     amountText: v.optional(v.string()),
     fitScore: v.optional(v.number()),
     confidence: v.optional(v.string()),
     status: v.optional(v.string()),
     eligibility: v.optional(v.string()),
+    careerStage: v.optional(v.string()),
+    eligibilityNotes: v.optional(v.string()),
+    relevanceVerdict: v.optional(v.string()),
+    relevanceReason: v.optional(v.string()),
     topicTags: v.optional(v.array(v.string())),
     description: v.optional(v.string()),
     sourceId: v.optional(v.string()),
@@ -894,11 +902,15 @@ export const recordTables = {
     applicantId: v.optional(v.string()),
     grantId: v.optional(v.string()),
     cycleId: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+    opportunityId: v.optional(v.string()),
   })
     .index('by_external_id', ['id'])
 .index('by_applicant_id', ['applicantId'])
 .index('by_grant_id', ['grantId'])
 .index('by_cycle_id', ['cycleId'])
+.index('by_project_id', ['projectId'])
+.index('by_opportunity_id', ['opportunityId'])
 .index('by_updatedAt', ['updatedAt'])
 .index('by_createdAt', ['createdAt'])
 .index('by_deletedAt', ['deletedAt']),
@@ -1015,6 +1027,94 @@ export const recordTables = {
   })
     .index('by_external_id', ['id'])
 .index('by_application_id', ['applicationId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  applicantProfile: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    fullName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    orcid: v.optional(v.string()),
+    careerStage: v.optional(v.string()),
+    citizenship: v.optional(v.string()),
+    residency: v.optional(v.string()),
+    institution: v.optional(v.string()),
+    department: v.optional(v.string()),
+    discipline: v.optional(v.string()),
+    keywords: v.optional(v.array(v.string())),
+    addressLine1: v.optional(v.string()),
+    city: v.optional(v.string()),
+    province: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    country: v.optional(v.string()),
+    bioShort: v.optional(v.string()),
+    bioLong: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    researcherId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_researcher_id', ['researcherId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  applicationSection: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    sectionType: v.optional(v.string()),
+    status: v.optional(v.string()),
+    prompt: v.optional(v.string()),
+    content: v.optional(v.string()),
+    wordLimit: v.optional(v.number()),
+    wordCount: v.optional(v.number()),
+    reusedFromId: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    applicationId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_application_id', ['applicationId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  reusableAnswer: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    questionType: v.optional(v.string()),
+    content: v.optional(v.string()),
+    funder: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    wordCount: v.optional(v.number()),
+    timesUsed: v.optional(v.number()),
+    lastUsedAt: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+    authorId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_project_id', ['projectId'])
+.index('by_author_id', ['authorId'])
 .index('by_updatedAt', ['updatedAt'])
 .index('by_createdAt', ['createdAt'])
 .index('by_deletedAt', ['deletedAt']),

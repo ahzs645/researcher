@@ -10,6 +10,13 @@ const persistResearchSeedMode = (mode: ResearchSeedMode): ResearchSeedMode => {
   return mode;
 };
 
+// Drop the persisted demo opt-in so the next boot resolves back to `blank`.
+// Used by the workspace reset so a wiped workspace doesn't immediately re-seed.
+export const clearResearchSeedMode = (): void => {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.removeItem(RESEARCH_SEED_MODE_STORAGE_KEY);
+};
+
 // Decides whether a fresh local bridge starts pre-loaded with the sample
 // dataset or as an empty workspace. Default is `blank`; visiting `/demo` (or
 // `?demo=1`) opts into the seeded demo data. Resolved at boot — while the URL

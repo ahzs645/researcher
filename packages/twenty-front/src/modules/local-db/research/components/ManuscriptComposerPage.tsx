@@ -14,6 +14,7 @@ import {
   type ReferenceLike,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
+import { ManuscriptCslBibliography } from '@/local-db/research/components/ManuscriptCslBibliography';
 import { ManuscriptExportPanel } from '@/local-db/research/components/ManuscriptExportPanel';
 import { ManuscriptFigurePanel } from '@/local-db/research/components/ManuscriptFigurePanel';
 import { ManuscriptReferencePanel } from '@/local-db/research/components/ManuscriptReferencePanel';
@@ -419,15 +420,23 @@ export const ManuscriptComposerPage = () => {
 
         <StyledColumn>
           {isDefined(bundle) ? (
-            <ManuscriptExportPanel
-              bundle={bundle}
-              journals={journals.map((journal) => ({
-                id: journal.id,
-                name: journal.name ?? 'Journal',
-              }))}
-              selectedJournalId={journalId}
-              onSelectJournal={setJournalId}
-            />
+            <>
+              <ManuscriptExportPanel
+                bundle={bundle}
+                journals={journals.map((journal) => ({
+                  id: journal.id,
+                  name: journal.name ?? 'Journal',
+                }))}
+                selectedJournalId={journalId}
+                onSelectJournal={setJournalId}
+              />
+              <ManuscriptCslBibliography
+                cslItems={bundle.cslJson}
+                citedKeys={bundle.citedKeys}
+                styleId={style.citationStyleId ?? ''}
+                fallback={bundle.bibliography}
+              />
+            </>
           ) : null}
           <StyledPanelTitle>References</StyledPanelTitle>
           <ManuscriptReferencePanel

@@ -1240,4 +1240,88 @@ export const recordTables = {
 .index('by_updatedAt', ['updatedAt'])
 .index('by_createdAt', ['createdAt'])
 .index('by_deletedAt', ['deletedAt']),
+  projectMembership: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    role: v.optional(v.string()),
+    status: v.optional(v.string()),
+    allocationPercent: v.optional(v.number()),
+    responsibilities: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    researcherId: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_researcher_id', ['researcherId'])
+.index('by_project_id', ['projectId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  obligation: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    obligationType: v.optional(v.string()),
+    status: v.optional(v.string()),
+    priority: v.optional(v.string()),
+    reportingPeriod: v.optional(v.string()),
+    recurrence: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
+    periodStart: v.optional(v.string()),
+    periodEnd: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+    completedAt: v.optional(v.string()),
+    keywords: v.optional(v.array(v.string())),
+    notes: v.optional(v.string()),
+    assigneeId: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+    grantId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_assignee_id', ['assigneeId'])
+.index('by_project_id', ['projectId'])
+.index('by_grant_id', ['grantId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  obligationDocument: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    documentKind: v.optional(v.string()),
+    fileUrl: v.optional(v.string()),
+    fileType: v.optional(v.string()),
+    fileSizeKb: v.optional(v.number()),
+    keywords: v.optional(v.array(v.string())),
+    summary: v.optional(v.string()),
+    uploadedAt: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    obligationId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_obligation_id', ['obligationId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
 };

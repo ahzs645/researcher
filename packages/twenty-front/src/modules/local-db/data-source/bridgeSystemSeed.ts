@@ -28,7 +28,8 @@ import { mockedViews } from '~/testing/mock-data/generated/metadata/views/mock-v
 // `migrateNavLayout`.
 //   3 → 4  applicantProfile (Lab) + applicationSection / reusableAnswer (Funding)
 //   4 → 5  manuscript authoring objects (Work) + the Compose link
-const BRIDGE_NAV_LAYOUT_VERSION = 5;
+//   5 → 6  obligations tracker objects (Work) + the "My obligations" link
+const BRIDGE_NAV_LAYOUT_VERSION = 6;
 
 // Default workspace persona until the first-run setup chooses one.
 const DEFAULT_WORKSPACE_MODE: WorkspaceMode = 'LAB';

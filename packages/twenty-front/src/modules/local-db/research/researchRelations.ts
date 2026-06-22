@@ -330,4 +330,73 @@ export const RESEARCH_RELATIONS: ResearchRelation[] = [
     manyFieldLabel: 'Section',
     manyFieldIcon: 'IconFileText',
   },
+  // Researcher ↔ project assignments — the membership roster's person side, so
+  // one person can be on many projects.
+  {
+    one: 'researcher',
+    oneField: 'projectAssignments',
+    oneFieldLabel: 'Project assignments',
+    oneFieldIcon: 'IconUsersPlus',
+    many: 'projectMembership',
+    manyField: 'researcher',
+    manyFieldLabel: 'Researcher',
+    manyFieldIcon: 'IconUser',
+  },
+  // Project ↔ members — the roster's project side, so one project can have many
+  // people. Together these two relations model the researcher↔project
+  // many-to-many through the projectMembership join object.
+  {
+    one: 'project',
+    oneField: 'members',
+    oneFieldLabel: 'Members',
+    oneFieldIcon: 'IconUsersPlus',
+    many: 'projectMembership',
+    manyField: 'project',
+    manyFieldLabel: 'Project',
+    manyFieldIcon: 'IconFolder',
+  },
+  // Researcher ↔ obligations they are responsible for (the assignee side).
+  {
+    one: 'researcher',
+    oneField: 'obligations',
+    oneFieldLabel: 'Obligations',
+    oneFieldIcon: 'IconClipboardCheck',
+    many: 'obligation',
+    manyField: 'assignee',
+    manyFieldLabel: 'Assignee',
+    manyFieldIcon: 'IconUser',
+  },
+  // Project ↔ its obligations (deliverables/reporting on the research itself).
+  {
+    one: 'project',
+    oneField: 'obligations',
+    oneFieldLabel: 'Obligations',
+    oneFieldIcon: 'IconClipboardCheck',
+    many: 'obligation',
+    manyField: 'project',
+    manyFieldLabel: 'Project',
+    manyFieldIcon: 'IconFolder',
+  },
+  // Grant ↔ its reporting obligations (progress/financial/final reports).
+  {
+    one: 'grant',
+    oneField: 'obligations',
+    oneFieldLabel: 'Obligations',
+    oneFieldIcon: 'IconClipboardCheck',
+    many: 'obligation',
+    manyField: 'grant',
+    manyFieldLabel: 'Grant',
+    manyFieldIcon: 'IconReportMoney',
+  },
+  // Obligation ↔ the documents uploaded for it (the report PDF, receipts…).
+  {
+    one: 'obligation',
+    oneField: 'documents',
+    oneFieldLabel: 'Documents',
+    oneFieldIcon: 'IconPaperclip',
+    many: 'obligationDocument',
+    manyField: 'obligation',
+    manyFieldLabel: 'Obligation',
+    manyFieldIcon: 'IconClipboardCheck',
+  },
 ];

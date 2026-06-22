@@ -96,7 +96,10 @@ export const getBridgeDataSource = () => {
       //          opportunityKind/eligibility fields
       //   5 → 6  manuscript authoring: manuscriptSection / figure / reference /
       //          journalTemplate objects + their relations
-      schemaVersion: 6,
+      //   6 → 7  obligations tracker: obligation / obligationDocument +
+      //          projectMembership (researcher↔project roster) objects and
+      //          their relations
+      schemaVersion: 7,
     });
   }
   return cachedDataSource;

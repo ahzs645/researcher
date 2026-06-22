@@ -62,6 +62,10 @@ parity with `local`.
 - `researchGrantSourceData.ts` — the built-in grant/scholarship source library
   (CIHR, NRC, Innovate BC, Vanier, NSERC, Banting, …).
 - `researchSeedRecords.ts` — a coherent demo dataset across all objects.
+- `researchObligationLabeling.ts` — the AI keyword/label seam for obligation
+  documents (deterministic fallback + injectable `AiDocumentLabeler`).
+- `researchObligationRecurrence.ts` — advances a recurring obligation to its
+  next instance (next period label + dates) when one is completed.
 - `bridgeResearchAugmentation.ts` — the single merge point.
 
 ### Funding workflow modules (pure, no backend)
@@ -88,6 +92,35 @@ touching any caller — the deterministic version stays the offline fallback.
   the reuse loop. Find the closest prior `reusableAnswer`s (scoped by question
   type, project, funder, wording) and stage one for a new section. Seam:
   `AiAnswerDrafter` (a Convex vector-search action would back retrieval).
+- `researchObligationLabeling.ts` — `labelObligationDocument`: auto-tag an
+  uploaded obligation document (keywords + suggested `documentKind` + a one-line
+  summary) from its filename, the owning obligation, and any extracted text.
+  Seam: `AiDocumentLabeler` (a Convex/Claude action reading the document body).
+
+### Obligations & assignment
+
+The obligations tracker answers "what does each person owe, and where are the
+documents". Three objects (declared like every other, in `researchObjectModel.ts`):
+
+- `obligation` — a reporting/compliance item a researcher must complete
+  (progress/annual/final/financial reports, ethics renewals, data-management
+  plans, deliverables): type, status, priority, reporting period, recurrence,
+  due date, and AI keywords. Related to a researcher (**assignee**), a project,
+  and optionally a grant.
+- `obligationDocument` — a file uploaded for an obligation (the report PDF,
+  receipts, approvals…). Stored inline as a data-URL or an external link, with
+  AI-suggested keywords/kind/summary.
+- `projectMembership` — the researcher↔project roster (a join object with a
+  role) so several people can share a project and one person can carry several
+  (`project.members` ↔ `researcher.projectAssignments`).
+
+`ObligationsPage` (route `/obligations`, nav LINK "My obligations" under Work)
+is the focused view: it lists obligations — flat in **solo** mode, grouped by
+person in **lab** mode — lets you add/assign one, upload its documents, and flip
+status. On upload it reads text-based file bodies and runs them through the
+labeler (the `createDocumentLabeler` seam), so keywords come from real content,
+not just the filename. Marking a **recurring** obligation complete auto-creates
+the next instance via `buildNextObligation`.
 
 ## Design constraints (read before adding fields)
 
@@ -120,9 +153,12 @@ When the object set changes, bump the Dexie `schemaVersion` in
   (`opportunityKind`); the relevance/eligibility assessment; the
   reusable-answer library + retrieval; the canonical applicant profile +
   autofill profile builder; "start application from opportunity" (linked
-  application + checklist + sections).
+  application + checklist + sections); the **obligations tracker** (obligation +
+  obligationDocument objects, inline document upload, AI keyword labeling from
+  text file bodies, recurring-instance auto-generation) and the
+  **project-membership roster** (researcher↔project many-to-many).
 - **Next (backend-dependent):** swap the deterministic AI seams for live
-  Convex/Claude actions (eligibility reading, answer drafting, vector retrieval);
-  the Convex live source-pull runtime + cron; the autofill review UI wired to the
-  connector-runner; team sharing/persistence (Convex as default) and document
-  attachments.
+  Convex/Claude actions (eligibility reading, answer drafting, vector retrieval,
+  document labeling/summarization from *binary* bodies like PDF/DOCX); the
+  Convex live source-pull runtime + cron; the autofill review UI wired to the
+  connector-runner; team sharing/persistence (Convex as default).

@@ -14,6 +14,9 @@ export const RESEARCH_DISCOVERY_PATH = '/discovery';
 // Internal route the "Compose paper" nav link points at (the manuscript composer).
 export const RESEARCH_COMPOSE_PATH = '/compose';
 
+// Internal route the "Obligations" nav link points at (the obligations tracker).
+export const RESEARCH_OBLIGATIONS_PATH = '/obligations';
+
 const SPEC_BY_NAME = new Map(
   RESEARCH_OBJECT_SPECS.map((spec) => [spec.nameSingular, spec]),
 );
@@ -560,6 +563,27 @@ const buildComposeLinkItem = () => ({
   targetRecordIdentifier: null,
 });
 
+// An internal LINK item opening the obligations tracker ("what do I owe"),
+// under the Work folder beneath the Compose link.
+const buildObligationsLinkItem = () => ({
+  id: researchDeterministicUuid('research:nav:link:obligations'),
+  userWorkspaceId: null,
+  targetRecordId: null,
+  targetObjectMetadataId: null,
+  viewId: null,
+  folderId: RESEARCH_NAV_FOLDER_IDS.WORK,
+  type: 'LINK',
+  name: 'My obligations',
+  link: RESEARCH_OBLIGATIONS_PATH,
+  icon: 'IconClipboardCheck',
+  color: 'red',
+  position: 101,
+  applicationId: CORE_APPLICATION_ID,
+  createdAt: SEED_TIMESTAMP,
+  updatedAt: SEED_TIMESTAMP,
+  targetRecordIdentifier: null,
+});
+
 export const buildResearchNavigationMenuItems = (
   workspaceMode: WorkspaceMode = 'LAB',
 ) => {
@@ -581,6 +605,7 @@ export const buildResearchNavigationMenuItems = (
     ...objectItems,
     buildDiscoveryLinkItem(),
     buildComposeLinkItem(),
+    buildObligationsLinkItem(),
   ];
 };
 

@@ -1001,10 +1001,12 @@ export const recordTables = {
     notes: v.optional(v.string()),
     leadAuthorId: v.optional(v.string()),
     projectId: v.optional(v.string()),
+    targetJournalId: v.optional(v.string()),
   })
     .index('by_external_id', ['id'])
 .index('by_leadAuthor_id', ['leadAuthorId'])
 .index('by_project_id', ['projectId'])
+.index('by_targetJournal_id', ['targetJournalId'])
 .index('by_updatedAt', ['updatedAt'])
 .index('by_createdAt', ['createdAt'])
 .index('by_deletedAt', ['deletedAt']),
@@ -1115,6 +1117,125 @@ export const recordTables = {
     .index('by_external_id', ['id'])
 .index('by_project_id', ['projectId'])
 .index('by_author_id', ['authorId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  manuscriptSection: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    sectionType: v.optional(v.string()),
+    placement: v.optional(v.string()),
+    content: v.optional(v.string()),
+    status: v.optional(v.string()),
+    orderIndex: v.optional(v.number()),
+    wordLimit: v.optional(v.number()),
+    wordCount: v.optional(v.number()),
+    includeInExport: v.optional(v.boolean()),
+    notes: v.optional(v.string()),
+    manuscriptId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_manuscript_id', ['manuscriptId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  figure: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    assetKind: v.optional(v.string()),
+    placement: v.optional(v.string()),
+    refKey: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    imageSource: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    altText: v.optional(v.string()),
+    credit: v.optional(v.string()),
+    widthPercent: v.optional(v.number()),
+    orderIndex: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    manuscriptId: v.optional(v.string()),
+    datasetId: v.optional(v.string()),
+    sectionId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_manuscript_id', ['manuscriptId'])
+.index('by_dataset_id', ['datasetId'])
+.index('by_section_id', ['sectionId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  reference: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    citationKey: v.optional(v.string()),
+    cslType: v.optional(v.string()),
+    authors: v.optional(v.string()),
+    year: v.optional(v.number()),
+    containerTitle: v.optional(v.string()),
+    volume: v.optional(v.string()),
+    issue: v.optional(v.string()),
+    pages: v.optional(v.string()),
+    doi: v.optional(v.string()),
+    url: v.optional(v.string()),
+    cslJson: v.optional(v.string()),
+    zoteroKey: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    manuscriptId: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
+.index('by_manuscript_id', ['manuscriptId'])
+.index('by_project_id', ['projectId'])
+.index('by_updatedAt', ['updatedAt'])
+.index('by_createdAt', ['createdAt'])
+.index('by_deletedAt', ['deletedAt']),
+  journalTemplate: defineTable({
+    id: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    createdBy: v.optional(v.any()),
+    deletedAt: v.optional(v.string()),
+    position: v.optional(v.number()),
+    searchVector: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.any()),
+    citationMode: v.optional(v.string()),
+    citationStyleId: v.optional(v.string()),
+    figureLabelFormat: v.optional(v.string()),
+    tableLabelFormat: v.optional(v.string()),
+    supplementPrefix: v.optional(v.string()),
+    numberingScope: v.optional(v.string()),
+    crossRefFormat: v.optional(v.string()),
+    figureCaptionPosition: v.optional(v.string()),
+    tableCaptionPosition: v.optional(v.string()),
+    abstractWordLimit: v.optional(v.number()),
+    twoColumn: v.optional(v.boolean()),
+    referenceDocUrl: v.optional(v.string()),
+    outputFormats: v.optional(v.array(v.string())),
+    notes: v.optional(v.string()),
+  })
+    .index('by_external_id', ['id'])
 .index('by_updatedAt', ['updatedAt'])
 .index('by_createdAt', ['createdAt'])
 .index('by_deletedAt', ['deletedAt']),

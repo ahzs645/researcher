@@ -317,6 +317,70 @@ describe('research executable schema', () => {
     );
   });
 
+  it('exposes the manuscript authoring objects and resolves manuscript → sections/figures', async () => {
+    const client = makeClient();
+
+    const result = await client.query({
+      query: gql`
+        query Authoring {
+          journalTemplates {
+            totalCount
+          }
+          references {
+            totalCount
+          }
+          manuscriptSections {
+            totalCount
+          }
+          figures {
+            totalCount
+          }
+          manuscripts(filter: { status: { eq: "DRAFTING" } }) {
+            edges {
+              node {
+                name
+                sections {
+                  totalCount
+                }
+                figures {
+                  totalCount
+                }
+                references {
+                  totalCount
+                }
+              }
+            }
+          }
+        }
+      `,
+    });
+
+    const data = result.data as {
+      journalTemplates: { totalCount: number };
+      references: { totalCount: number };
+      manuscriptSections: { totalCount: number };
+      figures: { totalCount: number };
+      manuscripts: {
+        edges: Array<{
+          node: {
+            name: string;
+            sections: { totalCount: number };
+            figures: { totalCount: number };
+            references: { totalCount: number };
+          };
+        }>;
+      };
+    };
+    expect(data.journalTemplates.totalCount).toBe(3);
+    expect(data.references.totalCount).toBe(5);
+    expect(data.manuscriptSections.totalCount).toBe(7);
+    expect(data.figures.totalCount).toBe(4);
+    const manuscript = data.manuscripts.edges[0].node;
+    expect(manuscript.sections.totalCount).toBe(7);
+    expect(manuscript.figures.totalCount).toBe(4);
+    expect(manuscript.references.totalCount).toBe(5);
+  });
+
   it('creates a grant through the schema link', async () => {
     const client = makeClient();
 

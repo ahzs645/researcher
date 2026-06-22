@@ -27,7 +27,8 @@ import { mockedViews } from '~/testing/mock-data/generated/metadata/views/mock-v
 // CRM, the Discovery link) so already-seeded visitors rebuild their nav. See
 // `migrateNavLayout`.
 //   3 → 4  applicantProfile (Lab) + applicationSection / reusableAnswer (Funding)
-const BRIDGE_NAV_LAYOUT_VERSION = 4;
+//   4 → 5  manuscript authoring objects (Work) + the Compose link
+const BRIDGE_NAV_LAYOUT_VERSION = 5;
 
 // Default workspace persona until the first-run setup chooses one.
 const DEFAULT_WORKSPACE_MODE: WorkspaceMode = 'LAB';

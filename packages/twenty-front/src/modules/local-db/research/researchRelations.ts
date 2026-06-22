@@ -253,4 +253,81 @@ export const RESEARCH_RELATIONS: ResearchRelation[] = [
     manyFieldLabel: 'Author',
     manyFieldIcon: 'IconUser',
   },
+  // Manuscript ↔ its authored sections.
+  {
+    one: 'manuscript',
+    oneField: 'sections',
+    oneFieldLabel: 'Sections',
+    oneFieldIcon: 'IconFileText',
+    many: 'manuscriptSection',
+    manyField: 'manuscript',
+    manyFieldLabel: 'Manuscript',
+    manyFieldIcon: 'IconBook',
+  },
+  // Manuscript ↔ its figures/tables/schemes.
+  {
+    one: 'manuscript',
+    oneField: 'figures',
+    oneFieldLabel: 'Figures',
+    oneFieldIcon: 'IconPhoto',
+    many: 'figure',
+    manyField: 'manuscript',
+    manyFieldLabel: 'Manuscript',
+    manyFieldIcon: 'IconBook',
+  },
+  // Manuscript ↔ its bibliography entries.
+  {
+    one: 'manuscript',
+    oneField: 'references',
+    oneFieldLabel: 'References',
+    oneFieldIcon: 'IconQuote',
+    many: 'reference',
+    manyField: 'manuscript',
+    manyFieldLabel: 'Manuscript',
+    manyFieldIcon: 'IconBook',
+  },
+  // Project ↔ a shared reference library (refs reusable across manuscripts).
+  {
+    one: 'project',
+    oneField: 'references',
+    oneFieldLabel: 'References',
+    oneFieldIcon: 'IconQuote',
+    many: 'reference',
+    manyField: 'project',
+    manyFieldLabel: 'Project',
+    manyFieldIcon: 'IconFolder',
+  },
+  // Journal template ↔ manuscripts targeting that format.
+  {
+    one: 'journalTemplate',
+    oneField: 'manuscripts',
+    oneFieldLabel: 'Manuscripts',
+    oneFieldIcon: 'IconBook',
+    many: 'manuscript',
+    manyField: 'targetJournal',
+    manyFieldLabel: 'Target journal',
+    manyFieldIcon: 'IconLayoutBoardSplit',
+  },
+  // Dataset ↔ figures plotted from it (a way images are added).
+  {
+    one: 'dataset',
+    oneField: 'figures',
+    oneFieldLabel: 'Figures',
+    oneFieldIcon: 'IconPhoto',
+    many: 'figure',
+    manyField: 'dataset',
+    manyFieldLabel: 'Dataset',
+    manyFieldIcon: 'IconDatabaseExport',
+  },
+  // Section ↔ figures anchored in it (for placement/ordering).
+  {
+    one: 'manuscriptSection',
+    oneField: 'figures',
+    oneFieldLabel: 'Figures',
+    oneFieldIcon: 'IconPhoto',
+    many: 'figure',
+    manyField: 'section',
+    manyFieldLabel: 'Section',
+    manyFieldIcon: 'IconFileText',
+  },
 ];

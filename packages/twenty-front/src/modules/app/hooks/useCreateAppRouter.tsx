@@ -37,6 +37,14 @@ const DiscoveryPage = lazy(() =>
   })),
 );
 
+const ManuscriptComposerPage = lazy(() =>
+  import('@/local-db/research/components/ManuscriptComposerPage').then(
+    (module) => ({
+      default: module.ManuscriptComposerPage,
+    }),
+  ),
+);
+
 const RecordShowPage = lazy(() =>
   import('~/pages/object-record/RecordShowPage').then((module) => ({
     default: module.RecordShowPage,
@@ -317,6 +325,14 @@ export const useCreateAppRouter = (
             element={
               <LazyRoute>
                 <DiscoveryPage />
+              </LazyRoute>
+            }
+          />
+          <Route
+            path="/compose"
+            element={
+              <LazyRoute>
+                <ManuscriptComposerPage />
               </LazyRoute>
             }
           />

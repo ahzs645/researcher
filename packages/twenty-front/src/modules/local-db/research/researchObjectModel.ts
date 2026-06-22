@@ -150,6 +150,130 @@ const CANONICAL_CONTENT_OPTIONS: ResearchSelectOption[] = [
   { value: 'OTHER', label: 'Other', color: 'gray' },
 ];
 
+// ── Manuscript authoring ──────────────────────────────────────────────────
+// Sections of a paper. Front/back matter, the IMRaD body, and a dedicated
+// SUPPLEMENT bucket whose figures/tables number separately (S1, S2…).
+const MANUSCRIPT_SECTION_TYPE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'TITLE_PAGE', label: 'Title page', color: 'gray' },
+  { value: 'ABSTRACT', label: 'Abstract', color: 'blue' },
+  { value: 'KEYWORDS', label: 'Keywords', color: 'sky' },
+  { value: 'INTRODUCTION', label: 'Introduction', color: 'turquoise' },
+  {
+    value: 'BACKGROUND',
+    label: 'Background / related work',
+    color: 'turquoise',
+  },
+  { value: 'METHODS', label: 'Methods', color: 'purple' },
+  { value: 'RESULTS', label: 'Results', color: 'green' },
+  { value: 'DISCUSSION', label: 'Discussion', color: 'pink' },
+  { value: 'CONCLUSION', label: 'Conclusion', color: 'blue' },
+  { value: 'ACKNOWLEDGMENTS', label: 'Acknowledgments', color: 'gray' },
+  { value: 'FUNDING', label: 'Funding statement', color: 'orange' },
+  {
+    value: 'AUTHOR_CONTRIBUTIONS',
+    label: 'Author contributions',
+    color: 'sky',
+  },
+  { value: 'CONFLICTS', label: 'Conflicts of interest', color: 'red' },
+  {
+    value: 'DATA_AVAILABILITY',
+    label: 'Data availability',
+    color: 'turquoise',
+  },
+  { value: 'ETHICS', label: 'Ethics statement', color: 'orange' },
+  { value: 'REFERENCES', label: 'References', color: 'gray' },
+  { value: 'SUPPLEMENT', label: 'Supplementary material', color: 'purple' },
+  { value: 'APPENDIX', label: 'Appendix', color: 'gray' },
+  { value: 'OTHER', label: 'Other', color: 'gray' },
+];
+
+// Where a section/asset sits in the document. Drives ordering and — for
+// SUPPLEMENT — a separate, prefixed numbering sequence.
+const PLACEMENT_OPTIONS: ResearchSelectOption[] = [
+  { value: 'FRONT_MATTER', label: 'Front matter', color: 'sky' },
+  { value: 'MAIN', label: 'Main text', color: 'green' },
+  { value: 'BACK_MATTER', label: 'Back matter', color: 'gray' },
+  { value: 'SUPPLEMENT', label: 'Supplement', color: 'purple' },
+];
+
+const ASSET_PLACEMENT_OPTIONS: ResearchSelectOption[] = [
+  { value: 'MAIN', label: 'Main text', color: 'green' },
+  { value: 'SUPPLEMENT', label: 'Supplement', color: 'purple' },
+];
+
+// What kind of numbered, captioned asset this is. Each kind keeps its own
+// counter (Figure 1, Table 1, Scheme 1…), per journal convention.
+const ASSET_KIND_OPTIONS: ResearchSelectOption[] = [
+  { value: 'FIGURE', label: 'Figure', color: 'blue' },
+  { value: 'TABLE', label: 'Table', color: 'green' },
+  { value: 'SCHEME', label: 'Scheme', color: 'purple' },
+  { value: 'BOX', label: 'Box', color: 'orange' },
+  { value: 'EQUATION', label: 'Equation', color: 'pink' },
+];
+
+// How the image got here — the modular "ways images are added".
+const IMAGE_SOURCE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'UPLOAD', label: 'Uploaded file', color: 'blue' },
+  { value: 'URL', label: 'External URL', color: 'sky' },
+  { value: 'DATASET', label: 'From a dataset', color: 'turquoise' },
+  { value: 'GENERATED', label: 'Generated / plotted', color: 'purple' },
+  { value: 'NONE', label: 'No image yet', color: 'gray' },
+];
+
+// Draft lifecycle shared by sections.
+const DRAFT_STATUS_OPTIONS: ResearchSelectOption[] = [
+  { value: 'NOT_STARTED', label: 'Not started', color: 'gray' },
+  { value: 'DRAFTING', label: 'Drafting', color: 'yellow' },
+  { value: 'IN_REVIEW', label: 'In review', color: 'orange' },
+  { value: 'FINAL', label: 'Final', color: 'green' },
+];
+
+// CSL item types (stored verbatim in cslJson; this SELECT is the friendly
+// picker). Values are UPPER_SNAKE GraphQL-safe; the real CSL type with hyphens
+// lives in the cslJson blob.
+const CSL_TYPE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'ARTICLE_JOURNAL', label: 'Journal article', color: 'blue' },
+  { value: 'PAPER_CONFERENCE', label: 'Conference paper', color: 'sky' },
+  { value: 'BOOK', label: 'Book', color: 'turquoise' },
+  { value: 'CHAPTER', label: 'Book chapter', color: 'green' },
+  { value: 'THESIS', label: 'Thesis', color: 'purple' },
+  { value: 'REPORT', label: 'Report', color: 'orange' },
+  { value: 'DATASET', label: 'Dataset', color: 'pink' },
+  { value: 'WEBPAGE', label: 'Web page', color: 'gray' },
+  { value: 'PREPRINT', label: 'Preprint', color: 'sky' },
+  { value: 'SOFTWARE', label: 'Software', color: 'turquoise' },
+  { value: 'OTHER', label: 'Other', color: 'gray' },
+];
+
+// How asset numbers run: one sequence for the whole paper, or restart per
+// top-level section (e.g. 1.1, 1.2 — Methods figures vs Results figures).
+const NUMBERING_SCOPE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'CONTINUOUS', label: 'Continuous (1, 2, 3…)', color: 'blue' },
+  { value: 'PER_SECTION', label: 'Per section (1.1, 1.2…)', color: 'purple' },
+];
+
+const CAPTION_POSITION_OPTIONS: ResearchSelectOption[] = [
+  { value: 'ABOVE', label: 'Above', color: 'sky' },
+  { value: 'BELOW', label: 'Below', color: 'green' },
+];
+
+// In-text citation rendering mode — the journal's house style.
+const CITATION_MODE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'NUMERIC', label: 'Numeric [1]', color: 'blue' },
+  { value: 'NUMERIC_SUPERSCRIPT', label: 'Superscript ¹', color: 'sky' },
+  { value: 'AUTHOR_DATE', label: 'Author–date (Smith, 2020)', color: 'green' },
+  { value: 'AUTHOR_NUMBER', label: 'Author–number', color: 'turquoise' },
+];
+
+const OUTPUT_FORMAT_OPTIONS: ResearchSelectOption[] = [
+  { value: 'DOCX', label: 'Word (DOCX)', color: 'blue' },
+  { value: 'PDF', label: 'PDF', color: 'red' },
+  { value: 'LATEX', label: 'LaTeX', color: 'green' },
+  { value: 'JATS', label: 'JATS XML', color: 'purple' },
+  { value: 'MARKDOWN', label: 'Markdown', color: 'gray' },
+  { value: 'HTML', label: 'HTML', color: 'orange' },
+];
+
 export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
   {
     nameSingular: 'researchTeam',
@@ -1346,6 +1470,354 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
       'funder',
       'timesUsed',
       'wordCount',
+    ],
+  },
+  {
+    nameSingular: 'manuscriptSection',
+    namePlural: 'manuscriptSections',
+    labelSingular: 'Manuscript section',
+    labelPlural: 'Manuscript sections',
+    navSection: 'WORK',
+    icon: 'IconFileText',
+    description: 'A section of a paper, authored in the composer',
+    navColor: 'blue',
+    nameFieldLabel: 'Section title',
+    nameFieldIcon: 'IconFileText',
+    fields: [
+      {
+        name: 'sectionType',
+        label: 'Section type',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: MANUSCRIPT_SECTION_TYPE_OPTIONS,
+      },
+      {
+        name: 'placement',
+        label: 'Placement',
+        type: 'SELECT',
+        icon: 'IconLayoutDistributeHorizontal',
+        description: 'Front matter, main text, back matter, or supplement',
+        options: PLACEMENT_OPTIONS,
+      },
+      {
+        name: 'content',
+        label: 'Content (Markdown)',
+        type: 'TEXT',
+        icon: 'IconMarkdown',
+        description:
+          'Markdown body. Math as $…$, citations as [@key], cross-refs as [#fig:label].',
+      },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: DRAFT_STATUS_OPTIONS,
+      },
+      {
+        name: 'orderIndex',
+        label: 'Order',
+        type: 'NUMBER',
+        icon: 'IconSortAscendingNumbers',
+      },
+      {
+        name: 'wordLimit',
+        label: 'Word limit',
+        type: 'NUMBER',
+        icon: 'IconRuler2',
+      },
+      {
+        name: 'wordCount',
+        label: 'Word count',
+        type: 'NUMBER',
+        icon: 'IconLetterCase',
+      },
+      {
+        name: 'includeInExport',
+        label: 'Include in export',
+        type: 'BOOLEAN',
+        icon: 'IconFileExport',
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'manuscript',
+      'sectionType',
+      'placement',
+      'status',
+      'orderIndex',
+      'wordCount',
+    ],
+  },
+  {
+    nameSingular: 'figure',
+    namePlural: 'figures',
+    labelSingular: 'Figure',
+    labelPlural: 'Figures',
+    navSection: 'WORK',
+    icon: 'IconPhoto',
+    description: 'A numbered, captioned figure, table, or scheme in a paper',
+    navColor: 'turquoise',
+    nameFieldLabel: 'Title',
+    nameFieldIcon: 'IconPhoto',
+    fields: [
+      {
+        name: 'assetKind',
+        label: 'Kind',
+        type: 'SELECT',
+        icon: 'IconShape',
+        description: 'Figure, table, scheme… each numbered in its own sequence',
+        options: ASSET_KIND_OPTIONS,
+      },
+      {
+        name: 'placement',
+        label: 'Placement',
+        type: 'SELECT',
+        icon: 'IconLayoutDistributeHorizontal',
+        description: 'Main text (Figure 1) or supplement (Figure S1)',
+        options: ASSET_PLACEMENT_OPTIONS,
+      },
+      {
+        name: 'refKey',
+        label: 'Reference key',
+        type: 'TEXT',
+        icon: 'IconHash',
+        description: 'Slug used in cross-refs, e.g. arpes → [#fig:arpes]',
+      },
+      {
+        name: 'caption',
+        label: 'Caption',
+        type: 'TEXT',
+        icon: 'IconFileDescription',
+      },
+      {
+        name: 'imageSource',
+        label: 'Image source',
+        type: 'SELECT',
+        icon: 'IconPhotoUp',
+        options: IMAGE_SOURCE_OPTIONS,
+      },
+      {
+        name: 'imageUrl',
+        label: 'Image',
+        type: 'TEXT',
+        icon: 'IconLink',
+        description: 'External URL or data-URL of the uploaded image',
+      },
+      {
+        name: 'altText',
+        label: 'Alt text',
+        type: 'TEXT',
+        icon: 'IconAccessible',
+      },
+      {
+        name: 'credit',
+        label: 'Credit / license',
+        type: 'TEXT',
+        icon: 'IconLicense',
+      },
+      {
+        name: 'widthPercent',
+        label: 'Width (%)',
+        type: 'NUMBER',
+        icon: 'IconRulerMeasure',
+      },
+      {
+        name: 'orderIndex',
+        label: 'Order',
+        type: 'NUMBER',
+        icon: 'IconSortAscendingNumbers',
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'manuscript',
+      'assetKind',
+      'placement',
+      'refKey',
+      'caption',
+      'imageSource',
+    ],
+  },
+  {
+    nameSingular: 'reference',
+    namePlural: 'references',
+    labelSingular: 'Reference',
+    labelPlural: 'References',
+    navSection: 'WORK',
+    icon: 'IconQuote',
+    description: 'A bibliography entry (stored as CSL JSON) cited in a paper',
+    navColor: 'gray',
+    nameFieldLabel: 'Title',
+    nameFieldIcon: 'IconQuote',
+    fields: [
+      {
+        name: 'citationKey',
+        label: 'Citation key',
+        type: 'TEXT',
+        icon: 'IconHash',
+        description: 'Stable key used in text as [@key]',
+      },
+      {
+        name: 'cslType',
+        label: 'Type',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: CSL_TYPE_OPTIONS,
+      },
+      { name: 'authors', label: 'Authors', type: 'TEXT', icon: 'IconUsers' },
+      { name: 'year', label: 'Year', type: 'NUMBER', icon: CALENDAR_ICON },
+      {
+        name: 'containerTitle',
+        label: 'Journal / book',
+        type: 'TEXT',
+        icon: 'IconBook',
+      },
+      {
+        name: 'volume',
+        label: 'Volume',
+        type: 'TEXT',
+        icon: 'IconNumbers',
+      },
+      { name: 'issue', label: 'Issue', type: 'TEXT', icon: 'IconNumbers' },
+      { name: 'pages', label: 'Pages', type: 'TEXT', icon: 'IconFileText' },
+      { name: 'doi', label: 'DOI', type: 'TEXT', icon: 'IconId' },
+      { name: 'url', label: 'URL', type: 'TEXT', icon: 'IconLink' },
+      {
+        name: 'cslJson',
+        label: 'CSL JSON',
+        type: 'TEXT',
+        icon: 'IconBraces',
+        description: 'Full CSL-JSON item — the source of truth for formatting',
+      },
+      {
+        name: 'zoteroKey',
+        label: 'Zotero key',
+        type: 'TEXT',
+        icon: 'IconExternalLink',
+        description: 'Provenance if imported from Zotero',
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'citationKey',
+      'cslType',
+      'authors',
+      'year',
+      'containerTitle',
+      'doi',
+    ],
+  },
+  {
+    nameSingular: 'journalTemplate',
+    namePlural: 'journalTemplates',
+    labelSingular: 'Journal template',
+    labelPlural: 'Journal templates',
+    navSection: 'WORK',
+    icon: 'IconLayoutBoardSplit',
+    description: 'A target journal format: citation style + numbering + layout',
+    navColor: 'orange',
+    nameFieldLabel: 'Journal / format name',
+    nameFieldIcon: 'IconLayoutBoardSplit',
+    fields: [
+      {
+        name: 'citationMode',
+        label: 'Citation style',
+        type: 'SELECT',
+        icon: 'IconQuote',
+        options: CITATION_MODE_OPTIONS,
+      },
+      {
+        name: 'citationStyleId',
+        label: 'CSL style id',
+        type: 'TEXT',
+        icon: 'IconFileTypeXml',
+        description: 'Key into the CSL styles repo, e.g. "nature"',
+      },
+      {
+        name: 'figureLabelFormat',
+        label: 'Figure label',
+        type: 'TEXT',
+        icon: 'IconPhoto',
+        description: 'Template, e.g. "Figure {n}" or "Fig. {n}"',
+      },
+      {
+        name: 'tableLabelFormat',
+        label: 'Table label',
+        type: 'TEXT',
+        icon: 'IconTable',
+        description: 'Template, e.g. "Table {n}"',
+      },
+      {
+        name: 'supplementPrefix',
+        label: 'Supplement prefix',
+        type: 'TEXT',
+        icon: 'IconLetterS',
+        description: 'Prefix for supplementary items, e.g. "S" → Figure S1',
+      },
+      {
+        name: 'numberingScope',
+        label: 'Numbering',
+        type: 'SELECT',
+        icon: 'IconSortAscendingNumbers',
+        options: NUMBERING_SCOPE_OPTIONS,
+      },
+      {
+        name: 'crossRefFormat',
+        label: 'Cross-ref format',
+        type: 'TEXT',
+        icon: 'IconArrowsExchange',
+        description: 'How [#fig:x] renders in text, e.g. "Figure {n}"',
+      },
+      {
+        name: 'figureCaptionPosition',
+        label: 'Figure caption',
+        type: 'SELECT',
+        icon: 'IconAlignBoxLeftBottom',
+        options: CAPTION_POSITION_OPTIONS,
+      },
+      {
+        name: 'tableCaptionPosition',
+        label: 'Table caption',
+        type: 'SELECT',
+        icon: 'IconAlignBoxLeftTop',
+        options: CAPTION_POSITION_OPTIONS,
+      },
+      {
+        name: 'abstractWordLimit',
+        label: 'Abstract word limit',
+        type: 'NUMBER',
+        icon: 'IconRuler2',
+      },
+      {
+        name: 'twoColumn',
+        label: 'Two-column layout',
+        type: 'BOOLEAN',
+        icon: 'IconColumns2',
+      },
+      {
+        name: 'referenceDocUrl',
+        label: 'Reference DOCX',
+        type: 'TEXT',
+        icon: 'IconFileTypeDocx',
+        description: 'Word template whose named styles the export maps onto',
+      },
+      {
+        name: 'outputFormats',
+        label: 'Output formats',
+        type: 'MULTI_SELECT',
+        icon: 'IconFileExport',
+        options: OUTPUT_FORMAT_OPTIONS,
+        readOnly: true,
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'citationMode',
+      'numberingScope',
+      'figureLabelFormat',
+      'citationStyleId',
+      'twoColumn',
     ],
   },
 ];

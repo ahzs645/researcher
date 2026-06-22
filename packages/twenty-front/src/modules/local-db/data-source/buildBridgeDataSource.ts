@@ -94,7 +94,9 @@ export const getBridgeDataSource = () => {
       //   4 → 5  applicantProfile / applicationSection / reusableAnswer objects,
       //          project↔application + opportunity provenance relations, and
       //          opportunityKind/eligibility fields
-      schemaVersion: 5,
+      //   5 → 6  manuscript authoring: manuscriptSection / figure / reference /
+      //          journalTemplate objects + their relations
+      schemaVersion: 6,
     });
   }
   return cachedDataSource;

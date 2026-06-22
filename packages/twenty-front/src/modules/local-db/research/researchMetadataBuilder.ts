@@ -11,6 +11,9 @@ import { RESEARCH_RELATIONS } from './researchRelations';
 // Internal route the "Find grants" nav link points at (the Discovery page).
 export const RESEARCH_DISCOVERY_PATH = '/discovery';
 
+// Internal route the "Compose paper" nav link points at (the manuscript composer).
+export const RESEARCH_COMPOSE_PATH = '/compose';
+
 const SPEC_BY_NAME = new Map(
   RESEARCH_OBJECT_SPECS.map((spec) => [spec.nameSingular, spec]),
 );
@@ -536,6 +539,27 @@ const buildDiscoveryLinkItem = () => ({
   targetRecordIdentifier: null,
 });
 
+// An internal LINK item opening the manuscript composer, at the bottom of the
+// Work folder (high position so it sits under the Work object items).
+const buildComposeLinkItem = () => ({
+  id: researchDeterministicUuid('research:nav:link:compose'),
+  userWorkspaceId: null,
+  targetRecordId: null,
+  targetObjectMetadataId: null,
+  viewId: null,
+  folderId: RESEARCH_NAV_FOLDER_IDS.WORK,
+  type: 'LINK',
+  name: 'Compose paper',
+  link: RESEARCH_COMPOSE_PATH,
+  icon: 'IconPencil',
+  color: 'blue',
+  position: 100,
+  applicationId: CORE_APPLICATION_ID,
+  createdAt: SEED_TIMESTAMP,
+  updatedAt: SEED_TIMESTAMP,
+  targetRecordIdentifier: null,
+});
+
 export const buildResearchNavigationMenuItems = (
   workspaceMode: WorkspaceMode = 'LAB',
 ) => {
@@ -556,6 +580,7 @@ export const buildResearchNavigationMenuItems = (
     ...RESEARCH_NAV_FOLDERS.map(buildResearchNavFolder),
     ...objectItems,
     buildDiscoveryLinkItem(),
+    buildComposeLinkItem(),
   ];
 };
 

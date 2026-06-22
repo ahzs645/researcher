@@ -1,5 +1,6 @@
-import { type ManuscriptBundle } from './manuscriptAssembly';
+import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import { blocknoteDocxExporter } from './manuscriptDocxExport';
+import { blocknotePdfExporter } from './manuscriptPdfExport';
 
 // Pluggable export. Every exporter consumes the one `ManuscriptBundle` and
 // returns downloadable files, so the engine is a registry entry, not a rewrite.
@@ -25,13 +26,6 @@ export type ManuscriptExporter = {
   offline: boolean;
   export: (bundle: ManuscriptBundle) => Promise<ExportFile[]>;
 };
-
-const slugify = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-    .slice(0, 60) || 'manuscript';
 
 // Build the YAML front-matter Pandoc/Quarto reads (title, author, abstract,
 // bibliography + csl pointers). This is what makes the .md bundle a turnkey
@@ -62,7 +56,7 @@ export const markdownBundleExporter: ManuscriptExporter = {
   formats: ['MARKDOWN', 'JSON'],
   offline: true,
   export: async (bundle) => {
-    const base = slugify(bundle.metadata.title);
+    const base = slugifyTitle(bundle.metadata.title);
     const document = [buildFrontMatter(bundle), '', bundle.fullMarkdown].join(
       '\n',
     );
@@ -86,6 +80,7 @@ export const markdownBundleExporter: ManuscriptExporter = {
 // button per exporter and shows its formats + offline badge.
 export const getManuscriptExporters = (): ManuscriptExporter[] => [
   blocknoteDocxExporter,
+  blocknotePdfExporter,
   markdownBundleExporter,
 ];
 

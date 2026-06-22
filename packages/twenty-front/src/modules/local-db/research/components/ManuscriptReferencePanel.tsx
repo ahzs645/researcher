@@ -9,6 +9,12 @@ import {
   parseReferences,
   type ReferenceDraft,
 } from '@/local-db/research/manuscript/manuscriptReferenceImport';
+import {
+  isZoteroConfigComplete,
+  parseZoteroCslResponse,
+  zoteroItemsUrl,
+  type ZoteroConfig,
+} from '@/local-db/research/manuscript/manuscriptZoteroImport';
 import { type ReferenceLike } from '@/local-db/research/manuscript/manuscriptTypes';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
@@ -72,6 +78,13 @@ const StyledActions = styled.div`
   gap: ${themeCssVariables.spacing[2]};
 `;
 
+const StyledSubhead = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.medium};
+  margin-top: ${themeCssVariables.spacing[2]};
+`;
+
 export const ManuscriptReferencePanel = ({
   manuscriptId,
   projectId,
@@ -85,6 +98,11 @@ export const ManuscriptReferencePanel = ({
 
   const [pasteText, setPasteText] = useState('');
   const [doi, setDoi] = useState('');
+  const [zotero, setZotero] = useState<ZoteroConfig>({
+    apiKey: '',
+    libraryType: 'users',
+    libraryId: '',
+  });
   const [isBusy, setIsBusy] = useState(false);
 
   const createFromDrafts = async (drafts: ReferenceDraft[]) => {
@@ -141,6 +159,37 @@ export const ManuscriptReferencePanel = ({
     }
   };
 
+  const importZotero = async () => {
+    if (isBusy || !isZoteroConfigComplete(zotero)) return;
+    setIsBusy(true);
+    try {
+      const response = await fetch(zoteroItemsUrl(zotero));
+      if (!response.ok) {
+        enqueueErrorSnackBar({
+          message: `Zotero import failed (${response.status})`,
+        });
+        return;
+      }
+      const drafts = parseZoteroCslResponse(await response.json());
+      if (drafts.length === 0) {
+        enqueueErrorSnackBar({
+          message: 'No references in that Zotero library',
+        });
+        return;
+      }
+      await createFromDrafts(drafts);
+      enqueueSuccessSnackBar({
+        message: `Imported ${drafts.length} reference(s) from Zotero`,
+      });
+    } catch {
+      enqueueErrorSnackBar({
+        message: 'Could not reach Zotero — check the key/library id',
+      });
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   return (
     <StyledPanel>
       {references.map((reference) => (
@@ -176,6 +225,50 @@ export const ManuscriptReferencePanel = ({
         size="small"
         disabled={isBusy || pasteText.trim().length === 0}
         onClick={importPaste}
+      />
+
+      <StyledSubhead>Zotero library</StyledSubhead>
+      <StyledActions>
+        <select
+          value={zotero.libraryType}
+          onChange={(event) =>
+            setZotero((previous) => ({
+              ...previous,
+              libraryType: event.target.value as ZoteroConfig['libraryType'],
+            }))
+          }
+        >
+          <option value="users">User</option>
+          <option value="groups">Group</option>
+        </select>
+        <StyledInput
+          placeholder="Library ID"
+          value={zotero.libraryId}
+          onChange={(event) =>
+            setZotero((previous) => ({
+              ...previous,
+              libraryId: event.target.value,
+            }))
+          }
+        />
+      </StyledActions>
+      <StyledInput
+        type="password"
+        placeholder="Zotero API key"
+        value={zotero.apiKey}
+        onChange={(event) =>
+          setZotero((previous) => ({
+            ...previous,
+            apiKey: event.target.value,
+          }))
+        }
+      />
+      <Button
+        title="Import from Zotero"
+        variant="secondary"
+        size="small"
+        disabled={isBusy || !isZoteroConfigComplete(zotero)}
+        onClick={importZotero}
       />
     </StyledPanel>
   );

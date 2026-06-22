@@ -48,6 +48,13 @@ const CSL_TYPE_REVERSE: Record<string, string> = {
   OTHER: 'article-journal',
 };
 
+export const slugifyTitle = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 60) || 'manuscript';
+
 export const countWords = (markdown: string): number => {
   const text = markdown
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ') // images

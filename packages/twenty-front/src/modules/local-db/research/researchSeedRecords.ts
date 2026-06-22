@@ -1453,6 +1453,201 @@ const figureRecords = (): SeedRecord[] => [
   }),
 ];
 
+// The membership roster: who is on which project, so the lab can see several
+// people sharing a project and one person carrying several. Sofia leads the
+// topological project but also helps on cryo; Maya (the PI) spans all three.
+const projectMembershipRecords = (): SeedRecord[] => [
+  makeRecord('projectMembership', 'sofia-topological', 0, {
+    name: 'Sofia — Topological insulators',
+    researcherId: RESEARCHER.sofia,
+    projectId: PROJECT.topological,
+    role: 'LEAD',
+    status: 'ACTIVE',
+    allocationPercent: 70,
+    responsibilities: 'Thin-film growth, characterization, thesis lead',
+    startDate: '2025-09-01T00:00:00.000Z',
+    endDate: null,
+    notes: '',
+  }),
+  makeRecord('projectMembership', 'maya-topological', 1, {
+    name: 'Maya — Topological insulators',
+    researcherId: RESEARCHER.maya,
+    projectId: PROJECT.topological,
+    role: 'CO_INVESTIGATOR',
+    status: 'ACTIVE',
+    allocationPercent: 20,
+    responsibilities: 'Supervision, grant reporting',
+    startDate: '2025-09-01T00:00:00.000Z',
+    endDate: null,
+    notes: '',
+  }),
+  makeRecord('projectMembership', 'liam-spintronic', 2, {
+    name: 'Liam — Spintronic memory',
+    researcherId: RESEARCHER.liam,
+    projectId: PROJECT.spintronic,
+    role: 'LEAD',
+    status: 'ACTIVE',
+    allocationPercent: 60,
+    responsibilities: 'Device prototyping, measurements',
+    startDate: '2026-01-15T00:00:00.000Z',
+    endDate: null,
+    notes: '',
+  }),
+  makeRecord('projectMembership', 'sofia-cryo', 3, {
+    name: 'Sofia — Cryo platform',
+    researcherId: RESEARCHER.sofia,
+    projectId: PROJECT.cryo,
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    allocationPercent: 15,
+    responsibilities: 'Low-temperature measurement setup',
+    startDate: null,
+    endDate: null,
+    notes: 'Shows one person carrying more than one project.',
+  }),
+  makeRecord('projectMembership', 'maya-cryo', 4, {
+    name: 'Maya — Cryo platform',
+    researcherId: RESEARCHER.maya,
+    projectId: PROJECT.cryo,
+    role: 'LEAD',
+    status: 'ACTIVE',
+    allocationPercent: 10,
+    responsibilities: 'Infrastructure grant lead',
+    startDate: null,
+    endDate: null,
+    notes: '',
+  }),
+];
+
+// The obligations each person owes — the "things you have to do" tracker. The
+// NSERC grant drives an annual progress report; the project carries an ethics
+// renewal; the spintronic grant has a financial report.
+const OBLIGATION = {
+  nsercProgress: recordId('obligation', 'nserc-progress-2026'),
+  ethicsRenewal: recordId('obligation', 'topological-ethics-2026'),
+  cihrFinancial: recordId('obligation', 'cihr-financial-q1'),
+  dataPlan: recordId('obligation', 'spintronic-dmp'),
+};
+
+const obligationRecords = (): SeedRecord[] => [
+  makeRecord('obligation', 'nserc-progress-2026', 0, {
+    name: '2026 annual progress report',
+    obligationType: 'PROGRESS_REPORT',
+    status: 'IN_PROGRESS',
+    priority: 'HIGH',
+    reportingPeriod: '2026',
+    recurrence: 'ANNUAL',
+    assigneeId: RESEARCHER.maya,
+    projectId: PROJECT.topological,
+    grantId: recordId('grant', 'nserc-discovery'),
+    dueDate: '2026-12-31T00:00:00.000Z',
+    periodStart: '2026-01-01T00:00:00.000Z',
+    periodEnd: '2026-12-31T00:00:00.000Z',
+    submittedAt: null,
+    completedAt: null,
+    keywords: ['progress report', '2026', 'NSERC', 'topological insulators'],
+    notes: 'Year-1 report for the Discovery grant.',
+  }),
+  makeRecord('obligation', 'topological-ethics-2026', 1, {
+    name: 'Ethics certificate renewal',
+    obligationType: 'ETHICS_RENEWAL',
+    status: 'UPCOMING',
+    priority: 'MEDIUM',
+    reportingPeriod: '2026',
+    recurrence: 'ANNUAL',
+    assigneeId: RESEARCHER.sofia,
+    projectId: PROJECT.topological,
+    grantId: null,
+    dueDate: '2026-08-15T00:00:00.000Z',
+    periodStart: null,
+    periodEnd: null,
+    submittedAt: null,
+    completedAt: null,
+    keywords: ['ethics renewal', '2026', 'topological insulators'],
+    notes: '',
+  }),
+  makeRecord('obligation', 'cihr-financial-q1', 2, {
+    name: 'Q1 2026 financial report',
+    obligationType: 'FINANCIAL_REPORT',
+    status: 'COMPLETE',
+    priority: 'MEDIUM',
+    reportingPeriod: 'Q1 2026',
+    recurrence: 'QUARTERLY',
+    assigneeId: RESEARCHER.liam,
+    projectId: PROJECT.spintronic,
+    grantId: recordId('grant', 'cihr-project'),
+    dueDate: '2026-04-30T00:00:00.000Z',
+    periodStart: '2026-01-01T00:00:00.000Z',
+    periodEnd: '2026-03-31T00:00:00.000Z',
+    submittedAt: '2026-04-22T00:00:00.000Z',
+    completedAt: '2026-04-22T00:00:00.000Z',
+    keywords: ['financial report', 'Q1 2026', 'spintronic memory'],
+    notes: '',
+  }),
+  makeRecord('obligation', 'spintronic-dmp', 3, {
+    name: 'Data management plan',
+    obligationType: 'DATA_MANAGEMENT',
+    status: 'UPCOMING',
+    priority: 'LOW',
+    reportingPeriod: '2026',
+    recurrence: 'ONCE',
+    assigneeId: RESEARCHER.liam,
+    projectId: PROJECT.spintronic,
+    grantId: null,
+    dueDate: '2026-09-30T00:00:00.000Z',
+    periodStart: null,
+    periodEnd: null,
+    submittedAt: null,
+    completedAt: null,
+    keywords: ['data management', '2026', 'spintronic memory'],
+    notes: '',
+  }),
+];
+
+// Uploaded documents for the obligations above. The completed financial report
+// carries its submitted spreadsheet + a receipt; the in-progress report has a
+// working draft. fileUrl would be a data URL after a real upload — kept as a
+// placeholder link in seed data.
+const obligationDocumentRecords = (): SeedRecord[] => [
+  makeRecord('obligationDocument', 'nserc-progress-draft', 0, {
+    name: 'NSERC progress report (draft)',
+    obligationId: OBLIGATION.nsercProgress,
+    documentKind: 'REPORT',
+    fileUrl: 'https://example.org/nserc-progress-2026-draft.pdf',
+    fileType: 'application/pdf',
+    fileSizeKb: 480,
+    keywords: ['progress report', '2026', 'NSERC', 'draft'],
+    summary: 'Progress report for 2026 — NSERC · Topological insulators',
+    uploadedAt: '2026-05-20T00:00:00.000Z',
+    notes: '',
+  }),
+  makeRecord('obligationDocument', 'cihr-financial-xlsx', 1, {
+    name: 'Q1 financial statement',
+    obligationId: OBLIGATION.cihrFinancial,
+    documentKind: 'FINANCIAL',
+    fileUrl: 'https://example.org/cihr-q1-2026-financials.xlsx',
+    fileType:
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    fileSizeKb: 92,
+    keywords: ['financial report', 'Q1 2026', 'budget'],
+    summary: 'Financial report for Q1 2026 — CIHR · Spintronic memory',
+    uploadedAt: '2026-04-22T00:00:00.000Z',
+    notes: '',
+  }),
+  makeRecord('obligationDocument', 'cihr-receipt', 2, {
+    name: 'Equipment receipt',
+    obligationId: OBLIGATION.cihrFinancial,
+    documentKind: 'RECEIPT',
+    fileUrl: 'https://example.org/receipt-probe-station.pdf',
+    fileType: 'application/pdf',
+    fileSizeKb: 41,
+    keywords: ['receipt', 'equipment', 'spintronic memory'],
+    summary: 'Receipt / invoice — Spintronic memory',
+    uploadedAt: '2026-04-22T00:00:00.000Z',
+    notes: '',
+  }),
+];
+
 // Seed map keyed by object `nameSingular`, matching the DataSource seed shape.
 export const getResearchSeedRecords = (): Record<string, SeedRecord[]> => ({
   researchTeam: researchTeamRecords(),
@@ -1474,4 +1669,7 @@ export const getResearchSeedRecords = (): Record<string, SeedRecord[]> => ({
   reference: referenceRecords(),
   manuscriptSection: manuscriptSectionRecords(),
   figure: figureRecords(),
+  projectMembership: projectMembershipRecords(),
+  obligation: obligationRecords(),
+  obligationDocument: obligationDocumentRecords(),
 });

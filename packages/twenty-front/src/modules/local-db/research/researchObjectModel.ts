@@ -274,6 +274,89 @@ const OUTPUT_FORMAT_OPTIONS: ResearchSelectOption[] = [
   { value: 'HTML', label: 'HTML', color: 'orange' },
 ];
 
+// ── Obligations & assignment ───────────────────────────────────────────────
+// The recurring "things a researcher must do" — progress reports, renewals,
+// deliverables — that the obligations tracker manages, plus the roles/role-mix
+// that let several people share a project and one person carry several projects.
+
+// What a researcher is on the hook for. Funder reporting dominates, but ethics
+// renewals and data-management plans are obligations too, so they are first
+// class rather than free text.
+const OBLIGATION_TYPE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'PROGRESS_REPORT', label: 'Progress report', color: 'blue' },
+  { value: 'ANNUAL_REPORT', label: 'Annual report', color: 'sky' },
+  { value: 'INTERIM_REPORT', label: 'Interim report', color: 'turquoise' },
+  { value: 'FINAL_REPORT', label: 'Final report', color: 'green' },
+  { value: 'FINANCIAL_REPORT', label: 'Financial report', color: 'orange' },
+  { value: 'MILESTONE', label: 'Milestone / deliverable', color: 'purple' },
+  { value: 'ETHICS_RENEWAL', label: 'Ethics renewal', color: 'red' },
+  { value: 'DATA_MANAGEMENT', label: 'Data management plan', color: 'yellow' },
+  { value: 'PUBLICATION', label: 'Publication requirement', color: 'pink' },
+  { value: 'TRAINING', label: 'Training / certification', color: 'gray' },
+  { value: 'OTHER', label: 'Other', color: 'gray' },
+];
+
+// Where an obligation sits in its lifecycle, surfaced as a real column so a
+// researcher can see at a glance what is outstanding vs done.
+const OBLIGATION_STATUS_OPTIONS: ResearchSelectOption[] = [
+  { value: 'UPCOMING', label: 'Upcoming', color: 'gray' },
+  { value: 'IN_PROGRESS', label: 'In progress', color: 'blue' },
+  { value: 'SUBMITTED', label: 'Submitted', color: 'purple' },
+  { value: 'COMPLETE', label: 'Complete', color: 'green' },
+  { value: 'OVERDUE', label: 'Overdue', color: 'red' },
+  { value: 'WAIVED', label: 'Waived', color: 'gray' },
+];
+
+// Many obligations repeat on a fixed cadence (annual progress reports, quarterly
+// financials); recording it lets the next instance be generated later.
+const RECURRENCE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'ONCE', label: 'One-time', color: 'gray' },
+  { value: 'MONTHLY', label: 'Monthly', color: 'sky' },
+  { value: 'QUARTERLY', label: 'Quarterly', color: 'blue' },
+  { value: 'SEMI_ANNUAL', label: 'Semi-annual', color: 'turquoise' },
+  { value: 'ANNUAL', label: 'Annual', color: 'green' },
+];
+
+// Shared priority scale (mirrors the grant priority list) so urgent obligations
+// sort to the top of "what do I owe".
+const PRIORITY_OPTIONS: ResearchSelectOption[] = [
+  { value: 'LOW', label: 'Low', color: 'gray' },
+  { value: 'MEDIUM', label: 'Medium', color: 'yellow' },
+  { value: 'HIGH', label: 'High', color: 'orange' },
+  { value: 'CRITICAL', label: 'Critical', color: 'red' },
+];
+
+// What kind of file is attached to an obligation. The AI labeler suggests this
+// from the filename/content; it is editable.
+const DOCUMENT_KIND_OPTIONS: ResearchSelectOption[] = [
+  { value: 'REPORT', label: 'Report', color: 'blue' },
+  { value: 'FINANCIAL', label: 'Financial / budget', color: 'green' },
+  { value: 'APPROVAL', label: 'Approval / certificate', color: 'turquoise' },
+  { value: 'RECEIPT', label: 'Receipt / invoice', color: 'orange' },
+  { value: 'CORRESPONDENCE', label: 'Correspondence', color: 'sky' },
+  { value: 'DATASET', label: 'Data file', color: 'purple' },
+  { value: 'SUPPORTING', label: 'Supporting document', color: 'gray' },
+  { value: 'OTHER', label: 'Other', color: 'gray' },
+];
+
+// A researcher's role on a project. The roster lets several people share one
+// project (each with a role) and one person carry several projects.
+const MEMBERSHIP_ROLE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'LEAD', label: 'Lead', color: 'blue' },
+  { value: 'CO_INVESTIGATOR', label: 'Co-investigator', color: 'sky' },
+  { value: 'MEMBER', label: 'Member', color: 'turquoise' },
+  { value: 'STUDENT', label: 'Student', color: 'purple' },
+  { value: 'RESEARCH_ASSISTANT', label: 'Research assistant', color: 'green' },
+  { value: 'COLLABORATOR', label: 'Collaborator', color: 'gray' },
+  { value: 'ADVISOR', label: 'Advisor', color: 'orange' },
+];
+
+const MEMBERSHIP_STATUS_OPTIONS: ResearchSelectOption[] = [
+  { value: 'ACTIVE', label: 'Active', color: 'green' },
+  { value: 'INACTIVE', label: 'Inactive', color: 'gray' },
+  { value: 'COMPLETED', label: 'Completed', color: 'blue' },
+];
+
 export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
   {
     nameSingular: 'researchTeam',
@@ -1826,5 +1909,229 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
       'citationStyleId',
       'twoColumn',
     ],
+  },
+  {
+    nameSingular: 'projectMembership',
+    namePlural: 'projectMemberships',
+    labelSingular: 'Project assignment',
+    labelPlural: 'Project assignments',
+    navSection: 'WORK',
+    icon: 'IconUsersPlus',
+    description:
+      'Assigns a researcher to a project (with a role) so several people can share a project and one person can carry several',
+    navColor: 'turquoise',
+    nameFieldLabel: 'Assignment',
+    nameFieldIcon: 'IconUsersPlus',
+    fields: [
+      {
+        name: 'role',
+        label: 'Role',
+        type: 'SELECT',
+        icon: 'IconBriefcase',
+        options: MEMBERSHIP_ROLE_OPTIONS,
+      },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: MEMBERSHIP_STATUS_OPTIONS,
+      },
+      {
+        name: 'allocationPercent',
+        label: 'Time allocation %',
+        type: 'NUMBER',
+        icon: 'IconPercentage',
+        description: 'Share of this person’s effort on the project',
+      },
+      {
+        name: 'responsibilities',
+        label: 'Responsibilities',
+        type: 'TEXT',
+        icon: 'IconChecklist',
+      },
+      {
+        name: 'startDate',
+        label: 'Start date',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      {
+        name: 'endDate',
+        label: 'End date',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'researcher',
+      'project',
+      'role',
+      'status',
+      'allocationPercent',
+    ],
+  },
+  {
+    nameSingular: 'obligation',
+    namePlural: 'obligations',
+    labelSingular: 'Obligation',
+    labelPlural: 'Obligations',
+    navSection: 'WORK',
+    icon: 'IconClipboardCheck',
+    description:
+      'A reporting or compliance obligation a researcher must complete — progress reports, renewals, deliverables — with its documents',
+    navColor: 'red',
+    nameFieldLabel: 'Title',
+    nameFieldIcon: 'IconClipboardCheck',
+    fields: [
+      {
+        name: 'obligationType',
+        label: 'Type',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: OBLIGATION_TYPE_OPTIONS,
+      },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: OBLIGATION_STATUS_OPTIONS,
+      },
+      {
+        name: 'priority',
+        label: 'Priority',
+        type: 'SELECT',
+        icon: 'IconFlag',
+        options: PRIORITY_OPTIONS,
+      },
+      {
+        name: 'reportingPeriod',
+        label: 'Reporting period',
+        type: 'TEXT',
+        icon: 'IconCalendarStats',
+        description: 'The period this covers, e.g. "2026", "Year 2", "Q1 2026"',
+      },
+      {
+        name: 'recurrence',
+        label: 'Recurrence',
+        type: 'SELECT',
+        icon: 'IconRefresh',
+        options: RECURRENCE_OPTIONS,
+      },
+      {
+        name: 'dueDate',
+        label: 'Due date',
+        type: 'DATE_TIME',
+        icon: 'IconCalendarDue',
+      },
+      {
+        name: 'periodStart',
+        label: 'Period start',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      {
+        name: 'periodEnd',
+        label: 'Period end',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      {
+        name: 'submittedAt',
+        label: 'Submitted',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      {
+        name: 'completedAt',
+        label: 'Completed',
+        type: 'DATE_TIME',
+        icon: 'IconCalendarCheck',
+      },
+      {
+        name: 'keywords',
+        label: 'Keywords',
+        type: 'ARRAY',
+        icon: TAG_ICON,
+        description: 'AI-suggested labels/keywords for finding this later',
+        readOnly: true,
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: [
+      'obligationType',
+      'assignee',
+      'project',
+      'status',
+      'reportingPeriod',
+      'dueDate',
+    ],
+  },
+  {
+    nameSingular: 'obligationDocument',
+    namePlural: 'obligationDocuments',
+    labelSingular: 'Obligation document',
+    labelPlural: 'Obligation documents',
+    navSection: 'WORK',
+    icon: 'IconPaperclip',
+    description:
+      'A file uploaded for an obligation (the report, receipts, approvals…), with AI-suggested keywords',
+    navColor: 'gray',
+    nameFieldLabel: 'Document name',
+    nameFieldIcon: 'IconPaperclip',
+    fields: [
+      {
+        name: 'documentKind',
+        label: 'Kind',
+        type: 'SELECT',
+        icon: 'IconCategory',
+        options: DOCUMENT_KIND_OPTIONS,
+      },
+      {
+        name: 'fileUrl',
+        label: 'File',
+        type: 'TEXT',
+        icon: 'IconLink',
+        description: 'Uploaded file (data URL) or external link',
+      },
+      {
+        name: 'fileType',
+        label: 'File type',
+        type: 'TEXT',
+        icon: 'IconFile',
+        description: 'MIME type or extension, e.g. application/pdf',
+      },
+      {
+        name: 'fileSizeKb',
+        label: 'Size (KB)',
+        type: 'NUMBER',
+        icon: 'IconDatabase',
+      },
+      {
+        name: 'keywords',
+        label: 'Keywords',
+        type: 'ARRAY',
+        icon: TAG_ICON,
+        description: 'AI-suggested labels/keywords',
+        readOnly: true,
+      },
+      {
+        name: 'summary',
+        label: 'Summary',
+        type: 'TEXT',
+        icon: TEXT_ICON,
+        description: 'AI-suggested one-line summary',
+      },
+      {
+        name: 'uploadedAt',
+        label: 'Uploaded',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
+    ],
+    defaultColumns: ['obligation', 'documentKind', 'fileType', 'uploadedAt'],
   },
 ];

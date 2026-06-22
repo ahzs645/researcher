@@ -45,6 +45,12 @@ const ManuscriptComposerPage = lazy(() =>
   ),
 );
 
+const ObligationsPage = lazy(() =>
+  import('@/local-db/research/components/ObligationsPage').then((module) => ({
+    default: module.ObligationsPage,
+  })),
+);
+
 const RecordShowPage = lazy(() =>
   import('~/pages/object-record/RecordShowPage').then((module) => ({
     default: module.RecordShowPage,
@@ -333,6 +339,14 @@ export const useCreateAppRouter = (
             element={
               <LazyRoute>
                 <ManuscriptComposerPage />
+              </LazyRoute>
+            }
+          />
+          <Route
+            path="/obligations"
+            element={
+              <LazyRoute>
+                <ObligationsPage />
               </LazyRoute>
             }
           />

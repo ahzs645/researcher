@@ -59,6 +59,11 @@ export const figureToMarkdown = (figure: NumberedFigure): string => {
   if (isNonEmptyString(figure.caption)) captionParts.push(figure.caption);
   lines.push(captionParts.join(' '));
 
+  // Tables render their grid (a GFM Markdown table) under the caption.
+  if (figure.assetKind === 'TABLE' && isNonEmptyString(figure.tableData)) {
+    lines.push(figure.tableData.trim());
+  }
+
   if (isNonEmptyString(figure.credit)) {
     lines.push(`*Credit: ${figure.credit}*`);
   }

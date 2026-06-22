@@ -137,6 +137,48 @@ describe('buildManuscriptBundle', () => {
   });
 });
 
+describe('buildManuscriptBundle — nodes & tables', () => {
+  const bundle = buildManuscriptBundle({
+    manuscript: { id: 'm', name: 'T' },
+    style: { citationMode: 'NUMERIC' },
+    sections: [
+      {
+        id: 's',
+        name: 'Methods',
+        sectionType: 'METHODS',
+        placement: 'MAIN',
+        orderIndex: 0,
+        content: 'See [#tab:grid] for parameters.',
+      },
+    ],
+    figures: [
+      {
+        id: 't',
+        refKey: 'grid',
+        name: 'Grid',
+        caption: 'Growth parameters.',
+        assetKind: 'TABLE',
+        placement: 'MAIN',
+        sectionId: 's',
+        tableData: '| A | B |\n| --- | --- |\n| 1 | 2 |',
+      },
+    ],
+    references: [],
+  });
+
+  it('exposes a neutral document-node model incl. a table node', () => {
+    expect(bundle.nodes.some((node) => node.kind === 'heading')).toBe(true);
+    expect(bundle.nodes.some((node) => node.kind === 'prose')).toBe(true);
+    expect(bundle.nodes.some((node) => node.kind === 'table')).toBe(true);
+  });
+
+  it('renders the table grid and resolves the table cross-ref', () => {
+    expect(bundle.mainMarkdown).toContain('See Table 1 for parameters.');
+    expect(bundle.mainMarkdown).toContain('**Table 1.** Growth parameters.');
+    expect(bundle.mainMarkdown).toContain('| A | B |');
+  });
+});
+
 describe('countWords', () => {
   it('ignores markdown, images, citations and cross-refs', () => {
     expect(countWords('Two words [@k] [#fig:x] ![a](b)')).toBe(2);

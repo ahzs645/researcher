@@ -4,13 +4,17 @@ import { isDefined } from 'twenty-shared/utils';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { describeImageSource } from '@/local-db/research/manuscript/manuscriptImages';
+import {
+  describeImageSource,
+  resolveFigureImage,
+} from '@/local-db/research/manuscript/manuscriptImages';
 import { numberAssets } from '@/local-db/research/manuscript/manuscriptNumbering';
 import {
   type FigureLike,
   type JournalStyle,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
+import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
 // The figure manager: every figure/table/scheme with its live, journal-aware
@@ -60,6 +64,28 @@ const StyledMeta = styled.span`
   font-size: ${themeCssVariables.font.size.xs};
 `;
 
+const StyledThumb = styled.img`
+  border: 1px solid ${themeCssVariables.border.color.light};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  height: 40px;
+  object-fit: cover;
+  width: 56px;
+`;
+
+const StyledTableArea = styled.textarea`
+  background: ${themeCssVariables.background.primary};
+  border: 1px solid ${themeCssVariables.border.color.medium};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.primary};
+  font-family: monospace;
+  font-size: ${themeCssVariables.font.size.xs};
+  margin-top: ${themeCssVariables.spacing[1]};
+  min-height: 56px;
+  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
+  resize: vertical;
+  width: 100%;
+`;
+
 const StyledForm = styled.div`
   border-top: 1px solid ${themeCssVariables.border.color.light};
   display: flex;
@@ -105,6 +131,7 @@ export const ManuscriptFigurePanel = ({
   const { createOneRecord } = useCreateOneRecord({
     objectNameSingular: 'figure',
   });
+  const { updateOneRecord } = useUpdateOneRecord();
   const { enqueueSuccessSnackBar } = useSnackBar();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,7 +139,19 @@ export const ManuscriptFigurePanel = ({
   const [assetKind, setAssetKind] = useState('FIGURE');
   const [placement, setPlacement] = useState('MAIN');
   const [imageUrl, setImageUrl] = useState('');
+  const [tableData, setTableData] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+
+  // Persist an edited table grid (Markdown table) for an existing figure.
+  const persistTable = (figure: FigureLike, value: string) => {
+    if ((figure.tableData ?? '') === value) return;
+    void updateOneRecord({
+      objectNameSingular: 'figure',
+      idToUpdate: figure.id,
+      updateOneRecordInput: { tableData: value },
+    });
+    onChanged();
+  };
 
   // Live numbering — the same pure function the exporter uses, so the panel
   // shows exactly the labels the paper will carry.
@@ -141,11 +180,13 @@ export const ManuscriptFigurePanel = ({
           : imageUrl.trim().length > 0
             ? 'URL'
             : 'NONE',
+        ...(assetKind === 'TABLE' ? { tableData: tableData.trim() } : {}),
         orderIndex: figures.length,
       });
       enqueueSuccessSnackBar({ message: `Added ${assetKind.toLowerCase()}` });
       setCaption('');
       setImageUrl('');
+      setTableData('');
       onChanged();
     } finally {
       setIsAdding(false);
@@ -162,18 +203,34 @@ export const ManuscriptFigurePanel = ({
 
   return (
     <StyledPanel>
-      {numbered.map((figure) => (
-        <StyledRow key={figure.id}>
-          <StyledMain>
-            <StyledLabel>
-              {figure.label} — {figure.name}
-            </StyledLabel>
-            <StyledMeta>
-              [#{figure.refKey ?? figure.id}] · {describeImageSource(figure)}
-            </StyledMeta>
-          </StyledMain>
-        </StyledRow>
-      ))}
+      {numbered.map((figure) => {
+        const image = resolveFigureImage(figure);
+        return (
+          <div key={figure.id}>
+            <StyledRow>
+              <StyledMain>
+                <StyledLabel>
+                  {figure.label} — {figure.name}
+                </StyledLabel>
+                <StyledMeta>
+                  [#{figure.refKey ?? figure.id}] ·{' '}
+                  {describeImageSource(figure)}
+                </StyledMeta>
+              </StyledMain>
+              {image.kind !== 'none' ? (
+                <StyledThumb src={image.src} alt={figure.altText ?? ''} />
+              ) : null}
+            </StyledRow>
+            {figure.assetKind === 'TABLE' ? (
+              <StyledTableArea
+                defaultValue={figure.tableData ?? ''}
+                placeholder={'| Col A | Col B |\n| --- | --- |\n| 1 | 2 |'}
+                onBlur={(event) => persistTable(figure, event.target.value)}
+              />
+            ) : null}
+          </div>
+        );
+      })}
 
       <StyledForm>
         <StyledInput
@@ -199,11 +256,19 @@ export const ManuscriptFigurePanel = ({
             <option value="SUPPLEMENT">Supplement</option>
           </select>
         </StyledActions>
-        <StyledInput
-          placeholder="Image URL (optional)"
-          value={imageUrl}
-          onChange={(event) => setImageUrl(event.target.value)}
-        />
+        {assetKind === 'TABLE' ? (
+          <StyledTableArea
+            placeholder={'| Col A | Col B |\n| --- | --- |\n| 1 | 2 |'}
+            value={tableData}
+            onChange={(event) => setTableData(event.target.value)}
+          />
+        ) : (
+          <StyledInput
+            placeholder="Image URL (optional)"
+            value={imageUrl}
+            onChange={(event) => setImageUrl(event.target.value)}
+          />
+        )}
         <StyledActions>
           <Button
             title="Add"

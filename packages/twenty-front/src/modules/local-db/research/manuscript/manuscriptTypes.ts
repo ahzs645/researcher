@@ -43,6 +43,8 @@ export type FigureLike = {
   widthPercent?: number | null;
   orderIndex?: number | null;
   sectionId?: string | null;
+  // For TABLE assets: the grid as a GFM Markdown table string.
+  tableData?: string | null;
 };
 
 export type ReferenceLike = {

@@ -157,6 +157,7 @@ const FIGURE_GQL = {
   credit: true,
   widthPercent: true,
   orderIndex: true,
+  tableData: true,
   manuscript: { id: true },
   section: { id: true },
 };

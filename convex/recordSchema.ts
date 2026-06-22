@@ -1160,6 +1160,7 @@ export const recordTables = {
     placement: v.optional(v.string()),
     refKey: v.optional(v.string()),
     caption: v.optional(v.string()),
+    tableData: v.optional(v.string()),
     imageSource: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     altText: v.optional(v.string()),

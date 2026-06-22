@@ -155,6 +155,10 @@ export type ManuscriptBundle = {
   bibliography: FormattedBibliographyEntry[];
   citedKeys: string[];
   numberedFigures: NumberedFigure[];
+  // A neutral, render-target-agnostic document model. The Markdown exporter and
+  // the BlockNote/DOCX exporter both consume this, so figures become real
+  // images and tables become real tables in DOCX (not just Markdown text).
+  nodes: ManuscriptDocNode[];
   warnings: string[];
   stats: {
     wordCount: number;
@@ -165,6 +169,19 @@ export type ManuscriptBundle = {
     supplementFigureCount: number;
   };
 };
+
+// One unit of the neutral document model.
+export type ManuscriptDocNode =
+  | { kind: 'heading'; level: 1 | 2 | 3; text: string }
+  | { kind: 'prose'; markdown: string }
+  | { kind: 'figure'; figure: NumberedFigure }
+  | { kind: 'table'; figure: NumberedFigure }
+  | { kind: 'bibliography'; entries: FormattedBibliographyEntry[] };
+
+const figureNode = (figure: NumberedFigure): ManuscriptDocNode =>
+  figure.assetKind === 'TABLE'
+    ? { kind: 'table', figure }
+    : { kind: 'figure', figure };
 
 const renderSectionBody = (
   section: SectionLike,
@@ -243,9 +260,11 @@ export const buildManuscriptBundle = (
     warnings.push(`Citation [@${key}] has no matching reference`);
   }
 
-  // Second pass: render citations and assemble per-placement blocks.
+  // Second pass: render citations and assemble per-placement blocks + nodes.
   const mainBlocks: string[] = [];
   const supplementBlocks: string[] = [];
+  const mainNodes: ManuscriptDocNode[] = [];
+  const supplementNodes: ManuscriptDocNode[] = [];
   let mainWords = 0;
 
   sections.forEach((section, index) => {
@@ -258,8 +277,12 @@ export const buildManuscriptBundle = (
 
     const isSupplement = section.placement === 'SUPPLEMENT';
     const target = isSupplement ? supplementBlocks : mainBlocks;
+    const nodeTarget = isSupplement ? supplementNodes : mainNodes;
     target.push(block);
     for (const figureBlock of figureBlocks) target.push(figureBlock);
+    nodeTarget.push({ kind: 'heading', level: 2, text: part.heading });
+    nodeTarget.push({ kind: 'prose', markdown: withCitations });
+    for (const figure of anchored) nodeTarget.push(figureNode(figure));
 
     // Word-limit checks.
     const words = countWords(section.content ?? '');
@@ -277,9 +300,11 @@ export const buildManuscriptBundle = (
 
   for (const figure of unanchoredMain) {
     mainBlocks.push(figureToMarkdown(figure));
+    mainNodes.push(figureNode(figure));
   }
   for (const figure of supplementFigures) {
     supplementBlocks.push(figureToMarkdown(figure));
+    supplementNodes.push(figureNode(figure));
   }
 
   // Bibliography.
@@ -291,6 +316,14 @@ export const buildManuscriptBundle = (
       ...bibliography.map((entry) => entry.text),
     ].join('\n');
     mainBlocks.push(bibBlock);
+    mainNodes.push({ kind: 'heading', level: 2, text: 'References' });
+    mainNodes.push({ kind: 'bibliography', entries: bibliography });
+  }
+
+  const nodes: ManuscriptDocNode[] = [...mainNodes];
+  if (supplementNodes.length > 0) {
+    nodes.push({ kind: 'heading', level: 1, text: 'Supplementary Material' });
+    nodes.push(...supplementNodes);
   }
 
   const abstractSection = sections.find(
@@ -334,6 +367,7 @@ export const buildManuscriptBundle = (
     bibliography,
     citedKeys,
     numberedFigures: numbered,
+    nodes,
     warnings,
     stats: {
       wordCount: mainWords,

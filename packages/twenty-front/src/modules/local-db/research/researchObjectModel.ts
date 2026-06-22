@@ -1591,6 +1591,13 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconFileDescription',
       },
       {
+        name: 'tableData',
+        label: 'Table content',
+        type: 'TEXT',
+        icon: 'IconTable',
+        description: 'For tables: the grid as a Markdown table (| a | b |…)',
+      },
+      {
         name: 'imageSource',
         label: 'Image source',
         type: 'SELECT',

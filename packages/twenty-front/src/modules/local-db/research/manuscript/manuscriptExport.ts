@@ -1,4 +1,5 @@
 import { type ManuscriptBundle } from './manuscriptAssembly';
+import { blocknoteDocxExporter } from './manuscriptDocxExport';
 
 // Pluggable export. Every exporter consumes the one `ManuscriptBundle` and
 // returns downloadable files, so the engine is a registry entry, not a rewrite.
@@ -11,7 +12,8 @@ import { type ManuscriptBundle } from './manuscriptAssembly';
 export type ExportFile = {
   filename: string;
   mimeType: string;
-  content: string;
+  // Text for Markdown/JSON; a Blob for binary formats (DOCX/PDF).
+  content: string | Blob;
 };
 
 export type ManuscriptExporter = {
@@ -83,13 +85,17 @@ export const markdownBundleExporter: ManuscriptExporter = {
 // The registry. Backends append here as they land; the composer renders one
 // button per exporter and shows its formats + offline badge.
 export const getManuscriptExporters = (): ManuscriptExporter[] => [
+  blocknoteDocxExporter,
   markdownBundleExporter,
 ];
 
 // Trigger a browser download for an export file. Kept out of the pure exporters
 // so they stay testable; the composer calls this with each returned file.
 export const downloadExportFile = (file: ExportFile): void => {
-  const blob = new Blob([file.content], { type: file.mimeType });
+  const blob =
+    file.content instanceof Blob
+      ? file.content
+      : new Blob([file.content], { type: file.mimeType });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

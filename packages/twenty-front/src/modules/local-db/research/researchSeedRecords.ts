@@ -1408,6 +1408,8 @@ const figureRecords = (): SeedRecord[] => [
       'MBE growth parameters: substrate temperature, flux ratio, and growth rate per run.',
     imageSource: 'NONE',
     imageUrl: '',
+    tableData:
+      '| Run | Substrate T (°C) | Se:Bi flux ratio | Rate (nm/min) |\n| --- | --- | --- | --- |\n| A | 220 | 10:1 | 0.8 |\n| B | 240 | 8:1 | 1.1 |\n| C | 200 | 12:1 | 0.6 |',
     altText: '',
     credit: '',
     widthPercent: 100,

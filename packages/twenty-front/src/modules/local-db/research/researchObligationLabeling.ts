@@ -138,11 +138,26 @@ const KIND_HINTS: Array<{ kind: DocumentKind; needles: string[] }> = [
   { kind: 'RECEIPT', needles: ['receipt', 'invoice', 'reimburse'] },
   {
     kind: 'FINANCIAL',
-    needles: ['budget', 'financial', 'finance', 'expense', 'expenditure', 'cost'],
+    needles: [
+      'budget',
+      'financial',
+      'finance',
+      'expense',
+      'expenditure',
+      'cost',
+    ],
   },
   {
     kind: 'APPROVAL',
-    needles: ['ethics', 'approval', 'approved', 'certificate', 'reb', 'consent', 'renewal'],
+    needles: [
+      'ethics',
+      'approval',
+      'approved',
+      'certificate',
+      'reb',
+      'consent',
+      'renewal',
+    ],
   },
   {
     kind: 'CORRESPONDENCE',

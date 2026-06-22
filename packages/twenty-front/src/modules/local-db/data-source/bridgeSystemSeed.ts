@@ -26,7 +26,9 @@ import { mockedViews } from '~/testing/mock-data/generated/metadata/views/mock-v
 // Bump when the nav layout changes (folders, hidden demo objects, repurposed
 // CRM, the Discovery link) so already-seeded visitors rebuild their nav. See
 // `migrateNavLayout`.
-const BRIDGE_NAV_LAYOUT_VERSION = 3;
+//   3 → 4  applicantProfile (Lab) + applicationSection / reusableAnswer (Funding)
+//   4 → 5  manuscript authoring objects (Work) + the Compose link
+const BRIDGE_NAV_LAYOUT_VERSION = 5;
 
 // Default workspace persona until the first-run setup chooses one.
 const DEFAULT_WORKSPACE_MODE: WorkspaceMode = 'LAB';

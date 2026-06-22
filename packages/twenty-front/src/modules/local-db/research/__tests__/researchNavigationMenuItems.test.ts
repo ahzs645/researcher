@@ -132,8 +132,8 @@ describe('research navigation menu items', () => {
       researchObjectMetadataItems as never,
     );
     const folderCount = Object.keys(RESEARCH_NAV_FOLDER_IDS).length;
-    // all research objects + the four folders + the Discovery link survive.
-    expect(kept).toHaveLength(RESEARCH_OBJECT_SPECS.length + folderCount + 1);
+    // all research objects + the four folders + the Discovery & Compose links.
+    expect(kept).toHaveLength(RESEARCH_OBJECT_SPECS.length + folderCount + 2);
     expect(
       kept.some((item) => (item as { name?: string }).name === 'Funding'),
     ).toBe(true);

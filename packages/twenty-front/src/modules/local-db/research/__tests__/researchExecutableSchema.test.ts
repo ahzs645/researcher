@@ -105,7 +105,7 @@ describe('research executable schema', () => {
     expect(data.grants.totalCount).toBe(1);
   });
 
-  it('exposes all 24 ported grant sources and 6 opportunities', async () => {
+  it('exposes all 30 grant sources and 9 opportunities', async () => {
     const client = makeClient();
 
     const result = await client.query({
@@ -125,8 +125,8 @@ describe('research executable schema', () => {
       grantSources: { totalCount: number };
       grantOpportunities: { totalCount: number };
     };
-    expect(data.grantSources.totalCount).toBe(24);
-    expect(data.grantOpportunities.totalCount).toBe(6);
+    expect(data.grantSources.totalCount).toBe(30);
+    expect(data.grantOpportunities.totalCount).toBe(9);
   });
 
   it('resolves relations in both directions', async () => {
@@ -258,6 +258,127 @@ describe('research executable schema', () => {
     );
     expect(statuses).toContain('READY');
     expect(statuses).toContain('NEEDED');
+  });
+
+  it('exposes the reuse objects and resolves application → sections', async () => {
+    const client = makeClient();
+
+    const result = await client.query({
+      query: gql`
+        query Reuse {
+          applicantProfiles {
+            totalCount
+          }
+          applicationSections {
+            totalCount
+          }
+          reusableAnswers {
+            totalCount
+          }
+          grantApplications(filter: { status: { eq: "REVIEWING" } }) {
+            edges {
+              node {
+                name
+                sections {
+                  totalCount
+                }
+                project {
+                  name
+                }
+              }
+            }
+          }
+        }
+      `,
+    });
+
+    const data = result.data as {
+      applicantProfiles: { totalCount: number };
+      applicationSections: { totalCount: number };
+      reusableAnswers: { totalCount: number };
+      grantApplications: {
+        edges: Array<{
+          node: {
+            name: string;
+            sections: { totalCount: number };
+            project: { name: string } | null;
+          };
+        }>;
+      };
+    };
+    expect(data.applicantProfiles.totalCount).toBe(2);
+    expect(data.applicationSections.totalCount).toBe(6);
+    expect(data.reusableAnswers.totalCount).toBe(6);
+    const application = data.grantApplications.edges[0].node;
+    // The CIHR team application has 4 narrative sections and links to a project.
+    expect(application.sections.totalCount).toBe(4);
+    expect(application.project?.name).toBe(
+      'Low-power spintronic memory devices',
+    );
+  });
+
+  it('exposes the manuscript authoring objects and resolves manuscript → sections/figures', async () => {
+    const client = makeClient();
+
+    const result = await client.query({
+      query: gql`
+        query Authoring {
+          journalTemplates {
+            totalCount
+          }
+          references {
+            totalCount
+          }
+          manuscriptSections {
+            totalCount
+          }
+          figures {
+            totalCount
+          }
+          manuscripts(filter: { status: { eq: "DRAFTING" } }) {
+            edges {
+              node {
+                name
+                sections {
+                  totalCount
+                }
+                figures {
+                  totalCount
+                }
+                references {
+                  totalCount
+                }
+              }
+            }
+          }
+        }
+      `,
+    });
+
+    const data = result.data as {
+      journalTemplates: { totalCount: number };
+      references: { totalCount: number };
+      manuscriptSections: { totalCount: number };
+      figures: { totalCount: number };
+      manuscripts: {
+        edges: Array<{
+          node: {
+            name: string;
+            sections: { totalCount: number };
+            figures: { totalCount: number };
+            references: { totalCount: number };
+          };
+        }>;
+      };
+    };
+    expect(data.journalTemplates.totalCount).toBe(3);
+    expect(data.references.totalCount).toBe(5);
+    expect(data.manuscriptSections.totalCount).toBe(7);
+    expect(data.figures.totalCount).toBe(4);
+    const manuscript = data.manuscripts.edges[0].node;
+    expect(manuscript.sections.totalCount).toBe(7);
+    expect(manuscript.figures.totalCount).toBe(4);
+    expect(manuscript.references.totalCount).toBe(5);
   });
 
   it('creates a grant through the schema link', async () => {

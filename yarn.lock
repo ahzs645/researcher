@@ -28602,6 +28602,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"citeproc@npm:^2.4.63":
+  version: 2.4.63
+  resolution: "citeproc@npm:2.4.63"
+  checksum: 10c0/56470784ebb0d06270fc5c6566c4b01f11d7d0c26c7db9d0c8b30938be3490c0bbb278b443136a711729c712a48815fced410f0f57fdefd360fa769f51046bf7
+  languageName: node
+  linkType: hard
+
 "citty@npm:^0.1.6":
   version: 0.1.6
   resolution: "citty@npm:0.1.6"
@@ -54197,6 +54204,7 @@ __metadata:
     apollo-upload-client: "npm:^19.0.0"
     buffer: "npm:^6.0.3"
     chromatic: "npm:^6.18.0"
+    citeproc: "npm:^2.4.63"
     convex: "npm:^1.38.0"
     country-flag-icons: "npm:^1.5.11"
     cron-parser: "npm:5.1.1"

@@ -6,7 +6,13 @@ const objectMetadataItem = {
   id: 'object-1',
   nameSingular: 'project',
   fields: [
-    { id: 'f-name', name: 'name', label: 'Title', type: 'TEXT', isActive: true },
+    {
+      id: 'f-name',
+      name: 'name',
+      label: 'Title',
+      type: 'TEXT',
+      isActive: true,
+    },
     {
       id: 'f-lead',
       name: 'lead',

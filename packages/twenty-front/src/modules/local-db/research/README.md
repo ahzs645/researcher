@@ -64,6 +64,8 @@ parity with `local`.
 - `researchSeedRecords.ts` — a coherent demo dataset across all objects.
 - `researchObligationLabeling.ts` — the AI keyword/label seam for obligation
   documents (deterministic fallback + injectable `AiDocumentLabeler`).
+- `researchObligationRecurrence.ts` — advances a recurring obligation to its
+  next instance (next period label + dates) when one is completed.
 - `bridgeResearchAugmentation.ts` — the single merge point.
 
 ### Funding workflow modules (pure, no backend)
@@ -114,8 +116,11 @@ documents". Three objects (declared like every other, in `researchObjectModel.ts
 
 `ObligationsPage` (route `/obligations`, nav LINK "My obligations" under Work)
 is the focused view: it lists obligations — flat in **solo** mode, grouped by
-person in **lab** mode — lets you add/assign one, upload its documents
-(auto-tagged via `labelObligationDocument`), and flip status.
+person in **lab** mode — lets you add/assign one, upload its documents, and flip
+status. On upload it reads text-based file bodies and runs them through the
+labeler (the `createDocumentLabeler` seam), so keywords come from real content,
+not just the filename. Marking a **recurring** obligation complete auto-creates
+the next instance via `buildNextObligation`.
 
 ## Design constraints (read before adding fields)
 
@@ -149,11 +154,11 @@ When the object set changes, bump the Dexie `schemaVersion` in
   reusable-answer library + retrieval; the canonical applicant profile +
   autofill profile builder; "start application from opportunity" (linked
   application + checklist + sections); the **obligations tracker** (obligation +
-  obligationDocument objects, inline document upload, AI keyword labeling) and
-  the **project-membership roster** (researcher↔project many-to-many).
+  obligationDocument objects, inline document upload, AI keyword labeling from
+  text file bodies, recurring-instance auto-generation) and the
+  **project-membership roster** (researcher↔project many-to-many).
 - **Next (backend-dependent):** swap the deterministic AI seams for live
   Convex/Claude actions (eligibility reading, answer drafting, vector retrieval,
-  document labeling/summarization from the file body); the Convex live
-  source-pull runtime + cron; the autofill review UI wired to the
-  connector-runner; team sharing/persistence (Convex as default); recurring
-  obligation generation from the recurrence cadence.
+  document labeling/summarization from *binary* bodies like PDF/DOCX); the
+  Convex live source-pull runtime + cron; the autofill review UI wired to the
+  connector-runner; team sharing/persistence (Convex as default).

@@ -4,7 +4,11 @@ import { isDefined } from 'twenty-shared/utils';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { labelObligationDocument } from '@/local-db/research/researchObligationLabeling';
+import { createDocumentLabeler } from '@/local-db/research/researchObligationLabeling';
+import {
+  buildNextObligation,
+  isRecurring,
+} from '@/local-db/research/researchObligationRecurrence';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
@@ -23,6 +27,7 @@ type ObligationRecord = {
   reportingPeriod?: string | null;
   recurrence?: string | null;
   dueDate?: string | null;
+  periodStart?: string | null;
   periodEnd?: string | null;
   completedAt?: string | null;
   keywords?: string[] | null;
@@ -75,6 +80,7 @@ const OBLIGATION_GQL_FIELDS = {
   reportingPeriod: true,
   recurrence: true,
   dueDate: true,
+  periodStart: true,
   periodEnd: true,
   completedAt: true,
   keywords: true,
@@ -266,6 +272,32 @@ const fileToDataUrl = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
+// Keep extracted text bounded — enough for keyword mining without bloating.
+const MAX_EXTRACTED_CHARS = 20000;
+
+// Read the document body for text-based files so the labeler tags from real
+// content, not just the filename. Binary formats (PDF/DOCX) need a parser, left
+// to the backend AI seam; here they fall back to filename-only labeling.
+const readFileText = (file: File): Promise<string | null> => {
+  const isTextLike =
+    file.type.startsWith('text/') ||
+    file.type === 'application/json' ||
+    /\.(txt|md|csv|json|tsv|log)$/i.test(file.name);
+  if (!isTextLike) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      resolve(String(reader.result).slice(0, MAX_EXTRACTED_CHARS));
+    reader.onerror = () => resolve(null);
+    reader.readAsText(file);
+  });
+};
+
+// The active document labeler. Routed through the seam so a live Convex/Claude
+// labeler can be dropped in without touching the upload handler; offline it is
+// the deterministic fallback.
+const documentLabeler = createDocumentLabeler();
+
 const formatDate = (value: string | null | undefined): string => {
   if (!isDefined(value) || value.length === 0) return '';
   const date = new Date(value);
@@ -296,7 +328,7 @@ const statusTone = (
 
 export const ObligationsPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadTargetRef = useRef<string | null>(null);
+  const [uploadTargetId, setUploadTargetId] = useState<string | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL');
   const [isUploading, setIsUploading] = useState(false);
 
@@ -392,7 +424,9 @@ export const ObligationsPage = () => {
   // mode there is a single bucket ("Your obligations").
   const groups = useMemo(() => {
     if (isSoloMode) {
-      return [{ key: 'me', label: 'Your obligations', items: visibleObligations }];
+      return [
+        { key: 'me', label: 'Your obligations', items: visibleObligations },
+      ];
     }
     const byAssignee = new Map<string, ObligationRecord[]>();
     for (const obligation of visibleObligations) {
@@ -424,7 +458,9 @@ export const ObligationsPage = () => {
     setNewPeriod('');
     setNewDue('');
     await refetchObligations();
-    enqueueSuccessSnackBar({ message: `Added obligation "${newTitle.trim()}"` });
+    enqueueSuccessSnackBar({
+      message: `Added obligation "${newTitle.trim()}"`,
+    });
   };
 
   const setObligationStatus = async (
@@ -439,11 +475,42 @@ export const ObligationsPage = () => {
         completedAt: status === 'COMPLETE' ? new Date().toISOString() : null,
       },
     });
+
+    // Completing a recurring obligation tees up the next instance (advanced
+    // period + dates), so the cadence keeps rolling without a manual re-entry.
+    const justCompleted =
+      status === 'COMPLETE' && obligation.status !== 'COMPLETE';
+    if (justCompleted && isRecurring(obligation.recurrence)) {
+      const next = buildNextObligation(obligation);
+      if (isDefined(next)) {
+        await createObligation({
+          name: next.name,
+          obligationType: obligation.obligationType,
+          status: 'UPCOMING',
+          priority: obligation.priority,
+          recurrence: obligation.recurrence,
+          reportingPeriod: next.reportingPeriod,
+          dueDate: next.dueDate,
+          periodStart: next.periodStart,
+          periodEnd: next.periodEnd,
+          assigneeId: obligation.assigneeId,
+          projectId: obligation.projectId,
+          grantId: obligation.grantId,
+          keywords: obligation.keywords ?? [],
+        });
+        enqueueSuccessSnackBar({
+          message: `Next instance created: "${next.name}"${
+            isDefined(next.dueDate) ? ` (due ${formatDate(next.dueDate)})` : ''
+          }`,
+        });
+      }
+    }
+
     await refetchObligations();
   };
 
   const openUpload = (obligationId: string) => {
-    uploadTargetRef.current = obligationId;
+    setUploadTargetId(obligationId);
     fileInputRef.current?.click();
   };
 
@@ -451,7 +518,7 @@ export const ObligationsPage = () => {
   // (the offline AI fallback), and store it against the obligation.
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    const obligationId = uploadTargetRef.current;
+    const obligationId = uploadTargetId;
     event.target.value = '';
     if (!isDefined(file) || !isDefined(obligationId)) return;
 
@@ -461,7 +528,8 @@ export const ObligationsPage = () => {
       const grant = isDefined(obligation?.grantId)
         ? grantById.get(obligation.grantId)
         : undefined;
-      const labels = labelObligationDocument({
+      const textContent = await readFileText(file);
+      const labels = await documentLabeler({
         fileName: file.name,
         fileType: file.type,
         obligationTitle: obligation?.name,
@@ -471,6 +539,7 @@ export const ObligationsPage = () => {
         projectName: isDefined(obligation?.projectId)
           ? projectName.get(obligation.projectId)
           : undefined,
+        textContent,
       });
       const dataUrl = await fileToDataUrl(file);
       await createDocument({
@@ -492,7 +561,7 @@ export const ObligationsPage = () => {
       });
     } finally {
       setIsUploading(false);
-      uploadTargetRef.current = null;
+      setUploadTargetId(null);
     }
   };
 
@@ -678,12 +747,7 @@ export const ObligationsPage = () => {
         ))
       )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        hidden
-        onChange={handleUpload}
-      />
+      <input ref={fileInputRef} type="file" hidden onChange={handleUpload} />
     </StyledPage>
   );
 };

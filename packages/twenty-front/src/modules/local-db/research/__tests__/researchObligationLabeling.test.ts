@@ -3,7 +3,7 @@ import {
   labelObligationDocument,
   type AiDocumentLabeler,
   type DocumentLabels,
-} from '../researchObligationLabeling';
+} from '@/local-db/research/researchObligationLabeling';
 
 describe('researchObligationLabeling', () => {
   describe('labelObligationDocument', () => {
@@ -121,7 +121,9 @@ describe('researchObligationLabeling', () => {
         suggestedKind: 'OTHER',
         summary: 'From the model',
       };
-      const aiLabeler: AiDocumentLabeler = jest.fn().mockResolvedValue(aiResult);
+      const aiLabeler: AiDocumentLabeler = jest
+        .fn()
+        .mockResolvedValue(aiResult);
 
       const labeler = createDocumentLabeler(aiLabeler);
       const result = await labeler({ fileName: 'anything.pdf' });

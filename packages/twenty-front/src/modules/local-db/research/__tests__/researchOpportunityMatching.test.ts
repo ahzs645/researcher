@@ -2,7 +2,7 @@ import {
   buildSeededTeamProfile,
   scoreOpportunity,
   type TeamProfile,
-} from '../researchOpportunityMatching';
+} from '@/local-db/research/researchOpportunityMatching';
 
 describe('opportunity matching', () => {
   const profile: TeamProfile = {

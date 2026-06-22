@@ -32,7 +32,11 @@ const normalize = (value: string): string =>
     .trim();
 
 const tokenize = (value: string | null | undefined): string[] =>
-  value ? normalize(value).split(' ').filter((token) => token.length > 3) : [];
+  value
+    ? normalize(value)
+        .split(' ')
+        .filter((token) => token.length > 3)
+    : [];
 
 const overlaps = (interest: string, terms: Set<string>): boolean => {
   if (terms.has(interest)) return true;

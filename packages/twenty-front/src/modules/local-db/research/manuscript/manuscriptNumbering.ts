@@ -45,6 +45,15 @@ const labelFormatFor = (kind: AssetKind, style: JournalStyle): string => {
   return DEFAULT_LABEL_FORMAT[kind];
 };
 
+// The in-text cross-reference format. `crossRefFormat` is the journal's *figure*
+// reference style (e.g. "Fig. {n}"); tables and other kinds are referenced by
+// their own label format ("Table 1"), never the figure style — otherwise
+// [#tab:x] would render as "Fig. 1".
+const crossRefFormatFor = (kind: AssetKind, style: JournalStyle): string =>
+  kind === 'FIGURE' && style.crossRefFormat
+    ? style.crossRefFormat
+    : labelFormatFor(kind, style);
+
 // Stable ordering: main before supplement, then by explicit orderIndex, then by
 // title so the sequence is deterministic even when orderIndex is unset.
 const compareAssets = (a: FigureLike, b: FigureLike): number => {
@@ -75,9 +84,7 @@ export const numberAssets = (
 
     const number = supplement ? `${supplementPrefix}${next}` : `${next}`;
     const label = applyTemplate(labelFormatFor(kind, style), number);
-    const crossRefLabel = style.crossRefFormat
-      ? applyTemplate(style.crossRefFormat, number)
-      : label;
+    const crossRefLabel = applyTemplate(crossRefFormatFor(kind, style), number);
 
     return { ...figure, number, label, crossRefLabel };
   });

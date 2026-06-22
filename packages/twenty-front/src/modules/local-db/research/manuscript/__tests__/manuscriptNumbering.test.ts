@@ -58,7 +58,7 @@ describe('numberAssets', () => {
     expect(numbered.find((f) => f.id === 'f1')?.label).toBe('Fig. 1');
   });
 
-  it('uses crossRefFormat for the in-text label', () => {
+  it('uses crossRefFormat for the in-text figure label', () => {
     const numbered = numberAssets(figures, {
       figureLabelFormat: 'Figure {n}',
       crossRefFormat: 'Fig. {n}',
@@ -66,6 +66,17 @@ describe('numberAssets', () => {
     const figure = numbered.find((f) => f.id === 'f1');
     expect(figure?.label).toBe('Figure 1');
     expect(figure?.crossRefLabel).toBe('Fig. 1');
+  });
+
+  it('does not apply the figure cross-ref format to tables', () => {
+    // [#tab:x] must render as "TABLE 1", not "Fig. 1".
+    const numbered = numberAssets(figures, {
+      tableLabelFormat: 'TABLE {n}',
+      crossRefFormat: 'Fig. {n}',
+    });
+    const table = numbered.find((f) => f.id === 't1');
+    expect(table?.label).toBe('TABLE 1');
+    expect(table?.crossRefLabel).toBe('TABLE 1');
   });
 
   it('is deterministic across calls', () => {

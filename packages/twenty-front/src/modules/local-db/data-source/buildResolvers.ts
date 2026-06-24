@@ -6,6 +6,7 @@ import {
   type DataSourceContext,
   type DataSourceObject,
   type DataSourceRecord,
+  applyDataSourceRecordDefaults,
   encodeCursor,
   getAggregateFieldsForObject,
 } from 'twenty-shared/data-source';
@@ -47,7 +48,10 @@ const decorateRecord = (
   record: DataSourceRecord | null,
 ): (DataSourceRecord & { __typename: string }) | null => {
   if (!record) return null;
-  return { __typename: typenameFor(object), ...record };
+  return {
+    __typename: typenameFor(object),
+    ...applyDataSourceRecordDefaults(object, record),
+  };
 };
 
 const FILTER_SYMBOL = Symbol.for('bridge:connection-filter');

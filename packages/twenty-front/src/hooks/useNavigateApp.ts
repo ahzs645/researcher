@@ -1,3 +1,4 @@
+import { addTwentyDataBridgeModeToPath } from '@/local-db/twenty-local/addTwentyDataBridgeModeToPath';
 import { useNavigate } from 'react-router-dom';
 import { type AppPath, type NavigateOptions } from 'twenty-shared/types';
 import { getAppPath } from 'twenty-shared/utils';
@@ -12,6 +13,6 @@ export const useNavigateApp = () => {
     options?: NavigateOptions,
   ) => {
     const path = getAppPath(to, params, queryParams);
-    return navigate(path, options);
+    return navigate(addTwentyDataBridgeModeToPath(path), options);
   };
 };

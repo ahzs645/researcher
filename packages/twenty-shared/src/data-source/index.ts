@@ -30,6 +30,7 @@ export type {
   DataSourceSearchPage,
   DataSourceContext,
 } from './types/DataSourceTypes';
+export { applyDataSourceRecordDefaults } from './utils/applyDataSourceRecordDefaults';
 export { tryBuildConvexFilter } from './utils/buildConvexFilter';
 export { buildDataSourceBundle } from './utils/buildDataSourceBundle';
 export { computeAggregate } from './utils/computeAggregate';

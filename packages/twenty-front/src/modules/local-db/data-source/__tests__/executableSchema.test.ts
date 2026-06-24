@@ -24,7 +24,7 @@ type CompanyConnectionData = {
 };
 
 type CompanyData = {
-  company: { id: string; name: string };
+  company: { id: string; name: string; idealCustomerProfile?: boolean };
 };
 
 type CreateCompanyData = {
@@ -129,6 +129,31 @@ describe('executable schema (Company vertical slice)', () => {
     const data = result.data as CompanyData;
     expect(data.company).toEqual(
       expect.objectContaining({ id: 'company-2', name: 'Initech' }),
+    );
+  });
+
+  it('applies metadata defaults before returning non-nullable fields', async () => {
+    const { client } = makeClient();
+
+    const result = await client.query({
+      query: gql`
+        query FindOneCompanyWithDefault($id: UUID!) {
+          company(filter: { id: { eq: $id } }) {
+            id
+            name
+            idealCustomerProfile
+          }
+        }
+      `,
+      variables: { id: 'company-1' },
+    });
+
+    const data = result.data as CompanyData;
+    expect(data.company).toEqual(
+      expect.objectContaining({
+        id: 'company-1',
+        idealCustomerProfile: false,
+      }),
     );
   });
 

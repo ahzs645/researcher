@@ -41,7 +41,10 @@ describe('useNavigateApp', () => {
       objectRecordId: '123',
     });
 
-    expect(mockNavigate).toHaveBeenCalledWith('/object/company/123', undefined);
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/object/company/123?localdb=1',
+      undefined,
+    );
   });
 
   it('should navigate with query params', () => {

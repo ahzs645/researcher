@@ -98,7 +98,7 @@ class BridgeSystemDexie extends Dexie {
     super(BRIDGE_SYSTEM_DEXIE_NAME);
     // `id` is always the primary key; secondary indexes mirror the lookups the
     // mock link does (view by type, viewField by viewId, etc.).
-    this.version(1).stores({
+    const stores = {
       user: 'id',
       workspace: 'id',
       workspaceMember: 'id',
@@ -123,6 +123,13 @@ class BridgeSystemDexie extends Dexie {
       calendarChannel: 'id',
       frontComponent: 'id',
       logicFunction: 'id',
+    };
+    this.version(1).stores(stores);
+    // Version 2 repeats the full current schema so users who created a v1 DB
+    // before later stores existed get a real IndexedDB version upgrade.
+    this.version(2).stores(stores);
+    this.on('versionchange', () => {
+      this.close();
     });
   }
 }
@@ -134,6 +141,11 @@ export const getBridgeSystemDexie = (): BridgeSystemDexie => {
     cachedDb = new BridgeSystemDexie();
   }
   return cachedDb;
+};
+
+export const closeBridgeSystemDexieForReset = (): void => {
+  cachedDb?.close();
+  cachedDb = undefined;
 };
 
 // Singleton lookups: the bridge has exactly one "current" user / workspace, so

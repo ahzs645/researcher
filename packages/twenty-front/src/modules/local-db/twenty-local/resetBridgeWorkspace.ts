@@ -1,6 +1,10 @@
 import Dexie from 'dexie';
 
-import { BRIDGE_SYSTEM_DEXIE_NAME } from '@/local-db/data-source/bridgeSystemDexie';
+import {
+  BRIDGE_SYSTEM_DEXIE_NAME,
+  closeBridgeSystemDexieForReset,
+} from '@/local-db/data-source/bridgeSystemDexie';
+import { closeBridgeDataSourceForReset } from '@/local-db/data-source/buildBridgeDataSource';
 import { clearResearchSeedMode } from '@/local-db/twenty-local/getResearchSeedMode';
 import { getTwentyRawPathPrefix } from '@/local-db/twenty-local/getTwentyPublicBasePath';
 
@@ -30,6 +34,8 @@ export const isBridgeResetPath = (): boolean => {
 // anything opens a Dexie connection (i.e. at boot) so the deletes don't block
 // on an open handle.
 export const resetBridgeWorkspace = async (): Promise<void> => {
+  closeBridgeDataSourceForReset();
+  closeBridgeSystemDexieForReset();
   await Promise.all([
     Dexie.delete(BRIDGE_RECORDS_DEXIE_NAME),
     Dexie.delete(BRIDGE_SYSTEM_DEXIE_NAME),

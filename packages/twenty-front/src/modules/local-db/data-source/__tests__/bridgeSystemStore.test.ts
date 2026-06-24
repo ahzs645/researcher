@@ -2,7 +2,13 @@
 // system Dexie database has a real backing store to talk to in jsdom.
 import 'fake-indexeddb/auto';
 
-import { getBridgeSystemDexie } from '@/local-db/data-source/bridgeSystemDexie';
+import Dexie from 'dexie';
+
+import {
+  BRIDGE_SYSTEM_DEXIE_NAME,
+  closeBridgeSystemDexieForReset,
+  getBridgeSystemDexie,
+} from '@/local-db/data-source/bridgeSystemDexie';
 import { __resetBridgeSystemSeedForTests } from '@/local-db/data-source/bridgeSystemSeed';
 import {
   createApiKey,
@@ -123,5 +129,26 @@ describe('bridgeSystemStore', () => {
     });
     const revoked = await revokeApiKey((created as { id: string }).id);
     expect((revoked as Record<string, unknown>).revokedAt).toBeTruthy();
+  });
+
+  it('upgrades older v1 system databases with later object stores', async () => {
+    closeBridgeSystemDexieForReset();
+    await Dexie.delete(BRIDGE_SYSTEM_DEXIE_NAME);
+
+    const oldDb = new Dexie(BRIDGE_SYSTEM_DEXIE_NAME);
+    oldDb.version(1).stores({
+      user: 'id',
+      workspace: 'id',
+      workspaceMember: 'id',
+    });
+    await oldDb.open();
+    await oldDb.table('user').put({ id: 'legacy-user' });
+    oldDb.close();
+
+    closeBridgeSystemDexieForReset();
+    const upgradedDb = getBridgeSystemDexie();
+
+    await expect(upgradedDb.pageLayout.count()).resolves.toBe(0);
+    await expect(upgradedDb.logicFunction.count()).resolves.toBe(0);
   });
 });

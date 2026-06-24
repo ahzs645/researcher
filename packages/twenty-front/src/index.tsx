@@ -58,6 +58,7 @@ const renderApp = async () => {
     const isBridgeIndexPath =
       relativePathname === '/' ||
       relativePathname === '/welcome' ||
+      relativePathname === '/demo' ||
       relativePathname === '/localdb' ||
       relativePathname === '/convex';
 

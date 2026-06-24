@@ -112,6 +112,9 @@ export const createDexieDataSource = ({
     stores[object.nameSingular] = tableSchemaForObject(object);
   }
   db.version(schemaVersion).stores(stores);
+  db.on('versionchange', () => {
+    db.close();
+  });
 
   const tableFor = (objectName: string): Table<DataSourceRecord, string> => {
     if (!bundle.objectsByNameSingular.has(objectName)) {
@@ -190,7 +193,7 @@ export const createDexieDataSource = ({
       id: typeof input.id === 'string' ? input.id : crypto.randomUUID(),
       ...input,
       ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
-      ...(actor && input.createdBy === undefined
+      ...(input.createdBy === undefined
         ? { createdBy: actor, updatedBy: actor }
         : {}),
       createdAt: typeof input.createdAt === 'string' ? input.createdAt : now,
@@ -214,7 +217,7 @@ export const createDexieDataSource = ({
     const next: DataSourceRecord = {
       ...existing,
       ...input,
-      ...(actor && input.updatedBy === undefined ? { updatedBy: actor } : {}),
+      ...(input.updatedBy === undefined ? { updatedBy: actor } : {}),
       id: existing.id,
       updatedAt: new Date().toISOString(),
     };

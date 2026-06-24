@@ -114,9 +114,34 @@ export const ensureBridgeDataSourceSeeded = async (): Promise<void> => {
   const dataSource = getBridgeDataSource();
   seedPromise = (async () => {
     const probe = await dataSource.findMany('company', { first: 1 }, {});
-    if (probe.totalCount > 0) return;
-    if (getResearchSeedMode() !== 'demo') return;
+    const seedMode = getResearchSeedMode();
+    if (probe.totalCount > 0) {
+      if (seedMode !== 'demo') return;
+
+      const seed = buildSeed();
+      await Promise.all(
+        Object.entries(seed).map(async ([objectName, records]) => {
+          if (records.length === 0) return;
+          const existing = await dataSource.findMany(
+            objectName,
+            { first: 1 },
+            {},
+          );
+          if (existing.totalCount === 0) {
+            await dataSource.db.table(objectName).bulkPut(records);
+          }
+        }),
+      );
+      return;
+    }
+    if (seedMode !== 'demo') return;
     await dataSource.reset(buildSeed());
   })();
   return seedPromise;
+};
+
+export const closeBridgeDataSourceForReset = (): void => {
+  cachedDataSource?.db.close();
+  cachedDataSource = undefined;
+  seedPromise = undefined;
 };

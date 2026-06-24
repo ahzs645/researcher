@@ -15,13 +15,13 @@
 
 import { v } from 'convex/values';
 
-import { httpAction, internalMutation, internalQuery } from './_generated/server';
-import { internal } from './_generated/api';
 import {
-  checkBridgeAuth,
-  errorResponse,
-  okResponse,
-} from './bridgeAuth';
+  httpAction,
+  internalMutation,
+  internalQuery,
+} from './_generated/server';
+import { internal } from './_generated/api';
+import { checkBridgeAuth, errorResponse, okResponse } from './bridgeAuth';
 import {
   buildActorFromContext,
   computeAggregate,
@@ -29,6 +29,7 @@ import {
   computeSearch,
   decodeCursor,
   encodeCursor,
+  applyDataSourceRecordPosition,
   filterToPredicate,
   orderByToComparator,
   scopeFilterByContext,
@@ -43,9 +44,9 @@ import { type RecordGqlOperationFilter } from 'twenty-shared/types';
 
 type ConvexReader = {
   query: (name: string) => {
-    filter: (
-      cb: (q: unknown) => unknown,
-    ) => { collect: () => Promise<DataSourceRecord[]> };
+    filter: (cb: (q: unknown) => unknown) => {
+      collect: () => Promise<DataSourceRecord[]>;
+    };
     collect: () => Promise<DataSourceRecord[]>;
   };
 };
@@ -150,7 +151,9 @@ const findManyResult = async (
     args.args.filter,
     args.context,
   );
-  const sorted = [...matched].sort(orderByToComparator(args.args.orderBy ?? null));
+  const sorted = [...matched].sort(
+    orderByToComparator(args.args.orderBy ?? null),
+  );
 
   const offset = args.args.offset ?? 0;
   const startCursor = decodeCursor(args.args.after ?? undefined);
@@ -325,7 +328,13 @@ export const createOneImpl = internalMutation({
   },
   handler: async (ctx, payload) => {
     const scopedContext = (payload.context ?? {}) as DataSourceContext;
-    const input = (payload.input ?? {}) as Record<string, unknown>;
+    const existingRecords = await (ctx.db as unknown as ConvexReader)
+      .query(payload.objectName)
+      .collect();
+    const input = applyDataSourceRecordPosition(
+      (payload.input ?? {}) as Record<string, unknown>,
+      existingRecords,
+    );
     const now = new Date().toISOString();
     const actor = buildActorFromContext(scopedContext);
     const record = STRIP_NULL_DELETED_AT({
@@ -343,7 +352,10 @@ export const createOneImpl = internalMutation({
       createdAt: typeof input.createdAt === 'string' ? input.createdAt : now,
       updatedAt: now,
     }) as DataSourceRecord;
-    await (ctx.db as unknown as ConvexWriter).insert(payload.objectName, record);
+    await (ctx.db as unknown as ConvexWriter).insert(
+      payload.objectName,
+      record,
+    );
     return { ...record, deletedAt: null };
   },
 });
@@ -371,7 +383,13 @@ export const updateOneImpl = internalMutation({
       return { __forbidden: true };
     }
     const actor = buildActorFromContext(scopedContext);
-    const input = (payload.input ?? {}) as Record<string, unknown>;
+    const existingRecords = await (ctx.db as unknown as ConvexReader)
+      .query(payload.objectName)
+      .collect();
+    const input = applyDataSourceRecordPosition(
+      (payload.input ?? {}) as Record<string, unknown>,
+      existingRecords,
+    );
     const next: DataSourceRecord = {
       ...existing,
       ...input,
@@ -551,7 +569,8 @@ export const updateOneAction = httpAction(async (ctx, request) => {
     context?: unknown;
   };
   const result = await ctx.runMutation(internal.dataSource.updateOneImpl, body);
-  if (result === null) return notFoundResponse(request, body.objectName, body.id);
+  if (result === null)
+    return notFoundResponse(request, body.objectName, body.id);
   if ((result as { __forbidden?: boolean }).__forbidden)
     return forbiddenResponse(request, body.objectName, body.id);
   return okResponse(request, result);
@@ -567,7 +586,8 @@ export const deleteOneAction = httpAction(async (ctx, request) => {
     context?: unknown;
   };
   const result = await ctx.runMutation(internal.dataSource.deleteOneImpl, body);
-  if (result === null) return notFoundResponse(request, body.objectName, body.id);
+  if (result === null)
+    return notFoundResponse(request, body.objectName, body.id);
   if ((result as { __forbidden?: boolean }).__forbidden)
     return forbiddenResponse(request, body.objectName, body.id);
   return okResponse(request, result);

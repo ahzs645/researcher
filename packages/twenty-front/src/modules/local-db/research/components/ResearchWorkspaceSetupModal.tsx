@@ -160,8 +160,8 @@ export const ResearchWorkspaceSetupModal = () => {
             >
               <StyledChoiceTitle>Solo researcher</StyledChoiceTitle>
               <StyledChoiceDescription>
-                Track your own projects, funding, and outputs. The team roster
-                is hidden.
+                Track your own projects, funding, collaborators, outputs, and
+                obligations without lab administration.
               </StyledChoiceDescription>
             </StyledChoice>
             <StyledChoice
@@ -177,10 +177,10 @@ export const ResearchWorkspaceSetupModal = () => {
             </StyledChoice>
           </StyledChoices>
           <Button
-            title="Set up as a lab"
+            title="Set up solo workspace"
             variant="secondary"
             disabled={isSubmitting}
-            onClick={() => handleChoose('LAB')}
+            onClick={() => handleChoose('SOLO')}
           />
         </StyledCard>
       </StyledOverlay>

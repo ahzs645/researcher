@@ -121,6 +121,20 @@ describe('bridgeSystemStore', () => {
     expect(setup).toEqual({ setupCompleted: true, workspaceMode: 'SOLO' });
   });
 
+  it('rebuilds navigation for the chosen solo persona', async () => {
+    await setBridgeWorkspaceSetup('SOLO');
+    const items = await getNavigationMenuItems();
+
+    expect(
+      items.some((item) => item.type === 'FOLDER' && item.name === 'Lab'),
+    ).toBe(false);
+    expect(
+      items.some(
+        (item) => item.type === 'FOLDER' && item.name === 'My research',
+      ),
+    ).toBe(true);
+  });
+
   it('marks an API key as revoked', async () => {
     const created = await createApiKey({
       name: 'Soon-revoked',

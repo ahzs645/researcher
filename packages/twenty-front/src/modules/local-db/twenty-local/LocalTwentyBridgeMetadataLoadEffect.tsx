@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 
 import { isMinimalMetadataReadyState } from '@/metadata-store/states/isMinimalMetadataReadyState';
 import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+import { getBridgeWorkspaceSetup } from '@/local-db/data-source/bridgeSystemStore';
 import { useLoadMockedMetadata } from '~/testing/hooks/useLoadMockedMetadata';
 import { preloadMockedMetadata } from '~/testing/utils/preloadMockedMetadata';
 
@@ -20,14 +21,20 @@ export const LocalTwentyBridgeMetadataLoadEffect = () => {
   useEffect(() => {
     let isMounted = true;
 
-    void preloadMockedMetadata().then((data) => {
-      if (!isMounted) {
-        return;
-      }
+    void getBridgeWorkspaceSetup()
+      .then((setup) =>
+        preloadMockedMetadata({
+          workspaceMode: setup?.workspaceMode,
+        }),
+      )
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
 
-      applyMockedMetadata(data);
-      setIsMinimalMetadataReady(true);
-    });
+        applyMockedMetadata(data);
+        setIsMinimalMetadataReady(true);
+      });
 
     return () => {
       isMounted = false;

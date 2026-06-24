@@ -19,6 +19,7 @@ import {
   computeSearch,
   decodeCursor,
   encodeCursor,
+  applyDataSourceRecordPosition,
   filterToPredicate,
   orderByToComparator,
 } from 'twenty-shared/data-source';
@@ -187,16 +188,26 @@ export const createDexieDataSource = ({
     context: DataSourceContext,
   ): Promise<DataSourceRecord> => {
     const table = tableFor(objectName);
+    const normalizedInput = applyDataSourceRecordPosition(
+      input,
+      await table.toArray(),
+    );
     const now = new Date().toISOString();
     const actor = buildActorFromContext(context);
     const record: DataSourceRecord = {
-      id: typeof input.id === 'string' ? input.id : crypto.randomUUID(),
-      ...input,
+      id:
+        typeof normalizedInput.id === 'string'
+          ? normalizedInput.id
+          : crypto.randomUUID(),
+      ...normalizedInput,
       ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
-      ...(input.createdBy === undefined
+      ...(normalizedInput.createdBy === undefined
         ? { createdBy: actor, updatedBy: actor }
         : {}),
-      createdAt: typeof input.createdAt === 'string' ? input.createdAt : now,
+      createdAt:
+        typeof normalizedInput.createdAt === 'string'
+          ? normalizedInput.createdAt
+          : now,
       updatedAt: now,
       deletedAt: null,
     } as DataSourceRecord;
@@ -213,11 +224,15 @@ export const createDexieDataSource = ({
     const table = tableFor(objectName);
     const existing = await table.get(id);
     if (!existing) throw new Error(`${objectName} not found: ${id}`);
+    const normalizedInput = applyDataSourceRecordPosition(
+      input,
+      await table.toArray(),
+    );
     const actor = buildActorFromContext(context);
     const next: DataSourceRecord = {
       ...existing,
-      ...input,
-      ...(input.updatedBy === undefined ? { updatedBy: actor } : {}),
+      ...normalizedInput,
+      ...(normalizedInput.updatedBy === undefined ? { updatedBy: actor } : {}),
       id: existing.id,
       updatedAt: new Date().toISOString(),
     };

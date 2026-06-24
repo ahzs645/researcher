@@ -20,6 +20,7 @@ scalar DateTime
 scalar Date
 scalar JSON
 scalar BigInt
+scalar Position
 
 enum FilterIs {
   NULL
@@ -394,6 +395,7 @@ const FIELD_TO_OUTPUT_TYPE: Partial<Record<FieldMetadataType, string>> = {
 const FIELD_TO_INPUT_TYPE: Partial<Record<FieldMetadataType, string>> = {
   ...FIELD_TO_OUTPUT_TYPE,
   [FieldMetadataType.RICH_TEXT]: 'RichTextInput',
+  [FieldMetadataType.POSITION]: 'Position',
   [FieldMetadataType.ADDRESS]: 'AddressInput',
   [FieldMetadataType.FULL_NAME]: 'FullNameInput',
   [FieldMetadataType.LINKS]: 'LinksInput',
@@ -686,7 +688,9 @@ const renderInput = (
 
   for (const field of object.fields) {
     if (!field.isActive) continue;
-    if (field.isSystem && field.name !== 'id') continue;
+    if (field.isSystem && field.name !== 'id' && field.name !== 'position') {
+      continue;
+    }
     if (field.type === FieldMetadataType.RELATION) {
       if (!field.relation) continue;
       if (field.relation.type === RelationType.MANY_TO_ONE) {

@@ -466,6 +466,13 @@ const RESEARCH_NAV_FOLDERS: ResearchNavFolderConfig[] = [
   },
 ];
 
+const SOLO_HIDDEN_NAV_OBJECTS = new Set([
+  'researchTeam',
+  'researcher',
+  'applicantProfile',
+  'projectMembership',
+]);
+
 const researchNavFolderId = (key: ResearchNavSection): string =>
   researchDeterministicUuid(`research:nav:folder:${key}`);
 
@@ -479,7 +486,21 @@ export const RESEARCH_NAV_FOLDER_IDS: Record<ResearchNavSection, string> = {
   DISCOVERY: researchNavFolderId('DISCOVERY'),
 };
 
-const buildResearchNavFolder = (folder: ResearchNavFolderConfig) => ({
+const folderNameForWorkspaceMode = (
+  folder: ResearchNavFolderConfig,
+  workspaceMode: WorkspaceMode,
+) => {
+  if (workspaceMode === 'SOLO' && folder.key === 'LAB') {
+    return 'My research';
+  }
+
+  return folder.name;
+};
+
+const buildResearchNavFolder = (
+  folder: ResearchNavFolderConfig,
+  workspaceMode: WorkspaceMode,
+) => ({
   id: researchNavFolderId(folder.key),
   userWorkspaceId: null,
   targetRecordId: null,
@@ -488,7 +509,7 @@ const buildResearchNavFolder = (folder: ResearchNavFolderConfig) => ({
   folderId: null,
   // The nav components key off `type`; FOLDER groups its children.
   type: 'FOLDER',
-  name: folder.name,
+  name: folderNameForWorkspaceMode(folder, workspaceMode),
   link: null,
   icon: folder.icon,
   color: folder.color,
@@ -587,10 +608,13 @@ const buildObligationsLinkItem = () => ({
 export const buildResearchNavigationMenuItems = (
   workspaceMode: WorkspaceMode = 'LAB',
 ) => {
-  // Solo workspaces are a team of one, so the multi-team manager is hidden.
+  // Solo workspaces keep the research pipeline but hide lab administration.
   const specs = RESEARCH_OBJECT_SPECS.filter(
     (spec) =>
-      !(workspaceMode === 'SOLO' && spec.nameSingular === 'researchTeam'),
+      !(
+        workspaceMode === 'SOLO' &&
+        SOLO_HIDDEN_NAV_OBJECTS.has(spec.nameSingular)
+      ),
   );
   // Position each object by its order among same-folder specs so the in-folder
   // ordering is stable and leaves room for re-parented vanilla items after it.
@@ -601,7 +625,9 @@ export const buildResearchNavigationMenuItems = (
     return buildNavigationMenuItem(spec, next);
   });
   return [
-    ...RESEARCH_NAV_FOLDERS.map(buildResearchNavFolder),
+    ...RESEARCH_NAV_FOLDERS.map((folder) =>
+      buildResearchNavFolder(folder, workspaceMode),
+    ),
     ...objectItems,
     buildDiscoveryLinkItem(),
     buildComposeLinkItem(),

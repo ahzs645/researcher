@@ -16,6 +16,7 @@ import {
   computeSearch,
   decodeCursor,
   encodeCursor,
+  applyDataSourceRecordPosition,
   filterToPredicate,
   orderByToComparator,
 } from 'twenty-shared/data-source';
@@ -198,16 +199,23 @@ export const createInMemoryDataSource = (
     context: DataSourceContext,
   ): Promise<DataSourceRecord> => {
     const list = getOrCreate(objectName);
+    const normalizedInput = applyDataSourceRecordPosition(input, list);
     const now = new Date().toISOString();
     const actor = buildActorFromContext(context);
     const record: DataSourceRecord = {
-      id: typeof input.id === 'string' ? input.id : crypto.randomUUID(),
-      ...input,
+      id:
+        typeof normalizedInput.id === 'string'
+          ? normalizedInput.id
+          : crypto.randomUUID(),
+      ...normalizedInput,
       ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
-      ...(actor && input.createdBy === undefined
+      ...(actor !== null && normalizedInput.createdBy === undefined
         ? { createdBy: actor, updatedBy: actor }
         : {}),
-      createdAt: typeof input.createdAt === 'string' ? input.createdAt : now,
+      createdAt:
+        typeof normalizedInput.createdAt === 'string'
+          ? normalizedInput.createdAt
+          : now,
       updatedAt: now,
       deletedAt: null,
     } as DataSourceRecord;
@@ -224,11 +232,14 @@ export const createInMemoryDataSource = (
     const list = getOrCreate(objectName);
     const index = list.findIndex((record) => record.id === id);
     if (index < 0) throw new Error(`${objectName} not found: ${id}`);
+    const normalizedInput = applyDataSourceRecordPosition(input, list);
     const actor = buildActorFromContext(context);
     const updated: DataSourceRecord = {
       ...list[index],
-      ...input,
-      ...(actor && input.updatedBy === undefined ? { updatedBy: actor } : {}),
+      ...normalizedInput,
+      ...(actor !== null && normalizedInput.updatedBy === undefined
+        ? { updatedBy: actor }
+        : {}),
       id: list[index].id,
       updatedAt: new Date().toISOString(),
     };

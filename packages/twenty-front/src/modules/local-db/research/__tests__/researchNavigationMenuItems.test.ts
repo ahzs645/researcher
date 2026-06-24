@@ -103,24 +103,36 @@ describe('research navigation menu items', () => {
     expect(link?.folderId).toBe(RESEARCH_NAV_FOLDER_IDS.DISCOVERY);
   });
 
-  it('hides the team roster in solo mode', () => {
+  it('tailors lab administration out of solo mode', () => {
     const soloItems = augmentNavigationMenuItemsWithResearch<
       Record<string, unknown>
     >([], { workspaceMode: 'SOLO' });
-    const researchTeamObjectId = getResearchObjectId('researchTeam');
+    const hiddenObjectIds = [
+      'researchTeam',
+      'researcher',
+      'applicantProfile',
+      'projectMembership',
+    ].map(getResearchObjectId);
     const soloObjectItems = soloItems.filter((item) =>
       Boolean(item.targetObjectMetadataId),
     );
-    expect(soloObjectItems).toHaveLength(RESEARCH_OBJECT_SPECS.length - 1);
+    expect(soloObjectItems).toHaveLength(
+      RESEARCH_OBJECT_SPECS.length - hiddenObjectIds.length,
+    );
+    for (const objectId of hiddenObjectIds) {
+      expect(
+        soloItems.some((item) => item.targetObjectMetadataId === objectId),
+      ).toBe(false);
+      expect(
+        augmented.some((item) => item.targetObjectMetadataId === objectId),
+      ).toBe(true);
+    }
+    expect(
+      soloItems.some((item) => item.type === 'FOLDER' && item.name === 'Lab'),
+    ).toBe(false);
     expect(
       soloItems.some(
-        (item) => item.targetObjectMetadataId === researchTeamObjectId,
-      ),
-    ).toBe(false);
-    // The lab default still shows it.
-    expect(
-      augmented.some(
-        (item) => item.targetObjectMetadataId === researchTeamObjectId,
+        (item) => item.type === 'FOLDER' && item.name === 'My research',
       ),
     ).toBe(true);
   });

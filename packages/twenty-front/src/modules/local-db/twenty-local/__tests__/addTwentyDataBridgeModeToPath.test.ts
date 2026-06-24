@@ -22,7 +22,7 @@ describe('addTwentyDataBridgeModeToPath', () => {
     ).toBe('/objects/companies?viewId=company-index-view');
   });
 
-  it('adds localdb=1 to supported object and record paths in local mode', () => {
+  it('adds localdb=1 to object and record paths in local mode', () => {
     mockedGetTwentyDataMode.mockReturnValue('local');
 
     expect(
@@ -35,7 +35,7 @@ describe('addTwentyDataBridgeModeToPath', () => {
     );
   });
 
-  it('adds data=convex to supported object and record paths in Convex mode', () => {
+  it('adds data=convex to object and record paths in Convex mode', () => {
     mockedGetTwentyDataMode.mockReturnValue('convex');
 
     expect(
@@ -48,14 +48,25 @@ describe('addTwentyDataBridgeModeToPath', () => {
     );
   });
 
-  it('leaves unsupported Twenty object paths untouched', () => {
+  it('preserves bridge mode on research and repurposed CRM object paths', () => {
     mockedGetTwentyDataMode.mockReturnValue('local');
 
     expect(addTwentyDataBridgeModeToPath('/objects/people?viewId=people')).toBe(
-      '/objects/people?viewId=people',
+      '/objects/people?viewId=people&localdb=1',
     );
     expect(addTwentyDataBridgeModeToPath('/object/person/person-1')).toBe(
-      '/object/person/person-1',
+      '/object/person/person-1?localdb=1',
+    );
+    expect(
+      addTwentyDataBridgeModeToPath('/objects/researchTeams?viewId=teams'),
+    ).toBe('/objects/researchTeams?viewId=teams&localdb=1');
+  });
+
+  it('leaves non-object paths untouched', () => {
+    mockedGetTwentyDataMode.mockReturnValue('local');
+
+    expect(addTwentyDataBridgeModeToPath('/settings/profile')).toBe(
+      '/settings/profile',
     );
   });
 });

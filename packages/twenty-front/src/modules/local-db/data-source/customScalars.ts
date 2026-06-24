@@ -25,6 +25,19 @@ export const DateTimeScalar = stringScalar(
 );
 export const DateScalar = stringScalar('Date', 'ISO 8601 date string');
 export const BigIntScalar = stringScalar('BigInt', 'BigInt encoded as string');
+export const PositionScalar = new GraphQLScalarType<unknown, unknown>({
+  name: 'Position',
+  description: 'Twenty record position number or placement sentinel',
+  serialize: (value) => value,
+  parseValue: (value) => value,
+  parseLiteral: (ast: ValueNode) => {
+    if (ast.kind === Kind.INT || ast.kind === Kind.FLOAT) {
+      return parseFloat(ast.value);
+    }
+    if (ast.kind === Kind.STRING) return ast.value;
+    return null;
+  },
+});
 
 export const JSONScalar = new GraphQLScalarType<unknown, unknown>({
   name: 'JSON',
@@ -67,5 +80,6 @@ export const customScalarResolvers = {
   DateTime: DateTimeScalar,
   Date: DateScalar,
   BigInt: BigIntScalar,
+  Position: PositionScalar,
   JSON: JSONScalar,
 };

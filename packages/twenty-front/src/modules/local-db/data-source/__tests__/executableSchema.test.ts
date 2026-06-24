@@ -31,6 +31,10 @@ type CreateCompanyData = {
   createCompany: { id: string; name: string; employees: number };
 };
 
+type CreateCompanyWithPositionData = {
+  createCompany: { id: string; position: number };
+};
+
 type UpdateCompanyData = {
   updateCompany: { id: string; name: string; employees: number };
 };
@@ -50,6 +54,7 @@ const makeClient = () => {
         id: 'company-1',
         name: 'Acme',
         employees: 12,
+        position: 0,
         deletedAt: null,
         createdAt: '2024-01-01T00:00:00.000Z',
         updatedAt: '2024-01-01T00:00:00.000Z',
@@ -58,6 +63,7 @@ const makeClient = () => {
         id: 'company-2',
         name: 'Initech',
         employees: 4,
+        position: 1,
         deletedAt: null,
         createdAt: '2024-01-02T00:00:00.000Z',
         updatedAt: '2024-01-02T00:00:00.000Z',
@@ -185,6 +191,25 @@ describe('executable schema (Company vertical slice)', () => {
     expect(createdBy).toEqual(
       expect.objectContaining({ source: 'MANUAL', workspaceMemberId: null }),
     );
+  });
+
+  it('accepts frontend position sentinels on create', async () => {
+    const { client } = makeClient();
+
+    const created = await client.mutate({
+      mutation: gql`
+        mutation CreateOneCompanyWithPosition($input: CompanyCreateInput!) {
+          createCompany(data: $input) {
+            id
+            position
+          }
+        }
+      `,
+      variables: { input: { name: 'Umbrella', position: 'last' } },
+    });
+
+    const createdData = created.data as CreateCompanyWithPositionData;
+    expect(createdData.createCompany.position).toBe(2);
   });
 
   it('creates, updates, soft-deletes, and restores a company', async () => {

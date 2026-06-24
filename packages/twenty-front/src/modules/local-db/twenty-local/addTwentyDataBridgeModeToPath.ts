@@ -1,8 +1,4 @@
 import { getTwentyDataMode } from '@/local-db/twenty-local/isLocalTwentyDataMode';
-import {
-  getTwentyLocalObjectConfigByObjectNamePlural,
-  getTwentyLocalObjectConfigByObjectNameSingular,
-} from '@/local-db/twenty-local/twentyLocalObjectConfigs';
 
 export const addTwentyDataBridgeModeToPath = (path: string): string => {
   const mode = getTwentyDataMode();
@@ -13,12 +9,8 @@ export const addTwentyDataBridgeModeToPath = (path: string): string => {
 
   const url = new URL(path, window.location.origin);
   const [, routeKind, objectName] = url.pathname.split('/');
-  const isBridgeObjectPath =
-    routeKind === 'objects' &&
-    getTwentyLocalObjectConfigByObjectNamePlural(objectName) !== undefined;
-  const isBridgeRecordPath =
-    routeKind === 'object' &&
-    getTwentyLocalObjectConfigByObjectNameSingular(objectName) !== undefined;
+  const isBridgeObjectPath = routeKind === 'objects' && objectName.length > 0;
+  const isBridgeRecordPath = routeKind === 'object' && objectName.length > 0;
 
   if (!isBridgeObjectPath && !isBridgeRecordPath) {
     return path;

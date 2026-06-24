@@ -16,9 +16,13 @@ export const scopeFilterByContext = (
   return { and: [scope, filter] } as RecordGqlOperationFilter;
 };
 
-// Default ACTOR field value for created/updated by. Adapters call this when
-// the caller's `workspaceMemberId` is known. Matches Twenty's wire shape: a
-// composite with `source`, `workspaceMemberId`, `name`, and `context`.
+// Default ACTOR field value for created/updated by. Matches Twenty's wire
+// shape: a composite with `source`, `workspaceMemberId`, `name`, and
+// `context`. The composite itself is non-nullable in the generated schema
+// (only its sub-fields are nullable), so this always returns a value — when
+// the caller's `workspaceMemberId` is unknown it falls back to `null` rather
+// than omitting `createdBy`/`updatedBy`, which would surface as
+// "Cannot return null for non-nullable field <Object>.createdBy".
 export const buildActorFromContext = (
   context: DataSourceContext,
 ): {
@@ -26,11 +30,10 @@ export const buildActorFromContext = (
   workspaceMemberId: string | null;
   name: string;
   context: Record<string, unknown>;
-} | null => {
-  if (!context.workspaceMemberId) return null;
+} => {
   return {
     source: 'MANUAL',
-    workspaceMemberId: context.workspaceMemberId,
+    workspaceMemberId: context.workspaceMemberId ?? null,
     name: '',
     context: {},
   };

@@ -132,6 +132,36 @@ describe('executable schema (Company vertical slice)', () => {
     );
   });
 
+  it('populates the non-nullable createdBy actor on create without a workspace member', async () => {
+    const { client } = makeClient();
+
+    // Reproduces "Cannot return null for non-nullable field Company.createdBy":
+    // the bridge runs single-tenant with no workspaceMemberId in context, so
+    // the created record must still carry a non-null createdBy composite.
+    const created = await client.mutate({
+      mutation: gql`
+        mutation CreateOneCompanyWithActor($input: CompanyCreateInput!) {
+          createCompany(data: $input) {
+            id
+            name
+            createdBy {
+              source
+              workspaceMemberId
+            }
+          }
+        }
+      `,
+      variables: { input: { name: 'Hooli' } },
+    });
+
+    const createdBy = (
+      created.data as { createCompany: { createdBy: unknown } }
+    ).createCompany.createdBy;
+    expect(createdBy).toEqual(
+      expect.objectContaining({ source: 'MANUAL', workspaceMemberId: null }),
+    );
+  });
+
   it('creates, updates, soft-deletes, and restores a company', async () => {
     const { client } = makeClient();
 

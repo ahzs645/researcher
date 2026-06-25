@@ -1,7 +1,9 @@
 import { styled } from '@linaria/react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { isDefined } from 'twenty-shared/utils';
-import { Button } from 'twenty-ui/input';
+import { H1Title, H2Title, IconPlus } from 'twenty-ui/display';
+import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
@@ -22,6 +24,7 @@ import { ManuscriptSectionEditor } from '@/local-db/research/components/Manuscri
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
+import { Select } from '@/ui/input/components/Select';
 
 type WithManuscript = { manuscript?: { id?: string | null } | null };
 type SectionRecord = SectionLike & WithManuscript;
@@ -38,83 +41,59 @@ type ManuscriptRecord = {
 };
 type JournalRecord = JournalStyle & { id: string };
 
+// Mobile-first single-column composer. The whole page is the scroll container
+// and the content is capped to a readable measure, so it reflows cleanly from
+// phone to desktop instead of relying on a fixed multi-column grid. Section and
+// manuscript pickers use the shared `Select`; headings use `H1Title`/`H2Title`
+// so the surface matches the rest of the product rather than bespoke controls.
+
 const StyledPage = styled.div`
   box-sizing: border-box;
   display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[4]};
   height: 100%;
-  overflow: hidden;
+  justify-content: center;
+  min-height: 0;
+  overflow-y: auto;
   padding: ${themeCssVariables.spacing[6]};
+  width: 100%;
+`;
+
+const StyledContent = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[6]};
+  max-width: 880px;
+  width: 100%;
 `;
 
 const StyledHeader = styled.div`
-  align-items: center;
+  align-items: flex-end;
   display: flex;
-  gap: ${themeCssVariables.spacing[4]};
+  flex-wrap: wrap;
+  gap: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[4]};
   justify-content: space-between;
+
+  & h2 {
+    margin-bottom: 0;
+  }
 `;
 
-const StyledTitle = styled.h1`
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.lg};
-  font-weight: ${themeCssVariables.font.weight.semiBold};
-  margin: 0;
+const StyledToolbar = styled.div`
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
-const StyledSelect = styled.select`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.sm};
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
-`;
-
-const StyledColumns = styled.div`
-  display: grid;
-  flex: 1;
-  gap: ${themeCssVariables.spacing[4]};
-  grid-template-columns: 220px 1fr 300px;
-  min-height: 0;
-`;
-
-const StyledColumn = styled.div`
+const StyledPanel = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${themeCssVariables.spacing[2]};
-  min-height: 0;
-  overflow-y: auto;
 `;
 
-const StyledSectionItem = styled.button<{ active: boolean }>`
-  background: ${({ active }) =>
-    active
-      ? themeCssVariables.background.transparent.light
-      : themeCssVariables.background.secondary};
-  border: 1px solid
-    ${({ active }) =>
-      active
-        ? themeCssVariables.color.blue
-        : themeCssVariables.border.color.light};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  cursor: pointer;
-  font-size: ${themeCssVariables.font.size.sm};
-  padding: ${themeCssVariables.spacing[2]};
-  text-align: left;
-`;
-
-const StyledSectionMeta = styled.span`
+const StyledMeta = styled.span`
   color: ${themeCssVariables.font.color.tertiary};
-  font-size: ${themeCssVariables.font.size.xs};
-`;
-
-const StyledPanelTitle = styled.h2`
-  color: ${themeCssVariables.font.color.secondary};
   font-size: ${themeCssVariables.font.size.sm};
-  font-weight: ${themeCssVariables.font.weight.semiBold};
-  margin: ${themeCssVariables.spacing[2]} 0 0;
 `;
 
 const PLACEMENT_RANK: Record<string, number> = {
@@ -238,19 +217,63 @@ export const ManuscriptComposerPage = () => {
   const manuscripts = manuscriptRecords as unknown as ManuscriptRecord[];
   const journals = journalRecords as unknown as JournalRecord[];
 
-  const [manuscriptId, setManuscriptId] = useState<string | null>(null);
-  const [sectionId, setSectionId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [manuscriptId, setManuscriptId] = useState<string | null>(() =>
+    searchParams.get('manuscript'),
+  );
+  const [sectionId, setSectionId] = useState<string | null>(() =>
+    searchParams.get('section'),
+  );
   const [journalId, setJournalId] = useState<string | null>(null);
 
   const manuscript =
     manuscripts.find((item) => item.id === manuscriptId) ?? manuscripts[0];
 
-  // Default the selections once data arrives.
+  // Resolve the initial selection. A `?section=<id>` deep link selects that
+  // section's owning manuscript; otherwise fall back to the first manuscript.
   useEffect(() => {
-    if (!isDefined(manuscriptId) && manuscripts.length > 0) {
-      setManuscriptId(manuscripts[0].id);
+    if (isDefined(manuscriptId) || manuscripts.length === 0) return;
+    const owningManuscriptId = isDefined(sectionId)
+      ? (sectionRecords as unknown as SectionRecord[]).find(
+          (section) => section.id === sectionId,
+        )?.manuscript?.id
+      : undefined;
+    setManuscriptId(owningManuscriptId ?? manuscripts[0].id);
+  }, [manuscripts, manuscriptId, sectionId, sectionRecords]);
+
+  // Keep the URL in sync so the composer is shareable and back-button friendly.
+  const updateSelectionParams = (
+    nextManuscriptId: string,
+    nextSectionId: string | null,
+  ) => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set('manuscript', nextManuscriptId);
+        if (isDefined(nextSectionId)) {
+          next.set('section', nextSectionId);
+        } else {
+          next.delete('section');
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  const handleSelectManuscript = (nextManuscriptId: string) => {
+    setManuscriptId(nextManuscriptId);
+    setSectionId(null);
+    updateSelectionParams(nextManuscriptId, null);
+  };
+
+  const handleSelectSection = (nextSectionId: string) => {
+    setSectionId(nextSectionId);
+    if (isDefined(manuscript)) {
+      updateSelectionParams(manuscript.id, nextSectionId);
     }
-  }, [manuscripts, manuscriptId]);
+  };
 
   const sections = useMemo(
     () =>
@@ -317,6 +340,18 @@ export const ManuscriptComposerPage = () => {
 
   const selectedSection = sections.find((section) => section.id === sectionId);
 
+  const manuscriptOptions: SelectOption<string>[] = manuscripts.map((item) => ({
+    value: item.id,
+    label: item.name ?? 'Untitled manuscript',
+  }));
+
+  const sectionOptions: SelectOption<string>[] = sections.map((section) => ({
+    value: section.id,
+    label: `${section.name ?? section.sectionType ?? 'Section'} · ${
+      section.wordCount ?? 0
+    } w`,
+  }));
+
   const persistSection = (markdown: string) => {
     if (!isDefined(selectedSection)) return;
     void updateOneRecord({
@@ -349,57 +384,62 @@ export const ManuscriptComposerPage = () => {
   if (!isDefined(manuscript)) {
     return (
       <StyledPage>
-        <StyledTitle>Compose</StyledTitle>
-        <StyledSectionMeta>
-          No manuscripts yet — create one under Work › Manuscripts.
-        </StyledSectionMeta>
+        <StyledContent>
+          <H1Title title="Compose" />
+          <StyledMeta>
+            No manuscripts yet — create one under Work › Manuscripts.
+          </StyledMeta>
+        </StyledContent>
       </StyledPage>
     );
   }
 
   return (
     <StyledPage>
-      <StyledHeader>
-        <StyledTitle>Compose</StyledTitle>
-        <StyledSelect
-          value={manuscript.id}
-          onChange={(event) => {
-            setManuscriptId(event.target.value);
-            setSectionId(null);
-          }}
-        >
-          {manuscripts.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name ?? 'Untitled manuscript'}
-            </option>
-          ))}
-        </StyledSelect>
-      </StyledHeader>
-
-      <StyledColumns>
-        <StyledColumn>
-          {sections.map((section) => (
-            <StyledSectionItem
-              key={section.id}
-              active={section.id === sectionId}
-              onClick={() => setSectionId(section.id)}
-            >
-              {section.name ?? section.sectionType}
-              <br />
-              <StyledSectionMeta>
-                {section.placement} · {section.wordCount ?? 0} w
-              </StyledSectionMeta>
-            </StyledSectionItem>
-          ))}
-          <Button
-            title="Add section"
-            variant="secondary"
-            size="small"
-            onClick={addSection}
+      <StyledContent>
+        <StyledHeader>
+          <H1Title title="Compose" />
+          <Select
+            dropdownId="compose-manuscript-select"
+            options={manuscriptOptions}
+            value={manuscript.id}
+            onChange={handleSelectManuscript}
           />
-        </StyledColumn>
+        </StyledHeader>
 
-        <StyledColumn>
+        <StyledPanel>
+          <H2Title title="Sections" />
+          {sections.length > 0 ? (
+            <StyledToolbar>
+              <Select
+                dropdownId="compose-section-select"
+                options={sectionOptions}
+                value={selectedSection?.id ?? sections[0].id}
+                onChange={handleSelectSection}
+              />
+              <Button
+                title="Add section"
+                Icon={IconPlus}
+                variant="secondary"
+                size="small"
+                onClick={addSection}
+              />
+            </StyledToolbar>
+          ) : (
+            <StyledToolbar>
+              <StyledMeta>No sections yet.</StyledMeta>
+              <Button
+                title="Add section"
+                Icon={IconPlus}
+                variant="secondary"
+                size="small"
+                onClick={addSection}
+              />
+            </StyledToolbar>
+          )}
+        </StyledPanel>
+
+        <StyledPanel>
           {isDefined(selectedSection) ? (
             <ManuscriptSectionEditor
               key={selectedSection.id}
@@ -407,18 +447,22 @@ export const ManuscriptComposerPage = () => {
               onPersist={persistSection}
             />
           ) : (
-            <StyledSectionMeta>Select a section to edit.</StyledSectionMeta>
+            <StyledMeta>Add a section to start writing.</StyledMeta>
           )}
-          <StyledPanelTitle>Figures &amp; tables</StyledPanelTitle>
+        </StyledPanel>
+
+        <StyledPanel>
+          <H2Title title="Figures & tables" />
           <ManuscriptFigurePanel
             manuscriptId={manuscript.id}
             figures={figures}
             style={style}
             onChanged={() => void refetchFigures()}
           />
-        </StyledColumn>
+        </StyledPanel>
 
-        <StyledColumn>
+        <StyledPanel>
+          <H2Title title="Export" />
           {isDefined(bundle) ? (
             <>
               <ManuscriptExportPanel
@@ -438,14 +482,17 @@ export const ManuscriptComposerPage = () => {
               />
             </>
           ) : null}
-          <StyledPanelTitle>References</StyledPanelTitle>
+        </StyledPanel>
+
+        <StyledPanel>
+          <H2Title title="References" />
           <ManuscriptReferencePanel
             manuscriptId={manuscript.id}
             references={references}
             onChanged={() => void refetchReferences()}
           />
-        </StyledColumn>
-      </StyledColumns>
+        </StyledPanel>
+      </StyledContent>
     </StyledPage>
   );
 };

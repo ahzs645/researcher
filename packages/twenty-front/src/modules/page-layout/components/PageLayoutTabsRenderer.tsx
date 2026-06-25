@@ -95,11 +95,29 @@ export const PageLayoutTabsRenderer = () => {
 
   const SYSTEM_OBJECT_TABS = ['Home', 'Timeline', 'Overview', 'Flow'];
 
+  // Research-authoring objects are written through the Compose surface, so their
+  // record pages only keep Home (fields) and Timeline (kept as a lightweight
+  // history/version trail). Tasks / Notes / Files don't apply to a manuscript
+  // draft or one of its sections, so they're hidden here.
+  const TRIMMED_TAB_OBJECTS: Record<string, string[]> = {
+    manuscript: ['Home', 'Timeline'],
+    manuscriptSection: ['Home', 'Timeline'],
+  };
+
   const isUsingDefaultRecordPageLayout =
     currentPageLayout.id === DEFAULT_RECORD_PAGE_LAYOUT_ID;
 
-  const tabsForCurrentObject =
-    isSystemObject && isUsingDefaultRecordPageLayout
+  const objectNameSingular = targetRecordIdentifier?.targetObjectNameSingular;
+  const trimmedTabAllowlist =
+    isUsingDefaultRecordPageLayout && isDefined(objectNameSingular)
+      ? TRIMMED_TAB_OBJECTS[objectNameSingular]
+      : undefined;
+
+  const tabsForCurrentObject = isDefined(trimmedTabAllowlist)
+    ? tabsWithVisibleWidgets.filter((tab) =>
+        trimmedTabAllowlist.includes(tab.title),
+      )
+    : isSystemObject && isUsingDefaultRecordPageLayout
       ? tabsWithVisibleWidgets.filter((tab) =>
           SYSTEM_OBJECT_TABS.includes(tab.title),
         )

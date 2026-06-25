@@ -1,7 +1,7 @@
 import { styled } from '@linaria/react';
 import { type ChangeEvent, useMemo, useRef, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { Button } from 'twenty-ui/input';
+import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
@@ -16,11 +16,24 @@ import {
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { Select } from '@/ui/input/components/Select';
 
 // The figure manager: every figure/table/scheme with its live, journal-aware
 // label (Figure 1 / Table 1 / Figure S1), and an "add figure" row supporting the
 // modular image sources — paste a URL or upload a file (stored as a data-URL so
 // it works with no backend).
+
+const ASSET_KIND_OPTIONS: SelectOption<string>[] = [
+  { value: 'FIGURE', label: 'Figure' },
+  { value: 'TABLE', label: 'Table' },
+  { value: 'SCHEME', label: 'Scheme' },
+  { value: 'BOX', label: 'Box' },
+];
+
+const PLACEMENT_OPTIONS: SelectOption<string>[] = [
+  { value: 'MAIN', label: 'Main' },
+  { value: 'SUPPLEMENT', label: 'Supplement' },
+];
 
 type ManuscriptFigurePanelProps = {
   manuscriptId: string;
@@ -239,22 +252,18 @@ export const ManuscriptFigurePanel = ({
           onChange={(event) => setCaption(event.target.value)}
         />
         <StyledActions>
-          <select
+          <Select
+            dropdownId="figure-asset-kind-select"
+            options={ASSET_KIND_OPTIONS}
             value={assetKind}
-            onChange={(event) => setAssetKind(event.target.value)}
-          >
-            <option value="FIGURE">Figure</option>
-            <option value="TABLE">Table</option>
-            <option value="SCHEME">Scheme</option>
-            <option value="BOX">Box</option>
-          </select>
-          <select
+            onChange={setAssetKind}
+          />
+          <Select
+            dropdownId="figure-placement-select"
+            options={PLACEMENT_OPTIONS}
             value={placement}
-            onChange={(event) => setPlacement(event.target.value)}
-          >
-            <option value="MAIN">Main</option>
-            <option value="SUPPLEMENT">Supplement</option>
-          </select>
+            onChange={setPlacement}
+          />
         </StyledActions>
         {assetKind === 'TABLE' ? (
           <StyledTableArea

@@ -473,6 +473,12 @@ const SOLO_HIDDEN_NAV_OBJECTS = new Set([
   'projectMembership',
 ]);
 
+// Objects authored through a dedicated surface rather than browsed as a table.
+// Manuscript sections are edited in the Compose editor (reached via the
+// "Compose paper" nav link), so the standalone sections table is dropped from
+// the nav in every workspace mode. The records stay fully queryable.
+export const NAV_HIDDEN_OBJECTS = new Set(['manuscriptSection']);
+
 const researchNavFolderId = (key: ResearchNavSection): string =>
   researchDeterministicUuid(`research:nav:folder:${key}`);
 
@@ -611,6 +617,7 @@ export const buildResearchNavigationMenuItems = (
   // Solo workspaces keep the research pipeline but hide lab administration.
   const specs = RESEARCH_OBJECT_SPECS.filter(
     (spec) =>
+      !NAV_HIDDEN_OBJECTS.has(spec.nameSingular) &&
       !(
         workspaceMode === 'SOLO' &&
         SOLO_HIDDEN_NAV_OBJECTS.has(spec.nameSingular)

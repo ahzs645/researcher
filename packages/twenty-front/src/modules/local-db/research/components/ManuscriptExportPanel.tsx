@@ -1,6 +1,6 @@
 import { styled } from '@linaria/react';
 import { useState } from 'react';
-import { Button } from 'twenty-ui/input';
+import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { type ManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
@@ -9,6 +9,7 @@ import {
   getManuscriptExporters,
 } from '@/local-db/research/manuscript/manuscriptExport';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { Select } from '@/ui/input/components/Select';
 
 // Pick the target journal format and export. Numbering, captions and citations
 // in the bundle already reflect the selected template, so the warnings + stats
@@ -27,15 +28,6 @@ const StyledPanel = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${themeCssVariables.spacing[3]};
-`;
-
-const StyledSelect = styled.select`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.sm};
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
 `;
 
 const StyledStats = styled.div`
@@ -79,6 +71,11 @@ export const ManuscriptExportPanel = ({
   const [isExporting, setIsExporting] = useState(false);
   const exporters = getManuscriptExporters();
 
+  const journalOptions: SelectOption<string>[] = journals.map((journal) => ({
+    value: journal.id,
+    label: journal.name,
+  }));
+
   const runExport = async (exporterId: string) => {
     if (isExporting) return;
     const exporter = exporters.find((candidate) => candidate.id === exporterId);
@@ -99,16 +96,14 @@ export const ManuscriptExportPanel = ({
 
   return (
     <StyledPanel>
-      <StyledSelect
-        value={selectedJournalId ?? ''}
-        onChange={(event) => onSelectJournal(event.target.value)}
-      >
-        {journals.map((journal) => (
-          <option key={journal.id} value={journal.id}>
-            {journal.name}
-          </option>
-        ))}
-      </StyledSelect>
+      <Select
+        dropdownId="manuscript-export-journal-select"
+        label="Journal format"
+        fullWidth
+        options={journalOptions}
+        value={selectedJournalId ?? journalOptions[0]?.value}
+        onChange={onSelectJournal}
+      />
 
       <StyledStats>
         <span>{bundle.stats.wordCount} words</span>

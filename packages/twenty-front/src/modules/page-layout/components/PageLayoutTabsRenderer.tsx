@@ -107,8 +107,7 @@ export const PageLayoutTabsRenderer = () => {
   const isUsingDefaultRecordPageLayout =
     currentPageLayout.id === DEFAULT_RECORD_PAGE_LAYOUT_ID;
 
-  const objectNameSingular =
-    targetRecordIdentifier?.targetObjectNameSingular;
+  const objectNameSingular = targetRecordIdentifier?.targetObjectNameSingular;
   const trimmedTabAllowlist =
     isUsingDefaultRecordPageLayout && isDefined(objectNameSingular)
       ? TRIMMED_TAB_OBJECTS[objectNameSingular]

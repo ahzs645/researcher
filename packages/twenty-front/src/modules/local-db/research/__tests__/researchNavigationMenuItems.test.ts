@@ -6,6 +6,7 @@ import {
   augmentObjectMetadataWithResearch,
 } from '@/local-db/research/bridgeResearchAugmentation';
 import {
+  NAV_HIDDEN_OBJECTS,
   RESEARCH_NAV_FOLDER_IDS,
   getResearchObjectId,
 } from '@/local-db/research/researchMetadataBuilder';
@@ -49,8 +50,23 @@ describe('research navigation menu items', () => {
     const objectItems = augmented.filter((item) =>
       Boolean(item.targetObjectMetadataId),
     );
-    expect(objectItems).toHaveLength(RESEARCH_OBJECT_SPECS.length);
+    // Objects edited through a dedicated surface (e.g. manuscript sections, via
+    // the Compose editor) are kept out of the nav as a table.
+    expect(objectItems).toHaveLength(
+      RESEARCH_OBJECT_SPECS.length - NAV_HIDDEN_OBJECTS.size,
+    );
     expect(objectItems.every((item) => item.type === 'OBJECT')).toBe(true);
+
+    const navHiddenObjectIds = new Set(
+      [...NAV_HIDDEN_OBJECTS].map((nameSingular) =>
+        getResearchObjectId(nameSingular),
+      ),
+    );
+    expect(
+      objectItems.some((item) =>
+        navHiddenObjectIds.has(item.targetObjectMetadataId as string),
+      ),
+    ).toBe(false);
 
     const folderIds = new Set(Object.values(RESEARCH_NAV_FOLDER_IDS));
     expect(
@@ -117,7 +133,9 @@ describe('research navigation menu items', () => {
       Boolean(item.targetObjectMetadataId),
     );
     expect(soloObjectItems).toHaveLength(
-      RESEARCH_OBJECT_SPECS.length - hiddenObjectIds.length,
+      RESEARCH_OBJECT_SPECS.length -
+        hiddenObjectIds.length -
+        NAV_HIDDEN_OBJECTS.size,
     );
     for (const objectId of hiddenObjectIds) {
       expect(
@@ -144,9 +162,11 @@ describe('research navigation menu items', () => {
       researchObjectMetadataItems as never,
     );
     const folderCount = Object.keys(RESEARCH_NAV_FOLDER_IDS).length;
-    // all research objects + the four folders + the Discovery, Compose &
-    // Obligations links.
-    expect(kept).toHaveLength(RESEARCH_OBJECT_SPECS.length + folderCount + 3);
+    // all research objects (minus those edited through a dedicated surface) +
+    // the four folders + the Discovery, Compose & Obligations links.
+    expect(kept).toHaveLength(
+      RESEARCH_OBJECT_SPECS.length - NAV_HIDDEN_OBJECTS.size + folderCount + 3,
+    );
     expect(
       kept.some((item) => (item as { name?: string }).name === 'Funding'),
     ).toBe(true);

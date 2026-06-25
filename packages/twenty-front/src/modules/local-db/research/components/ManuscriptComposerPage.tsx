@@ -1,5 +1,6 @@
 import { styled } from '@linaria/react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { isDefined } from 'twenty-shared/utils';
 import { H1Title, H2Title, IconPlus } from 'twenty-ui/display';
 import { Button, type SelectOption } from 'twenty-ui/input';
@@ -216,19 +217,63 @@ export const ManuscriptComposerPage = () => {
   const manuscripts = manuscriptRecords as unknown as ManuscriptRecord[];
   const journals = journalRecords as unknown as JournalRecord[];
 
-  const [manuscriptId, setManuscriptId] = useState<string | null>(null);
-  const [sectionId, setSectionId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [manuscriptId, setManuscriptId] = useState<string | null>(() =>
+    searchParams.get('manuscript'),
+  );
+  const [sectionId, setSectionId] = useState<string | null>(() =>
+    searchParams.get('section'),
+  );
   const [journalId, setJournalId] = useState<string | null>(null);
 
   const manuscript =
     manuscripts.find((item) => item.id === manuscriptId) ?? manuscripts[0];
 
-  // Default the selections once data arrives.
+  // Resolve the initial selection. A `?section=<id>` deep link selects that
+  // section's owning manuscript; otherwise fall back to the first manuscript.
   useEffect(() => {
-    if (!isDefined(manuscriptId) && manuscripts.length > 0) {
-      setManuscriptId(manuscripts[0].id);
+    if (isDefined(manuscriptId) || manuscripts.length === 0) return;
+    const owningManuscriptId = isDefined(sectionId)
+      ? (sectionRecords as unknown as SectionRecord[]).find(
+          (section) => section.id === sectionId,
+        )?.manuscript?.id
+      : undefined;
+    setManuscriptId(owningManuscriptId ?? manuscripts[0].id);
+  }, [manuscripts, manuscriptId, sectionId, sectionRecords]);
+
+  // Keep the URL in sync so the composer is shareable and back-button friendly.
+  const updateSelectionParams = (
+    nextManuscriptId: string,
+    nextSectionId: string | null,
+  ) => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set('manuscript', nextManuscriptId);
+        if (isDefined(nextSectionId)) {
+          next.set('section', nextSectionId);
+        } else {
+          next.delete('section');
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  const handleSelectManuscript = (nextManuscriptId: string) => {
+    setManuscriptId(nextManuscriptId);
+    setSectionId(null);
+    updateSelectionParams(nextManuscriptId, null);
+  };
+
+  const handleSelectSection = (nextSectionId: string) => {
+    setSectionId(nextSectionId);
+    if (isDefined(manuscript)) {
+      updateSelectionParams(manuscript.id, nextSectionId);
     }
-  }, [manuscripts, manuscriptId]);
+  };
 
   const sections = useMemo(
     () =>
@@ -358,10 +403,7 @@ export const ManuscriptComposerPage = () => {
             dropdownId="compose-manuscript-select"
             options={manuscriptOptions}
             value={manuscript.id}
-            onChange={(value) => {
-              setManuscriptId(value);
-              setSectionId(null);
-            }}
+            onChange={handleSelectManuscript}
           />
         </StyledHeader>
 
@@ -373,7 +415,7 @@ export const ManuscriptComposerPage = () => {
                 dropdownId="compose-section-select"
                 options={sectionOptions}
                 value={selectedSection?.id ?? sections[0].id}
-                onChange={setSectionId}
+                onChange={handleSelectSection}
               />
               <Button
                 title="Add section"

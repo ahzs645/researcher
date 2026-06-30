@@ -86,17 +86,64 @@ export const parseCslJson = (text: string): ReferenceDraft[] => {
 // Handles the common `@type{key, field = {value}, field = "value", ...}` shape.
 // Not a full BibTeX implementation — enough to import a Zotero/Mendeley export.
 
-const BIBTEX_TYPE_MAP: Record<string, string> = {
-  article: 'ARTICLE_JOURNAL',
-  inproceedings: 'PAPER_CONFERENCE',
-  conference: 'PAPER_CONFERENCE',
-  book: 'BOOK',
-  incollection: 'CHAPTER',
-  inbook: 'CHAPTER',
-  phdthesis: 'THESIS',
-  mastersthesis: 'THESIS',
-  techreport: 'REPORT',
-  misc: 'OTHER',
+// BibTeX entry type → CSL item type (lower-hyphen). We build a real CSL item so
+// the import is stored CSL-JSON-first like every other path, not flat-only.
+const BIBTEX_CSL_TYPE_MAP: Record<string, string> = {
+  article: 'article-journal',
+  inproceedings: 'paper-conference',
+  conference: 'paper-conference',
+  book: 'book',
+  incollection: 'chapter',
+  inbook: 'chapter',
+  phdthesis: 'thesis',
+  mastersthesis: 'thesis',
+  techreport: 'report',
+  misc: 'document',
+};
+
+// "Last, First and Last2, First2" / "First Last and …" → CSL name objects.
+const bibtexAuthorsToCsl = (
+  value: string,
+): { family?: string; given?: string; literal?: string }[] =>
+  value
+    .split(/\s+and\s+/i)
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0)
+    .map((name) => {
+      if (name.includes(',')) {
+        const [family, given] = name.split(',').map((part) => part.trim());
+        return { family, given };
+      }
+      const parts = name.split(/\s+/);
+      if (parts.length === 1) return { literal: name };
+      const family = parts.pop() as string;
+      return { family, given: parts.join(' ') };
+    });
+
+const bibtexEntryToCslItem = (
+  type: string,
+  key: string,
+  fields: Record<string, string>,
+): Record<string, unknown> => {
+  const item: Record<string, unknown> = {
+    id: key,
+    type: BIBTEX_CSL_TYPE_MAP[type] ?? 'document',
+  };
+  if (isNonEmptyString(fields.title)) item.title = fields.title;
+  if (isNonEmptyString(fields.author)) {
+    item.author = bibtexAuthorsToCsl(fields.author);
+  }
+  const year = Number(fields.year);
+  if (Number.isFinite(year)) item.issued = { 'date-parts': [[year]] };
+  const container = fields.journal ?? fields.booktitle;
+  if (isNonEmptyString(container)) item['container-title'] = container;
+  if (isNonEmptyString(fields.volume)) item.volume = fields.volume;
+  if (isNonEmptyString(fields.number)) item.issue = fields.number;
+  if (isNonEmptyString(fields.pages)) item.page = fields.pages.replace(/--/g, '–');
+  if (isNonEmptyString(fields.doi)) item.DOI = fields.doi;
+  if (isNonEmptyString(fields.url)) item.URL = fields.url;
+  if (isNonEmptyString(fields.publisher)) item.publisher = fields.publisher;
+  return item;
 };
 
 const stripBraces = (value: string): string =>
@@ -106,13 +153,6 @@ const stripBraces = (value: string): string =>
     .replace(/[}"]+$/, '')
     .replace(/[{}]/g, '')
     .trim();
-
-const bibtexAuthors = (value: string): string =>
-  value
-    .split(/\s+and\s+/i)
-    .map((name) => name.trim())
-    .filter((name) => name.length > 0)
-    .join('; ');
 
 const parseBibtexFields = (body: string): Record<string, string> => {
   const fields: Record<string, string> = {};
@@ -131,23 +171,10 @@ export const parseBibtex = (text: string): ReferenceDraft[] => {
     const type = match[1].toLowerCase();
     const key = match[2].trim();
     const fields = parseBibtexFields(match[3]);
-    const yearValue = Number(fields.year);
-    drafts.push({
-      name: fields.title ?? 'Untitled',
-      citationKey: key,
-      cslType: BIBTEX_TYPE_MAP[type] ?? 'OTHER',
-      authors: isNonEmptyString(fields.author)
-        ? bibtexAuthors(fields.author)
-        : '',
-      year: Number.isFinite(yearValue) ? yearValue : null,
-      containerTitle: fields.journal ?? fields.booktitle ?? null,
-      volume: fields.volume ?? null,
-      issue: fields.number ?? null,
-      pages: fields.pages ?? null,
-      doi: fields.doi ?? null,
-      url: fields.url ?? null,
-      cslJson: '',
-    });
+    // Build a real CSL item, then derive the draft the same way every other
+    // path does — so BibTeX imports are stored CSL-JSON-first, not flat-only.
+    const draft = cslItemToReferenceDraft(bibtexEntryToCslItem(type, key, fields));
+    drafts.push({ ...draft, citationKey: key });
   }
   return drafts;
 };

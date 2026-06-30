@@ -50,7 +50,9 @@ const fetchFirstText = async (urls: string[]): Promise<string> => {
 
 const stripHtml = (html: string): string =>
   html
-    .replace(/<[^>]*>/g, '')
+    // Replace tags with a space, not nothing, so numeric styles keep the gap
+    // between the left-margin number ("1.") and the entry text.
+    .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 

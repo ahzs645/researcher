@@ -122,6 +122,36 @@ labeler (the `createDocumentLabeler` seam), so keywords come from real content,
 not just the filename. Marking a **recurring** obligation complete auto-creates
 the next instance via `buildNextObligation`.
 
+### Bringing existing work in & formatting it (manuscript/)
+
+The composer can now ingest an existing paper instead of only authoring from
+scratch, and format it offline:
+
+- `manuscript/manuscriptDocImport.ts` — pure, dependency-free parser:
+  Markdown/plain-text **or** WordprocessingML (`.docx` body) → classified
+  `manuscriptSection` drafts (headings → Abstract/Methods/… by keyword, tables
+  kept inline). Fully unit-tested.
+- `manuscript/manuscriptDocxFile.ts` — browser glue that unzips `word/document.xml`
+  from a real `.docx` with the native `DecompressionStream` (no zip dependency),
+  then hands the XML to the pure parser. Powers the **Import** panel on Compose.
+- `manuscript/manuscriptScaffold.ts` — journal-driven section skeletons (IMRaD /
+  thesis / chapter) with the abstract word limit pulled from the chosen
+  `journalTemplate`; `wordLimitStatus` backs the editor's over-limit warning.
+- `manuscript/manuscriptChart.ts` (+ `manuscriptChartImage.ts`) — turn a data
+  table (or a dataset's rows) into a plotted **chart figure**: pure SVG
+  generation, rasterized to PNG for reliable DOCX/PDF embedding.
+- `manuscript/manuscriptCsl.ts` — resolves CSL styles **local-first** (bundled
+  under `public/csl/`), CDN fallback, so the common journals format with no
+  network.
+- `researchApplicationImport.ts` — the same import engine, grant-shaped: a
+  proposal `.docx` → `applicationSection` drafts, behind the Funding nav's
+  **Import proposal** page.
+
+The **starter journal-template library** (`journalTemplateRecords` +
+`getResearchStarterRecords`) now seeds in **blank** workspaces too (not just
+demo), so a fresh workspace can format a paper without hand-building a template.
+Every bundled `citationStyleId` has a matching CSL file under `public/csl/`.
+
 ## Design constraints (read before adding fields)
 
 - **Flat fields only for now.** Relations are the one hard part of the bridge

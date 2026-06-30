@@ -1068,6 +1068,10 @@ const reusableAnswerRecords = (): SeedRecord[] => [
   }),
 ];
 
+// The starter format library. Ships in BOTH blank and demo workspaces (a format
+// is scaffolding, not demo content), so a fresh workspace can format a paper
+// without hand-building a template first. Every `citationStyleId` is one of the
+// CSL styles bundled under `public/csl/` so the bibliography renders **offline**.
 const journalTemplateRecords = (): SeedRecord[] => [
   makeRecord('journalTemplate', 'nature', 0, {
     name: 'Nature (numeric, superscript)',
@@ -1086,7 +1090,24 @@ const journalTemplateRecords = (): SeedRecord[] => [
     outputFormats: ['DOCX', 'PDF', 'JATS'],
     notes: 'Superscript numeric citations; 150-word abstract.',
   }),
-  makeRecord('journalTemplate', 'ieee-trans', 1, {
+  makeRecord('journalTemplate', 'science', 1, {
+    name: 'Science (numeric, superscript)',
+    citationMode: 'NUMERIC_SUPERSCRIPT',
+    citationStyleId: 'science',
+    figureLabelFormat: 'Fig. {n}',
+    tableLabelFormat: 'Table {n}',
+    supplementPrefix: 'S',
+    numberingScope: 'CONTINUOUS',
+    crossRefFormat: 'Fig. {n}',
+    figureCaptionPosition: 'BELOW',
+    tableCaptionPosition: 'ABOVE',
+    abstractWordLimit: 125,
+    twoColumn: false,
+    referenceDocUrl: '',
+    outputFormats: ['DOCX', 'PDF'],
+    notes: 'Superscript numeric; very short (125-word) abstract.',
+  }),
+  makeRecord('journalTemplate', 'ieee-trans', 2, {
     name: 'IEEE Transactions',
     citationMode: 'NUMERIC',
     citationStyleId: 'ieee',
@@ -1103,8 +1124,59 @@ const journalTemplateRecords = (): SeedRecord[] => [
     outputFormats: ['DOCX', 'PDF', 'LATEX'],
     notes: 'Two-column; bracketed numeric citations.',
   }),
-  makeRecord('journalTemplate', 'generic-author-date', 2, {
-    name: 'Generic (author–date)',
+  makeRecord('journalTemplate', 'conference-ieee', 3, {
+    name: 'Conference paper (IEEE, two-column)',
+    citationMode: 'NUMERIC',
+    citationStyleId: 'ieee',
+    figureLabelFormat: 'Fig. {n}',
+    tableLabelFormat: 'TABLE {n}',
+    supplementPrefix: 'S',
+    numberingScope: 'CONTINUOUS',
+    crossRefFormat: 'Fig. {n}',
+    figureCaptionPosition: 'BELOW',
+    tableCaptionPosition: 'ABOVE',
+    abstractWordLimit: 200,
+    twoColumn: true,
+    referenceDocUrl: '',
+    outputFormats: ['DOCX', 'PDF', 'LATEX'],
+    notes: 'Generic two-column conference proceedings format.',
+  }),
+  makeRecord('journalTemplate', 'mdpi-ijerph', 4, {
+    name: 'MDPI / IJERPH (numeric)',
+    citationMode: 'NUMERIC',
+    citationStyleId: 'multidisciplinary-digital-publishing-institute',
+    figureLabelFormat: 'Figure {n}',
+    tableLabelFormat: 'Table {n}',
+    supplementPrefix: 'S',
+    numberingScope: 'CONTINUOUS',
+    crossRefFormat: 'Figure {n}',
+    figureCaptionPosition: 'BELOW',
+    tableCaptionPosition: 'ABOVE',
+    abstractWordLimit: 200,
+    twoColumn: true,
+    referenceDocUrl: '',
+    outputFormats: ['DOCX', 'PDF'],
+    notes: 'MDPI house style (IJERPH, Sustainability, …); bracketed numeric.',
+  }),
+  makeRecord('journalTemplate', 'acs', 5, {
+    name: 'ACS (American Chemical Society)',
+    citationMode: 'NUMERIC',
+    citationStyleId: 'american-chemical-society',
+    figureLabelFormat: 'Figure {n}',
+    tableLabelFormat: 'Table {n}',
+    supplementPrefix: 'S',
+    numberingScope: 'CONTINUOUS',
+    crossRefFormat: 'Figure {n}',
+    figureCaptionPosition: 'BELOW',
+    tableCaptionPosition: 'ABOVE',
+    abstractWordLimit: 250,
+    twoColumn: true,
+    referenceDocUrl: '',
+    outputFormats: ['DOCX', 'PDF'],
+    notes: 'Chemistry journals; numeric superscript-style citations.',
+  }),
+  makeRecord('journalTemplate', 'generic-author-date', 6, {
+    name: 'APA 7th (author–date)',
     citationMode: 'AUTHOR_DATE',
     citationStyleId: 'apa',
     figureLabelFormat: 'Figure {n}',
@@ -1118,7 +1190,41 @@ const journalTemplateRecords = (): SeedRecord[] => [
     twoColumn: false,
     referenceDocUrl: '',
     outputFormats: ['DOCX', 'PDF'],
-    notes: 'Author–date in-text citations.',
+    notes: 'APA 7th author–date — social sciences, health, education.',
+  }),
+  makeRecord('journalTemplate', 'chicago-author-date', 7, {
+    name: 'Chicago (author–date)',
+    citationMode: 'AUTHOR_DATE',
+    citationStyleId: 'chicago-author-date',
+    figureLabelFormat: 'Figure {n}',
+    tableLabelFormat: 'Table {n}',
+    supplementPrefix: 'S',
+    numberingScope: 'CONTINUOUS',
+    crossRefFormat: 'Figure {n}',
+    figureCaptionPosition: 'BELOW',
+    tableCaptionPosition: 'ABOVE',
+    abstractWordLimit: 250,
+    twoColumn: false,
+    referenceDocUrl: '',
+    outputFormats: ['DOCX', 'PDF'],
+    notes: 'Chicago author–date — humanities and social sciences.',
+  }),
+  makeRecord('journalTemplate', 'thesis-generic', 8, {
+    name: 'Thesis / dissertation (author–date)',
+    citationMode: 'AUTHOR_DATE',
+    citationStyleId: 'apa',
+    figureLabelFormat: 'Figure {n}',
+    tableLabelFormat: 'Table {n}',
+    supplementPrefix: 'A',
+    numberingScope: 'PER_SECTION',
+    crossRefFormat: 'Figure {n}',
+    figureCaptionPosition: 'BELOW',
+    tableCaptionPosition: 'ABOVE',
+    abstractWordLimit: 350,
+    twoColumn: false,
+    referenceDocUrl: '',
+    outputFormats: ['DOCX', 'PDF'],
+    notes: 'Single-column thesis layout; per-chapter figure numbering.',
   }),
 ];
 
@@ -1672,4 +1778,11 @@ export const getResearchSeedRecords = (): Record<string, SeedRecord[]> => ({
   projectMembership: projectMembershipRecords(),
   obligation: obligationRecords(),
   obligationDocument: obligationDocumentRecords(),
+});
+
+// The subset seeded into a BLANK workspace too — formatting scaffolding the user
+// needs before they have any content, but no demo data. Keep this to records
+// that are templates/catalogs, never sample people/projects/grants.
+export const getResearchStarterRecords = (): Record<string, SeedRecord[]> => ({
+  journalTemplate: journalTemplateRecords(),
 });

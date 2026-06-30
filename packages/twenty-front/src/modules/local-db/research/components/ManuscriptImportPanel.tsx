@@ -5,6 +5,7 @@ import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
+  extractTablesToFigures,
   parseMarkdownDocument,
   type ImportedDocument,
 } from '@/local-db/research/manuscript/manuscriptDocImport';
@@ -12,14 +13,18 @@ import {
   ACCEPTED_IMPORT_EXTENSIONS,
   readImportedDocumentFile,
 } from '@/local-db/research/manuscript/manuscriptDocxFile';
+import { reconcileImportedCitations } from '@/local-db/research/manuscript/manuscriptCitationReconcile';
+import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
-// Bring an existing paper *in* instead of retyping it: drop a .docx / .md / .txt
-// (or paste text) and the document is split into classified manuscript sections.
-// The parsing is the pure, tested `manuscriptDocImport`; this panel only handles
-// I/O and record creation, appending after any sections already present.
+// Bring an existing paper *in* instead of retyping it: drop a .docx / .pdf / .md
+// / .txt (or paste text) and the document is split into classified manuscript
+// sections. With "reconcile" on, the References section is parsed into reference
+// records and in-text [1] / (Author, Year) markers are rewritten to live [@key]
+// citations, and standalone tables become numbered figures. The parsing is the
+// pure, tested layer; this panel only does I/O and record creation.
 
 type ManuscriptImportPanelProps = {
   manuscriptId: string;
@@ -56,6 +61,14 @@ const StyledActions = styled.div`
   gap: ${themeCssVariables.spacing[2]};
 `;
 
+const StyledCheckboxLabel = styled.label`
+  align-items: flex-start;
+  color: ${themeCssVariables.font.color.secondary};
+  display: flex;
+  font-size: ${themeCssVariables.font.size.xs};
+  gap: ${themeCssVariables.spacing[1]};
+`;
+
 const UNTITLED = /^untitled/i;
 
 export const ManuscriptImportPanel = ({
@@ -67,12 +80,19 @@ export const ManuscriptImportPanel = ({
   const { createOneRecord: createSection } = useCreateOneRecord({
     objectNameSingular: 'manuscriptSection',
   });
+  const { createOneRecord: createReference } = useCreateOneRecord({
+    objectNameSingular: 'reference',
+  });
+  const { createOneRecord: createFigure } = useCreateOneRecord({
+    objectNameSingular: 'figure',
+  });
   const { updateOneRecord } = useUpdateOneRecord();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [pasteText, setPasteText] = useState('');
   const [isBusy, setIsBusy] = useState(false);
+  const [reconcile, setReconcile] = useState(true);
 
   const importDocument = async (document: ImportedDocument) => {
     if (document.sections.length === 0) {
@@ -81,7 +101,31 @@ export const ManuscriptImportPanel = ({
       });
       return;
     }
-    for (const section of document.sections) {
+
+    let sections = document.sections;
+    let referenceCount = 0;
+    let figureCount = 0;
+    let linkedCount = 0;
+
+    // Reconcile: References → records, in-text markers → [@key], tables → figures.
+    if (reconcile) {
+      const reconciled = reconcileImportedCitations(sections);
+      linkedCount = reconciled.linkedCount;
+      const { added } = dedupeReferenceDrafts([], reconciled.references);
+      for (const reference of added) {
+        await createReference({ ...reference, manuscriptId });
+      }
+      referenceCount = added.length;
+
+      const lifted = extractTablesToFigures(reconciled.sections);
+      sections = lifted.sections;
+      for (const figure of lifted.figures) {
+        await createFigure({ ...figure, manuscriptId });
+      }
+      figureCount = lifted.figures.length;
+    }
+
+    for (const section of sections) {
       await createSection({
         name: section.name,
         manuscriptId,
@@ -105,8 +149,11 @@ export const ManuscriptImportPanel = ({
         updateOneRecordInput: { name: document.title },
       });
     }
+    const extras = reconcile
+      ? ` · ${referenceCount} reference(s), ${linkedCount} citation(s) linked, ${figureCount} table(s)`
+      : '';
     enqueueSuccessSnackBar({
-      message: `Imported ${document.sections.length} section(s)`,
+      message: `Imported ${sections.length} section(s)${extras}`,
     });
     onChanged();
   };
@@ -141,9 +188,19 @@ export const ManuscriptImportPanel = ({
   return (
     <StyledPanel>
       <StyledHint>
-        Import an existing paper as sections — Word (.docx), Markdown or plain
-        text. Headings become sections (Abstract, Methods, …); tables stay inline.
+        Import an existing paper as sections — Word (.docx), PDF (text-based,
+        best-effort), Markdown or plain text. Headings become sections (Abstract,
+        Methods, …).
       </StyledHint>
+      <StyledCheckboxLabel>
+        <input
+          type="checkbox"
+          checked={reconcile}
+          onChange={(event) => setReconcile(event.target.checked)}
+        />
+        Reconcile citations &amp; tables (parse References into records, link
+        [1]/(Author, Year) → [@key], lift tables to figures)
+      </StyledCheckboxLabel>
       <StyledActions>
         <Button
           title={isBusy ? 'Importing…' : 'Import file…'}

@@ -9,6 +9,7 @@ import {
   parseWordDocument,
   type ImportedDocument,
 } from './manuscriptDocImport';
+import { extractPdfText } from './manuscriptPdfFile';
 
 const td = new TextDecoder('utf-8');
 
@@ -96,7 +97,11 @@ export const readImportedDocumentFile = async (
     const xml = await extractDocxDocumentXml(await file.arrayBuffer());
     return parseWordDocument(xml);
   }
+  if (extension === 'pdf') {
+    // Best-effort: PDFs carry no headings, so this usually yields one section.
+    return parseMarkdownDocument(await extractPdfText(await file.arrayBuffer()));
+  }
   return parseMarkdownDocument(await file.text());
 };
 
-export const ACCEPTED_IMPORT_EXTENSIONS = '.docx,.md,.markdown,.txt';
+export const ACCEPTED_IMPORT_EXTENSIONS = '.docx,.pdf,.md,.markdown,.txt';

@@ -24,6 +24,17 @@ export type ImportedDocument = {
   sections: ImportedSectionDraft[];
 };
 
+export type ImportedFigureDraft = {
+  name: string;
+  assetKind: 'TABLE';
+  placement: 'MAIN';
+  refKey: string;
+  caption: string;
+  tableData: string;
+  imageSource: 'NONE';
+  orderIndex: number;
+};
+
 // Heading text → section type + placement. Order matters: the first rule whose
 // pattern matches the (numbering-stripped, lower-cased) heading wins, so more
 // specific phrases sit above generic ones.
@@ -242,3 +253,66 @@ export const parseWordMlToMarkdown = (documentXml: string): string => {
 
 export const parseWordDocument = (documentXml: string): ImportedDocument =>
   parseMarkdownDocument(parseWordMlToMarkdown(documentXml));
+
+// ── Lift standalone tables into numbered figure records ─────────────────────
+// An imported GFM table sitting in a section body is data, not prose. This pulls
+// each one out into a `figure` (TABLE) draft and leaves a `[#refKey]` cross-ref
+// in its place, so it numbers as "Table N" and renders once (via the figure),
+// not twice. Pure; the caller persists the figure drafts.
+
+const TABLE_SEPARATOR = /^\|?[\s:|-]+\|?$/;
+const isTableLine = (line: string): boolean => line.trim().includes('|');
+
+// A caption-ish line just above a table, e.g. "Table 1. Growth parameters".
+const CAPTION_LINE = /^\s*(table|tbl)\b[\s.:]*\d*[.:]?\s*(.*)$/i;
+
+export const extractTablesToFigures = (
+  sections: ImportedSectionDraft[],
+  startOrderIndex = 0,
+): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
+  const figures: ImportedFigureDraft[] = [];
+  let order = startOrderIndex;
+
+  const nextSections = sections.map((section) => {
+    const lines = section.content.split('\n');
+    const out: string[] = [];
+    for (let index = 0; index < lines.length; index += 1) {
+      // Find a maximal run of consecutive table lines.
+      if (isTableLine(lines[index])) {
+        let end = index;
+        while (end < lines.length && isTableLine(lines[end])) end += 1;
+        const block = lines.slice(index, end);
+        const hasSeparator = block.some((line) => TABLE_SEPARATOR.test(line.trim()));
+        if (hasSeparator && block.length >= 2) {
+          // Adopt a caption from the line just above the table if it reads like one.
+          let caption = '';
+          const previous = out[out.length - 1]?.trim() ?? '';
+          const captionMatch = CAPTION_LINE.exec(previous);
+          if (captionMatch !== null) {
+            caption = captionMatch[2].trim() || previous;
+            out.pop();
+          }
+          order += 1;
+          const refKey = `imported-table-${order}`;
+          figures.push({
+            name: caption || `Imported table ${order}`,
+            assetKind: 'TABLE',
+            placement: 'MAIN',
+            refKey,
+            caption,
+            tableData: block.join('\n').trim(),
+            imageSource: 'NONE',
+            orderIndex: order - 1,
+          });
+          out.push(`[#${refKey}]`);
+          index = end - 1;
+          continue;
+        }
+      }
+      out.push(lines[index]);
+    }
+    return { ...section, content: out.join('\n').replace(/\n{3,}/g, '\n\n').trim() };
+  });
+
+  return { sections: nextSections, figures };
+};

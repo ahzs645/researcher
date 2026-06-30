@@ -72,16 +72,28 @@ confirm it.)
 
 ## What's left (prioritized)
 
-1. **PDF import** — extract text/headings from `.pdf` (pdf.js) so real PDFs go in
-   directly. Highest impact: the user's manuscripts are PDFs.
-2. **Citation reconciliation on import** — parse the References section into
-   `reference` records and convert in-text `[1]` / `(Author, Year)` to `[@key]`,
-   so imported papers get live, re-styleable citations + a generated bibliography.
-3. **Vancouver CSL offline** — bundle it once a reachable mirror is found (works
-   online today via CDN fallback).
-4. **Shared reference library + 2-way Zotero sync** — one cross-manuscript
-   library, incremental sync, collections (today: per-manuscript, one-way import).
-5. **Figure extraction from imported tables** — optionally lift standalone tables
-   into numbered `figure` records (today they stay inline).
-6. **Full CI verification** — run the project's jest/typecheck/lint (blocked
-   locally here); pure logic was validated via standalone harnesses.
+1. **PDF import** — ✅ **done.** A dependency-free, best-effort extractor parses
+   text-based PDFs (objects + native `DecompressionStream` inflate of FlateDecode
+   streams; text from `Tj`/`TJ` operators) and feeds the importer. `.pdf` is now
+   accepted. Caveat: PDFs carry no heading structure, so it usually yields one
+   "Body" section to split, and scanned/image or exotic-font PDFs aren't
+   supported (save as .docx). Verified on crafted uncompressed + Flate PDFs (7/7).
+2. **Citation reconciliation on import** — ✅ **done.** The References section is
+   parsed into `reference` records (CSL-JSON-first, author-year keys, DOI), and
+   in-text `[1]` / `[1,2]` / `[1–3]` and `(Author et al., Year)` (incl. grouped
+   cites) are rewritten to live `[@key]`. On by default in the Import panel.
+   Verified (14/14 + end-to-end 6/6). Note: free-text reference *fields* are
+   heuristic (author/year/DOI reliable; title/journal best-effort, raw text kept
+   in notes) — but the in-text linking is exact.
+3. **Vancouver CSL offline** — ✅ **done.** Bundled `vancouver.csl` and added a
+   "Vancouver (numeric, biomedical)" template; renders offline
+   (`1. Mendell MJ, … Indoor Air. 2013;23(6):515–28.`).
+4. **Shared reference library + 2-way Zotero sync** — still open. Needs a
+   cross-manuscript library object + incremental/collection sync; one-way,
+   per-manuscript import works today (now de-duplicated).
+5. **Figure extraction from imported tables** — ✅ **done.** Standalone tables
+   are lifted into numbered `figure` (TABLE) records with a parsed caption, and
+   replaced in the body by a resolvable `[#imported-table-N]` cross-ref.
+6. **Full CI verification** — still open (the project's jest/typecheck/lint can't
+   run here — broken `yarn install`); all pure logic was validated via standalone
+   `tsx`/`citeproc` harnesses, and jest tests are written for every module.

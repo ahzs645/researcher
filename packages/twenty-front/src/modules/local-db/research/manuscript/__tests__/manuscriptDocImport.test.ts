@@ -1,5 +1,6 @@
 import {
   classifyHeading,
+  extractTablesToFigures,
   parseMarkdownDocument,
   parseWordDocument,
   parseWordMlToMarkdown,
@@ -128,6 +129,35 @@ describe('parseMarkdownDocument', () => {
       ].join('\n'),
     );
     expect(doc.sections[0].content).toContain('| Site | PM2.5 |');
+  });
+});
+
+describe('extractTablesToFigures', () => {
+  it('lifts a standalone table into a figure and leaves a cross-ref', () => {
+    const doc = parseMarkdownDocument(
+      [
+        '## Results',
+        'Table 1. Growth parameters',
+        '| Site | PM2.5 |',
+        '| --- | --- |',
+        '| A | 12 |',
+      ].join('\n'),
+    );
+    const { sections, figures } = extractTablesToFigures(doc.sections);
+    expect(figures).toHaveLength(1);
+    expect(figures[0].assetKind).toBe('TABLE');
+    expect(figures[0].refKey).toBe('imported-table-1');
+    expect(figures[0].caption).toBe('Growth parameters');
+    expect(figures[0].tableData).toContain('| Site | PM2.5 |');
+    // The table is replaced by a resolvable cross-ref, not duplicated.
+    expect(sections[0].content).toContain('[#imported-table-1]');
+    expect(sections[0].content).not.toContain('| Site | PM2.5 |');
+  });
+
+  it('leaves prose sections untouched when there is no table', () => {
+    const doc = parseMarkdownDocument('## Intro\nJust prose, no tables.');
+    const { figures } = extractTablesToFigures(doc.sections);
+    expect(figures).toHaveLength(0);
   });
 });
 

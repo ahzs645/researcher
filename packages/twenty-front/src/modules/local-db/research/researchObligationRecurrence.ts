@@ -8,6 +8,8 @@
 
 export type RecurrenceCadence =
   | 'ONCE'
+  | 'WEEKLY'
+  | 'BIWEEKLY'
   | 'MONTHLY'
   | 'QUARTERLY'
   | 'SEMI_ANNUAL'
@@ -18,6 +20,13 @@ const MONTHS_BY_CADENCE: Record<string, number> = {
   QUARTERLY: 3,
   SEMI_ANNUAL: 6,
   ANNUAL: 12,
+};
+
+// Short cadences advance by whole days instead of months — a weekly lab slide
+// deck rolls 7 days, not a fraction of a month.
+const DAYS_BY_CADENCE: Record<string, number> = {
+  WEEKLY: 7,
+  BIWEEKLY: 14,
 };
 
 // What the caller needs to compute the next instance. All optional so it maps
@@ -43,7 +52,20 @@ export type NextObligationFields = {
 
 // True when a recurrence value should spawn a follow-up instance.
 export const isRecurring = (recurrence: string | null | undefined): boolean =>
-  typeof recurrence === 'string' && recurrence in MONTHS_BY_CADENCE;
+  typeof recurrence === 'string' &&
+  (recurrence in MONTHS_BY_CADENCE || recurrence in DAYS_BY_CADENCE);
+
+// Add whole days to an ISO date (for weekly/biweekly cadences).
+const addDays = (
+  iso: string | null | undefined,
+  days: number,
+): string | null => {
+  if (typeof iso !== 'string' || iso.length === 0) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString();
+};
 
 // Add whole months to an ISO date, clamping the day to the target month's last
 // day (so Jan 31 + 1 month → Feb 28/29, not an overflow into March).
@@ -73,6 +95,19 @@ export const advanceLabel = (
 ): string | null => {
   if (typeof label !== 'string' || label.length === 0) {
     return label ?? null;
+  }
+  // Day-based cadences: advance a "Week N" marker; otherwise leave the label
+  // untouched (the rolled dates carry the change).
+  const days = DAYS_BY_CADENCE[cadence ?? ''];
+  if (days !== undefined) {
+    const weekN = /\b(Week\s+)(\d+)\b/i;
+    return weekN.test(label)
+      ? label.replace(
+          weekN,
+          (_match, prefix: string, n: string) =>
+            `${prefix}${Number(n) + days / 7}`,
+        )
+      : label;
   }
   const months = MONTHS_BY_CADENCE[cadence ?? ''];
   if (months === undefined) return label;
@@ -126,7 +161,21 @@ export const advanceLabel = (
 export const buildNextObligation = (
   input: RecurringObligationInput,
 ): NextObligationFields | null => {
-  const months = MONTHS_BY_CADENCE[input.recurrence ?? ''];
+  const cadence = input.recurrence ?? '';
+
+  // Weekly / biweekly advance by days; everything else by whole months.
+  const days = DAYS_BY_CADENCE[cadence];
+  if (days !== undefined) {
+    return {
+      name: advanceLabel(input.name, cadence) ?? input.name ?? '',
+      reportingPeriod: advanceLabel(input.reportingPeriod, cadence),
+      dueDate: addDays(input.dueDate, days),
+      periodStart: addDays(input.periodStart, days),
+      periodEnd: addDays(input.periodEnd, days),
+    };
+  }
+
+  const months = MONTHS_BY_CADENCE[cadence];
   if (months === undefined) return null;
 
   return {

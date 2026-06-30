@@ -1708,6 +1708,24 @@ const obligationRecords = (): SeedRecord[] => [
     keywords: ['data management', '2026', 'spintronic memory'],
     notes: '',
   }),
+  makeRecord('obligation', 'weekly-lab-slide', 4, {
+    name: 'Week 15 lab slide deck',
+    obligationType: 'PRESENTATION',
+    status: 'IN_PROGRESS',
+    priority: 'MEDIUM',
+    reportingPeriod: 'Week 15',
+    recurrence: 'WEEKLY',
+    assigneeId: RESEARCHER.maya,
+    projectId: PROJECT.topological,
+    grantId: null,
+    dueDate: '2026-04-17T00:00:00.000Z',
+    periodStart: null,
+    periodEnd: null,
+    submittedAt: null,
+    completedAt: null,
+    keywords: ['weekly', 'slides', 'lab meeting'],
+    notes: 'Marking this complete auto-creates the Week 16 deck, due a week later.',
+  }),
 ];
 
 // Uploaded documents for the obligations above. The completed financial report

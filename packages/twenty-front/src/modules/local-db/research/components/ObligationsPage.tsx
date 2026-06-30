@@ -55,11 +55,24 @@ const OBLIGATION_TYPE_LABELS: Record<string, string> = {
   FINAL_REPORT: 'Final report',
   FINANCIAL_REPORT: 'Financial report',
   MILESTONE: 'Milestone',
+  PRESENTATION: 'Presentation / slides',
   ETHICS_RENEWAL: 'Ethics renewal',
   DATA_MANAGEMENT: 'Data management',
   PUBLICATION: 'Publication',
   TRAINING: 'Training',
   OTHER: 'Other',
+};
+
+// Cadence picker for the create form — including the short weekly/biweekly
+// cadences a lab uses for recurring deliverables like a weekly slide deck.
+const RECURRENCE_LABELS: Record<string, string> = {
+  ONCE: 'One-time',
+  WEEKLY: 'Weekly',
+  BIWEEKLY: 'Every two weeks',
+  MONTHLY: 'Monthly',
+  QUARTERLY: 'Quarterly',
+  SEMI_ANNUAL: 'Semi-annual',
+  ANNUAL: 'Annual',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -335,6 +348,7 @@ export const ObligationsPage = () => {
   // New-obligation form state.
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState('PROGRESS_REPORT');
+  const [newRecurrence, setNewRecurrence] = useState('ONCE');
   const [newAssignee, setNewAssignee] = useState('');
   const [newProject, setNewProject] = useState('');
   const [newPeriod, setNewPeriod] = useState('');
@@ -449,6 +463,7 @@ export const ObligationsPage = () => {
       name: newTitle.trim(),
       obligationType: newType,
       status: 'UPCOMING',
+      recurrence: newRecurrence,
       reportingPeriod: newPeriod.trim().length > 0 ? newPeriod.trim() : null,
       assigneeId: newAssignee.length > 0 ? newAssignee : null,
       projectId: newProject.length > 0 ? newProject : null,
@@ -616,8 +631,18 @@ export const ObligationsPage = () => {
             </option>
           ))}
         </StyledSelect>
+        <StyledSelect
+          value={newRecurrence}
+          onChange={(event) => setNewRecurrence(event.target.value)}
+        >
+          {Object.entries(RECURRENCE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {value === 'ONCE' ? 'One-time' : `Repeats: ${label}`}
+            </option>
+          ))}
+        </StyledSelect>
         <StyledInput
-          placeholder="Period (e.g. 2026)"
+          placeholder="Period (e.g. Week 12, 2026)"
           value={newPeriod}
           onChange={(event) => setNewPeriod(event.target.value)}
         />

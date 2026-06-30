@@ -289,6 +289,7 @@ const OBLIGATION_TYPE_OPTIONS: ResearchSelectOption[] = [
   { value: 'FINAL_REPORT', label: 'Final report', color: 'green' },
   { value: 'FINANCIAL_REPORT', label: 'Financial report', color: 'orange' },
   { value: 'MILESTONE', label: 'Milestone / deliverable', color: 'purple' },
+  { value: 'PRESENTATION', label: 'Presentation / slides', color: 'sky' },
   { value: 'ETHICS_RENEWAL', label: 'Ethics renewal', color: 'red' },
   { value: 'DATA_MANAGEMENT', label: 'Data management plan', color: 'yellow' },
   { value: 'PUBLICATION', label: 'Publication requirement', color: 'pink' },
@@ -307,10 +308,13 @@ const OBLIGATION_STATUS_OPTIONS: ResearchSelectOption[] = [
   { value: 'WAIVED', label: 'Waived', color: 'gray' },
 ];
 
-// Many obligations repeat on a fixed cadence (annual progress reports, quarterly
-// financials); recording it lets the next instance be generated later.
+// Many obligations repeat on a fixed cadence — from a weekly lab slide deck to
+// annual progress reports and quarterly financials; recording it lets the next
+// instance be generated automatically when one is completed.
 const RECURRENCE_OPTIONS: ResearchSelectOption[] = [
   { value: 'ONCE', label: 'One-time', color: 'gray' },
+  { value: 'WEEKLY', label: 'Weekly', color: 'pink' },
+  { value: 'BIWEEKLY', label: 'Every two weeks', color: 'purple' },
   { value: 'MONTHLY', label: 'Monthly', color: 'sky' },
   { value: 'QUARTERLY', label: 'Quarterly', color: 'blue' },
   { value: 'SEMI_ANNUAL', label: 'Semi-annual', color: 'turquoise' },

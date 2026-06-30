@@ -163,9 +163,10 @@ describe('research navigation menu items', () => {
     );
     const folderCount = Object.keys(RESEARCH_NAV_FOLDER_IDS).length;
     // all research objects (minus those edited through a dedicated surface) +
-    // the four folders + the Discovery, Compose & Obligations links.
+    // the four folders + the Discovery, Compose, Obligations & Import-proposal
+    // links.
     expect(kept).toHaveLength(
-      RESEARCH_OBJECT_SPECS.length - NAV_HIDDEN_OBJECTS.size + folderCount + 3,
+      RESEARCH_OBJECT_SPECS.length - NAV_HIDDEN_OBJECTS.size + folderCount + 4,
     );
     expect(
       kept.some((item) => (item as { name?: string }).name === 'Funding'),

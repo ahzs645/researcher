@@ -5,6 +5,11 @@ import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
+  renderChartSvg,
+  tableMarkdownToChartData,
+} from '@/local-db/research/manuscript/manuscriptChart';
+import { rasterizeSvgToPngDataUrl } from '@/local-db/research/manuscript/manuscriptChartImage';
+import {
   describeImageSource,
   resolveFigureImage,
 } from '@/local-db/research/manuscript/manuscriptImages';
@@ -26,9 +31,28 @@ import { Select } from '@/ui/input/components/Select';
 const ASSET_KIND_OPTIONS: SelectOption<string>[] = [
   { value: 'FIGURE', label: 'Figure' },
   { value: 'TABLE', label: 'Table' },
+  { value: 'CHART', label: 'Chart (from table data)' },
   { value: 'SCHEME', label: 'Scheme' },
   { value: 'BOX', label: 'Box' },
 ];
+
+const CHART_WIDTH = 640;
+const CHART_HEIGHT = 400;
+
+// Render a Markdown data table to a PNG data-URL chart, or null when it has no
+// numeric columns to plot. Used both by the add form and the per-table action.
+const chartPngFromTable = async (
+  tableMarkdown: string,
+): Promise<string | null> => {
+  const data = tableMarkdownToChartData(tableMarkdown);
+  if (data === null) return null;
+  const svg = renderChartSvg(data, {
+    kind: 'bar',
+    width: CHART_WIDTH,
+    height: CHART_HEIGHT,
+  });
+  return rasterizeSvgToPngDataUrl(svg, CHART_WIDTH, CHART_HEIGHT);
+};
 
 const PLACEMENT_OPTIONS: SelectOption<string>[] = [
   { value: 'MAIN', label: 'Main' },
@@ -145,7 +169,7 @@ export const ManuscriptFigurePanel = ({
     objectNameSingular: 'figure',
   });
   const { updateOneRecord } = useUpdateOneRecord();
-  const { enqueueSuccessSnackBar } = useSnackBar();
+  const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [caption, setCaption] = useState('');
@@ -173,34 +197,98 @@ export const ManuscriptFigurePanel = ({
     [figures, style],
   );
 
+  // Create a chart figure from a Markdown data table: store it as a numbered
+  // FIGURE (GENERATED source) with the rendered PNG, and keep the source table
+  // in `tableData` so it can be re-plotted after edits.
+  const createChartFigure = async (
+    sourceTable: string,
+    captionText: string,
+    refKeyBase: string,
+    orderIndex: number,
+  ): Promise<boolean> => {
+    const png = await chartPngFromTable(sourceTable);
+    if (png === null) {
+      enqueueErrorSnackBar({
+        message: 'No numeric columns to plot — add a data table first',
+      });
+      return false;
+    }
+    await createOneRecord({
+      name: captionText || 'Chart',
+      manuscriptId,
+      assetKind: 'FIGURE',
+      placement,
+      refKey: slugify(refKeyBase).slice(0, 24) || `chart-${Date.now()}`,
+      caption: captionText,
+      imageUrl: png,
+      imageSource: 'GENERATED',
+      tableData: sourceTable,
+      orderIndex,
+    });
+    return true;
+  };
+
   const addFigure = async (dataUrl?: string) => {
     if (isAdding) return;
     setIsAdding(true);
     try {
       const trimmedCaption = caption.trim();
-      const refKey =
-        slugify(trimmedCaption).slice(0, 24) || `asset-${Date.now()}`;
-      await createOneRecord({
-        name: trimmedCaption || 'Untitled figure',
-        manuscriptId,
-        assetKind,
-        placement,
-        refKey,
-        caption: trimmedCaption,
-        imageUrl: dataUrl ?? imageUrl.trim(),
-        imageSource: isDefined(dataUrl)
-          ? 'UPLOAD'
-          : imageUrl.trim().length > 0
-            ? 'URL'
-            : 'NONE',
-        ...(assetKind === 'TABLE' ? { tableData: tableData.trim() } : {}),
-        orderIndex: figures.length,
-      });
-      enqueueSuccessSnackBar({ message: `Added ${assetKind.toLowerCase()}` });
+
+      if (assetKind === 'CHART') {
+        const created = await createChartFigure(
+          tableData.trim(),
+          trimmedCaption,
+          trimmedCaption || 'chart',
+          figures.length,
+        );
+        if (!created) return;
+        enqueueSuccessSnackBar({ message: 'Plotted chart from table' });
+      } else {
+        const refKey =
+          slugify(trimmedCaption).slice(0, 24) || `asset-${Date.now()}`;
+        await createOneRecord({
+          name: trimmedCaption || 'Untitled figure',
+          manuscriptId,
+          assetKind,
+          placement,
+          refKey,
+          caption: trimmedCaption,
+          imageUrl: dataUrl ?? imageUrl.trim(),
+          imageSource: isDefined(dataUrl)
+            ? 'UPLOAD'
+            : imageUrl.trim().length > 0
+              ? 'URL'
+              : 'NONE',
+          ...(assetKind === 'TABLE' ? { tableData: tableData.trim() } : {}),
+          orderIndex: figures.length,
+        });
+        enqueueSuccessSnackBar({ message: `Added ${assetKind.toLowerCase()}` });
+      }
+
       setCaption('');
       setImageUrl('');
       setTableData('');
       onChanged();
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  // Plot an existing table figure as a new chart figure.
+  const plotExistingTable = async (figure: FigureLike) => {
+    if (isAdding) return;
+    setIsAdding(true);
+    try {
+      const created = await createChartFigure(
+        figure.tableData ?? '',
+        `Chart — ${figure.caption || figure.name || 'table'}`,
+        `chart-${figure.refKey ?? figure.id}`,
+        figures.length,
+      );
+      if (created) {
+        enqueueSuccessSnackBar({ message: 'Plotted chart from table' });
+        onChanged();
+      }
     } finally {
       setIsAdding(false);
     }
@@ -235,11 +323,22 @@ export const ManuscriptFigurePanel = ({
               ) : null}
             </StyledRow>
             {figure.assetKind === 'TABLE' ? (
-              <StyledTableArea
-                defaultValue={figure.tableData ?? ''}
-                placeholder={'| Col A | Col B |\n| --- | --- |\n| 1 | 2 |'}
-                onBlur={(event) => persistTable(figure, event.target.value)}
-              />
+              <>
+                <StyledTableArea
+                  defaultValue={figure.tableData ?? ''}
+                  placeholder={'| Col A | Col B |\n| --- | --- |\n| 1 | 2 |'}
+                  onBlur={(event) => persistTable(figure, event.target.value)}
+                />
+                <StyledActions>
+                  <Button
+                    title="Plot as chart"
+                    variant="secondary"
+                    size="small"
+                    disabled={isAdding}
+                    onClick={() => plotExistingTable(figure)}
+                  />
+                </StyledActions>
+              </>
             ) : null}
           </div>
         );
@@ -265,9 +364,9 @@ export const ManuscriptFigurePanel = ({
             onChange={setPlacement}
           />
         </StyledActions>
-        {assetKind === 'TABLE' ? (
+        {assetKind === 'TABLE' || assetKind === 'CHART' ? (
           <StyledTableArea
-            placeholder={'| Col A | Col B |\n| --- | --- |\n| 1 | 2 |'}
+            placeholder={'| Site | PM2.5 |\n| --- | --- |\n| A | 12 |'}
             value={tableData}
             onChange={(event) => setTableData(event.target.value)}
           />

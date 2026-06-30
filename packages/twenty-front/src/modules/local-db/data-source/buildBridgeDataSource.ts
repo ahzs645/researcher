@@ -8,6 +8,7 @@ import { createDexieDataSource } from '@/local-db/data-source/createDexieDataSou
 import {
   augmentObjectMetadataWithResearch,
   getResearchSeedRecords,
+  getResearchStarterRecords,
 } from '@/local-db/research/bridgeResearchAugmentation';
 import { getResearchSeedMode } from '@/local-db/twenty-local/getResearchSeedMode';
 
@@ -81,6 +82,28 @@ const buildSeed = (): Record<string, DataSourceRecord[]> => ({
   ...(getResearchSeedRecords() as Record<string, DataSourceRecord[]>),
 });
 
+// The starter scaffolding seeded into a blank workspace too (journal templates),
+// so a fresh workspace can format a paper without first hand-building a template.
+const buildStarterSeed = (): Record<string, DataSourceRecord[]> =>
+  getResearchStarterRecords() as Record<string, DataSourceRecord[]>;
+
+// Insert a seed map only into tables that are currently empty — idempotent, so
+// re-running never clobbers records the user created.
+const seedMissingTables = async (
+  dataSource: ReturnType<typeof getBridgeDataSource>,
+  seed: Record<string, DataSourceRecord[]>,
+): Promise<void> => {
+  await Promise.all(
+    Object.entries(seed).map(async ([objectName, records]) => {
+      if (records.length === 0) return;
+      const existing = await dataSource.findMany(objectName, { first: 1 }, {});
+      if (existing.totalCount === 0) {
+        await dataSource.db.table(objectName).bulkPut(records);
+      }
+    }),
+  );
+};
+
 export const getBridgeDataSource = () => {
   if (cachedDataSource === undefined) {
     cachedDataSource = createDexieDataSource({
@@ -105,37 +128,30 @@ export const getBridgeDataSource = () => {
   return cachedDataSource;
 };
 
-// One-shot seed. A fresh install starts as a blank workspace; the sample
-// dataset is only loaded when the visitor opted into demo mode (`/demo`). An
-// already-populated database is left alone either way so mutations survive
-// reload.
+// One-shot seed. A fresh install starts as a blank workspace, but still gets the
+// starter format library (journal templates) so a paper can be formatted from
+// day one. The full sample dataset is only loaded in demo mode (`/demo`). An
+// already-populated database keeps the user's mutations; we only fill tables
+// that are still empty.
 export const ensureBridgeDataSourceSeeded = async (): Promise<void> => {
   if (seedPromise !== undefined) return seedPromise;
   const dataSource = getBridgeDataSource();
   seedPromise = (async () => {
     const probe = await dataSource.findMany('company', { first: 1 }, {});
     const seedMode = getResearchSeedMode();
-    if (probe.totalCount > 0) {
-      if (seedMode !== 'demo') return;
 
-      const seed = buildSeed();
-      await Promise.all(
-        Object.entries(seed).map(async ([objectName, records]) => {
-          if (records.length === 0) return;
-          const existing = await dataSource.findMany(
-            objectName,
-            { first: 1 },
-            {},
-          );
-          if (existing.totalCount === 0) {
-            await dataSource.db.table(objectName).bulkPut(records);
-          }
-        }),
-      );
+    if (seedMode === 'demo') {
+      if (probe.totalCount > 0) {
+        await seedMissingTables(dataSource, buildSeed());
+      } else {
+        await dataSource.reset(buildSeed());
+      }
       return;
     }
-    if (seedMode !== 'demo') return;
-    await dataSource.reset(buildSeed());
+
+    // Blank mode: seed only the starter format library, idempotently, so the
+    // workspace is never empty of templates but carries no demo content.
+    await seedMissingTables(dataSource, buildStarterSeed());
   })();
   return seedPromise;
 };

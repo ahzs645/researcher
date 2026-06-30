@@ -9,6 +9,7 @@ import {
   parseReferences,
   type ReferenceDraft,
 } from '@/local-db/research/manuscript/manuscriptReferenceImport';
+import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import {
   isZoteroConfigComplete,
   parseZoteroCslResponse,
@@ -105,8 +106,12 @@ export const ManuscriptReferencePanel = ({
   });
   const [isBusy, setIsBusy] = useState(false);
 
+  // Persist drafts after de-duplicating against the existing library and
+  // assigning unique citation keys — so re-importing a DOI or a whole Zotero
+  // library never creates duplicates. Returns counts for the caller's message.
   const createFromDrafts = async (drafts: ReferenceDraft[]) => {
-    for (const draft of drafts) {
+    const { added, duplicateCount } = dedupeReferenceDrafts(references, drafts);
+    for (const draft of added) {
       await createOneRecord({
         ...draft,
         manuscriptId,
@@ -114,6 +119,28 @@ export const ManuscriptReferencePanel = ({
       });
     }
     onChanged();
+    return { addedCount: added.length, duplicateCount };
+  };
+
+  const summarize = (
+    addedCount: number,
+    duplicateCount: number,
+    source: string,
+  ): void => {
+    if (addedCount === 0) {
+      enqueueSuccessSnackBar({
+        message:
+          duplicateCount > 0
+            ? `Already in your library — skipped ${duplicateCount} duplicate(s)`
+            : 'Nothing to import',
+      });
+      return;
+    }
+    const skipped =
+      duplicateCount > 0 ? `, skipped ${duplicateCount} duplicate(s)` : '';
+    enqueueSuccessSnackBar({
+      message: `Imported ${addedCount} reference(s)${source}${skipped}`,
+    });
   };
 
   const importPaste = async () => {
@@ -125,10 +152,8 @@ export const ManuscriptReferencePanel = ({
     }
     setIsBusy(true);
     try {
-      await createFromDrafts(drafts);
-      enqueueSuccessSnackBar({
-        message: `Imported ${drafts.length} reference(s)`,
-      });
+      const { addedCount, duplicateCount } = await createFromDrafts(drafts);
+      summarize(addedCount, duplicateCount, '');
       setPasteText('');
     } finally {
       setIsBusy(false);
@@ -149,8 +174,10 @@ export const ManuscriptReferencePanel = ({
         return;
       }
       const item = (await response.json()) as Record<string, unknown>;
-      await createFromDrafts([cslItemToReferenceDraft(item)]);
-      enqueueSuccessSnackBar({ message: 'Added reference from DOI' });
+      const { addedCount, duplicateCount } = await createFromDrafts([
+        cslItemToReferenceDraft(item),
+      ]);
+      summarize(addedCount, duplicateCount, ' from DOI');
       setDoi('');
     } catch {
       enqueueErrorSnackBar({ message: 'Could not reach doi.org' });
@@ -177,10 +204,8 @@ export const ManuscriptReferencePanel = ({
         });
         return;
       }
-      await createFromDrafts(drafts);
-      enqueueSuccessSnackBar({
-        message: `Imported ${drafts.length} reference(s) from Zotero`,
-      });
+      const { addedCount, duplicateCount } = await createFromDrafts(drafts);
+      summarize(addedCount, duplicateCount, ' from Zotero');
     } catch {
       enqueueErrorSnackBar({
         message: 'Could not reach Zotero — check the key/library id',

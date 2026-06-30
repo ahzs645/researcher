@@ -6,12 +6,48 @@ import {
 
 describe('researchObligationRecurrence', () => {
   describe('isRecurring', () => {
-    it('is true for known cadences and false otherwise', () => {
+    it('is true for known cadences (incl. weekly/biweekly) and false otherwise', () => {
       expect(isRecurring('ANNUAL')).toBe(true);
       expect(isRecurring('QUARTERLY')).toBe(true);
+      expect(isRecurring('WEEKLY')).toBe(true);
+      expect(isRecurring('BIWEEKLY')).toBe(true);
       expect(isRecurring('ONCE')).toBe(false);
       expect(isRecurring(null)).toBe(false);
-      expect(isRecurring('WEEKLY')).toBe(false);
+      expect(isRecurring('NONSENSE')).toBe(false);
+    });
+  });
+
+  describe('weekly / biweekly cadence', () => {
+    it('rolls the due date forward by 7 / 14 days', () => {
+      const weekly = buildNextObligation({
+        name: 'Weekly lab slide',
+        recurrence: 'WEEKLY',
+        dueDate: '2026-04-10T00:00:00.000Z',
+      });
+      expect(weekly?.dueDate).toBe('2026-04-17T00:00:00.000Z');
+
+      const biweekly = buildNextObligation({
+        name: 'Sprint demo',
+        recurrence: 'BIWEEKLY',
+        dueDate: '2026-04-10T00:00:00.000Z',
+      });
+      expect(biweekly?.dueDate).toBe('2026-04-24T00:00:00.000Z');
+    });
+
+    it('advances a "Week N" reporting period for weekly cadence', () => {
+      expect(advanceLabel('Week 12', 'WEEKLY')).toBe('Week 13');
+      expect(advanceLabel('Week 12', 'BIWEEKLY')).toBe('Week 14');
+      // A bare year is left to the dates for short cadences.
+      expect(advanceLabel('2026', 'WEEKLY')).toBe('2026');
+    });
+
+    it('crosses a month boundary correctly', () => {
+      const next = buildNextObligation({
+        name: 'Weekly slide',
+        recurrence: 'WEEKLY',
+        dueDate: '2026-04-28T00:00:00.000Z',
+      });
+      expect(next?.dueDate).toBe('2026-05-05T00:00:00.000Z');
     });
   });
 

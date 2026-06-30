@@ -5,7 +5,10 @@ import {
   buildResearchViews,
 } from './researchMetadataBuilder';
 import { type WorkspaceMode } from './researchObjectModel';
-import { getResearchSeedRecords } from './researchSeedRecords';
+import {
+  getResearchSeedRecords,
+  getResearchStarterRecords,
+} from './researchSeedRecords';
 
 // Single integration point that grafts the research object model onto the
 // bridge's static metadata. The standard 33-object bundle, generated views,
@@ -197,4 +200,4 @@ export const augmentNavigationMenuItemsWithResearch = <TItem>(
     ) as unknown as TItem[]),
   ].map(deriveNavigationMenuItemType);
 
-export { getResearchSeedRecords };
+export { getResearchSeedRecords, getResearchStarterRecords };

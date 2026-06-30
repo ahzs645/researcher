@@ -17,6 +17,10 @@ export const RESEARCH_COMPOSE_PATH = '/compose';
 // Internal route the "Obligations" nav link points at (the obligations tracker).
 export const RESEARCH_OBLIGATIONS_PATH = '/obligations';
 
+// Internal route the "Import proposal" nav link points at (the grant/proposal
+// document importer that fills an application's sections).
+export const RESEARCH_GRANT_IMPORT_PATH = '/grant-import';
+
 const SPEC_BY_NAME = new Map(
   RESEARCH_OBJECT_SPECS.map((spec) => [spec.nameSingular, spec]),
 );
@@ -611,6 +615,27 @@ const buildObligationsLinkItem = () => ({
   targetRecordIdentifier: null,
 });
 
+// An internal LINK item opening the grant/proposal importer, at the bottom of
+// the Funding folder.
+const buildGrantImportLinkItem = () => ({
+  id: researchDeterministicUuid('research:nav:link:grant-import'),
+  userWorkspaceId: null,
+  targetRecordId: null,
+  targetObjectMetadataId: null,
+  viewId: null,
+  folderId: RESEARCH_NAV_FOLDER_IDS.FUNDING,
+  type: 'LINK',
+  name: 'Import proposal',
+  link: RESEARCH_GRANT_IMPORT_PATH,
+  icon: 'IconFileImport',
+  color: 'sky',
+  position: 100,
+  applicationId: CORE_APPLICATION_ID,
+  createdAt: SEED_TIMESTAMP,
+  updatedAt: SEED_TIMESTAMP,
+  targetRecordIdentifier: null,
+});
+
 export const buildResearchNavigationMenuItems = (
   workspaceMode: WorkspaceMode = 'LAB',
 ) => {
@@ -639,6 +664,7 @@ export const buildResearchNavigationMenuItems = (
     buildDiscoveryLinkItem(),
     buildComposeLinkItem(),
     buildObligationsLinkItem(),
+    buildGrantImportLinkItem(),
   ];
 };
 

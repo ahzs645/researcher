@@ -51,6 +51,14 @@ const ObligationsPage = lazy(() =>
   })),
 );
 
+const ApplicationImportPage = lazy(() =>
+  import('@/local-db/research/components/ApplicationImportPage').then(
+    (module) => ({
+      default: module.ApplicationImportPage,
+    }),
+  ),
+);
+
 const RecordShowPage = lazy(() =>
   import('~/pages/object-record/RecordShowPage').then((module) => ({
     default: module.RecordShowPage,
@@ -347,6 +355,14 @@ export const useCreateAppRouter = (
             element={
               <LazyRoute>
                 <ObligationsPage />
+              </LazyRoute>
+            }
+          />
+          <Route
+            path="/grant-import"
+            element={
+              <LazyRoute>
+                <ApplicationImportPage />
               </LazyRoute>
             }
           />

@@ -16,9 +16,14 @@ import {
   type ReferenceLike,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
+import {
+  buildSectionSkeleton,
+  wordLimitStatus,
+} from '@/local-db/research/manuscript/manuscriptScaffold';
 import { ManuscriptCslBibliography } from '@/local-db/research/components/ManuscriptCslBibliography';
 import { ManuscriptExportPanel } from '@/local-db/research/components/ManuscriptExportPanel';
 import { ManuscriptFigurePanel } from '@/local-db/research/components/ManuscriptFigurePanel';
+import { ManuscriptImportPanel } from '@/local-db/research/components/ManuscriptImportPanel';
 import { ManuscriptReferencePanel } from '@/local-db/research/components/ManuscriptReferencePanel';
 import { ManuscriptSectionEditor } from '@/local-db/research/components/ManuscriptSectionEditor';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
@@ -36,6 +41,7 @@ type ManuscriptRecord = {
   id: string;
   name?: string | null;
   status?: string | null;
+  manuscriptType?: string | null;
   targetVenue?: string | null;
   targetJournal?: { id?: string | null } | null;
 };
@@ -94,6 +100,17 @@ const StyledPanel = styled.div`
 const StyledMeta = styled.span`
   color: ${themeCssVariables.font.color.tertiary};
   font-size: ${themeCssVariables.font.size.sm};
+`;
+
+const StyledLimit = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
+const StyledLimitOver = styled.span`
+  color: ${themeCssVariables.font.color.danger};
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.medium};
 `;
 
 const PLACEMENT_RANK: Record<string, number> = {
@@ -185,6 +202,7 @@ export const ManuscriptComposerPage = () => {
       id: true,
       name: true,
       status: true,
+      manuscriptType: true,
       targetVenue: true,
       targetJournal: { id: true },
     },
@@ -381,6 +399,32 @@ export const ManuscriptComposerPage = () => {
     if (isDefined(createdId)) setSectionId(createdId);
   };
 
+  // Generate the journal-appropriate section skeleton (IMRaD / thesis / chapter)
+  // with the abstract's word limit pre-filled from the selected journal format,
+  // so authors start from the expected structure instead of a blank page.
+  const scaffoldSections = async () => {
+    if (!isDefined(manuscript)) return;
+    const skeleton = buildSectionSkeleton(manuscript.manuscriptType, style);
+    let firstId: string | undefined;
+    for (const draft of skeleton) {
+      const created = await createSection({
+        name: draft.name,
+        manuscriptId: manuscript.id,
+        sectionType: draft.sectionType,
+        placement: draft.placement,
+        orderIndex: sections.length + draft.orderIndex,
+        status: 'NOT_STARTED',
+        includeInExport: draft.includeInExport,
+        content: '',
+        ...(isDefined(draft.wordLimit) ? { wordLimit: draft.wordLimit } : {}),
+      });
+      const createdId = (created as { id?: string } | undefined)?.id;
+      if (!isDefined(firstId) && isDefined(createdId)) firstId = createdId;
+    }
+    await refetchSections();
+    if (isDefined(firstId)) setSectionId(firstId);
+  };
+
   if (!isDefined(manuscript)) {
     return (
       <StyledPage>
@@ -435,17 +479,55 @@ export const ManuscriptComposerPage = () => {
                 size="small"
                 onClick={addSection}
               />
+              <Button
+                title="Scaffold sections"
+                variant="secondary"
+                size="small"
+                onClick={scaffoldSections}
+              />
             </StyledToolbar>
           )}
         </StyledPanel>
 
         <StyledPanel>
+          <H2Title title="Import" />
+          <ManuscriptImportPanel
+            manuscriptId={manuscript.id}
+            manuscriptName={manuscript.name}
+            existingSectionCount={sections.length}
+            onChanged={() => void refetchSections()}
+          />
+        </StyledPanel>
+
+        <StyledPanel>
           {isDefined(selectedSection) ? (
-            <ManuscriptSectionEditor
-              key={selectedSection.id}
-              initialMarkdown={selectedSection.content ?? ''}
-              onPersist={persistSection}
-            />
+            <>
+              <ManuscriptSectionEditor
+                key={selectedSection.id}
+                initialMarkdown={selectedSection.content ?? ''}
+                onPersist={persistSection}
+              />
+              {(() => {
+                const status = wordLimitStatus(
+                  selectedSection.wordCount,
+                  selectedSection.wordLimit,
+                );
+                if (status.wordLimit === null) {
+                  return <StyledLimit>{status.wordCount} words</StyledLimit>;
+                }
+                return status.over ? (
+                  <StyledLimitOver>
+                    {status.wordCount} / {status.wordLimit} words ·{' '}
+                    {Math.abs(status.remaining ?? 0)} over limit
+                  </StyledLimitOver>
+                ) : (
+                  <StyledLimit>
+                    {status.wordCount} / {status.wordLimit} words ·{' '}
+                    {status.remaining} left
+                  </StyledLimit>
+                );
+              })()}
+            </>
           ) : (
             <StyledMeta>Add a section to start writing.</StyledMeta>
           )}

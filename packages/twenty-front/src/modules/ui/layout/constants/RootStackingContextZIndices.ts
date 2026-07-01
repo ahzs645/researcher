@@ -13,6 +13,7 @@
  * TODO: add the other remaining components that can appear in the root stacking context
  */
 export enum RootStackingContextZIndices {
+  MobileNavigationDrawerOverlay = 15,
   SidePanel = 21,
   SidePanelButton = 22,
   DropdownPortalBelowModal = 38,

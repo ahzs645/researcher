@@ -40,7 +40,10 @@ const collectStringValues = (
 };
 
 const matchScore = (record: DataSourceRecord, needle: string): number => {
-  if (needle.length === 0) return 0;
+  // An empty needle means the caller hasn't typed a query yet (e.g. a record
+  // picker's initial state) — treat it as "match everything" so pickers show
+  // a default list instead of an empty "No records found" state.
+  if (needle.length === 0) return 1;
   const lower = needle.toLowerCase();
   let score = 0;
   for (const value of collectStringValues(record)) {

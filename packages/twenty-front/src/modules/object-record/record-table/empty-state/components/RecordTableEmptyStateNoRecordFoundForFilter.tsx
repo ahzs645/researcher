@@ -3,6 +3,7 @@ import { useRecordTableContextOrThrow } from '@/object-record/record-table/conte
 import { RecordTableEmptyStateDisplay } from '@/object-record/record-table/empty-state/components/RecordTableEmptyStateDisplay';
 import { useCreateNewIndexRecord } from '@/object-record/record-table/hooks/useCreateNewIndexRecord';
 import { t } from '@lingui/core/macro';
+import { withIndefiniteArticle } from 'twenty-shared/utils';
 import { IconPlus } from 'twenty-ui/display';
 
 export const RecordTableEmptyStateNoRecordFoundForFilter = () => {
@@ -18,7 +19,7 @@ export const RecordTableEmptyStateNoRecordFoundForFilter = () => {
 
   const objectLabelSingular = useObjectLabel(objectMetadataItem);
 
-  const buttonTitle = t`Add a ${objectLabelSingular}`;
+  const buttonTitle = t`Add ${withIndefiniteArticle(objectLabelSingular)}`;
 
   const title = t`No ${objectLabelSingular} found`;
 

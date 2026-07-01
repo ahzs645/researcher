@@ -4,6 +4,7 @@ import { RecordTableEmptyStateDisplay } from '@/object-record/record-table/empty
 import { getEmptyStateSubTitle } from '@/object-record/record-table/empty-state/utils/getEmptyStateSubTitle';
 import { getEmptyStateTitle } from '@/object-record/record-table/empty-state/utils/getEmptyStateTitle';
 import { useCreateNewIndexRecord } from '@/object-record/record-table/hooks/useCreateNewIndexRecord';
+import { withIndefiniteArticle } from 'twenty-shared/utils';
 import { IconPlus } from 'twenty-ui/display';
 
 export const RecordTableEmptyStateNoGroupNoRecordAtAll = () => {
@@ -19,7 +20,7 @@ export const RecordTableEmptyStateNoGroupNoRecordAtAll = () => {
 
   const objectLabelSingular = useObjectLabel(objectMetadataItem);
 
-  const buttonTitle = `Add a ${objectLabelSingular}`;
+  const buttonTitle = `Add ${withIndefiniteArticle(objectLabelSingular)}`;
 
   const title = getEmptyStateTitle(
     objectMetadataItem.nameSingular,

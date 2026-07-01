@@ -8,10 +8,12 @@ import { KeyboardShortcutMenu } from '@/keyboard-shortcut-menu/components/Keyboa
 import { LayoutCustomizationBar } from '@/layout-customization/components/LayoutCustomizationBar';
 import { AppNavigationDrawer } from '@/navigation/components/AppNavigationDrawer';
 import { MobileNavigationBar } from '@/navigation/components/MobileNavigationBar';
+import { useNavigationDrawerExpanded } from '@/navigation/hooks/useNavigationDrawerExpanded';
 import { PageDragDropProvider } from '@/navigation-menu-item/display/dnd/providers/PageDragDropProvider';
 import { useIsSettingsPage } from '@/navigation/hooks/useIsSettingsPage';
 import { OBJECT_SETTINGS_WIDTH } from '@/settings/data-model/constants/ObjectSettings';
 import { BackgroundMockNavigationDrawer } from '@/sign-in-background-mock/components/BackgroundMockNavigationDrawer';
+import { RootStackingContextZIndices } from '@/ui/layout/constants/RootStackingContextZIndices';
 import { Suspense, lazy, useContext } from 'react';
 
 const BackgroundMockPage = lazy(() =>
@@ -48,11 +50,25 @@ const StyledPageContainerBase = styled.div`
   flex: 1 1 auto;
   flex-direction: row;
   min-height: 0;
+  position: relative;
 `;
 const StyledPageContainer = motion.create(StyledPageContainerBase);
 
-const StyledNavigationDrawerWrapper = styled.div`
+const StyledNavigationDrawerWrapper = styled.div<{
+  isMobileOverlay?: boolean;
+}>`
   flex-shrink: 0;
+
+  ${({ isMobileOverlay }) =>
+    isMobileOverlay
+      ? `
+        background: ${themeCssVariables.background.primary};
+        inset: 0;
+        position: absolute;
+        width: 100%;
+        z-index: ${RootStackingContextZIndices.MobileNavigationDrawerOverlay};
+      `
+      : ''}
 `;
 
 const StyledMainContainer = styled.div`
@@ -68,6 +84,9 @@ export const DefaultLayout = () => {
   const showAuthModal = useShowAuthModal();
   const useShowFullScreen = useShowFullscreen();
   const { theme } = useContext(ThemeContext);
+  const isNavigationDrawerExpanded = useNavigationDrawerExpanded();
+  const isMobileNavigationDrawerOverlay =
+    isMobile && isNavigationDrawerExpanded;
 
   return (
     <>
@@ -98,7 +117,9 @@ export const DefaultLayout = () => {
                     <BackgroundMockNavigationDrawer />
                   </StyledNavigationDrawerWrapper>
                 ) : useShowFullScreen ? null : (
-                  <StyledNavigationDrawerWrapper>
+                  <StyledNavigationDrawerWrapper
+                    isMobileOverlay={isMobileNavigationDrawerOverlay}
+                  >
                     <AppNavigationDrawer />
                   </StyledNavigationDrawerWrapper>
                 )}

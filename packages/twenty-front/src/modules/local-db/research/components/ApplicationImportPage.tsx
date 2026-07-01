@@ -163,8 +163,8 @@ export const ApplicationImportPage = () => {
         <H1Title title="Import proposal" />
         {applications.length === 0 ? (
           <StyledHint>
-            No grant applications yet — start one from Funding › Discovery, then
-            import your proposal here.
+            No grant applications yet — start one from a grant opportunity in
+            Discovery, then import your proposal here.
           </StyledHint>
         ) : (
           <>
@@ -200,7 +200,9 @@ export const ApplicationImportPage = () => {
                 onChange={handleFile}
               />
               <StyledTextarea
-                placeholder={'…or paste proposal text here:\n\n## Lay summary\n…\n\n## Objectives\n…'}
+                placeholder={
+                  '…or paste proposal text here:\n\n## Lay summary\n…\n\n## Objectives\n…'
+                }
                 value={pasteText}
                 onChange={(event) => setPasteText(event.target.value)}
               />

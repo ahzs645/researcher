@@ -107,6 +107,12 @@ export const RecordInlineCellContainer = () => {
       readonly={readonly ?? false}
       onMouseEnter={handleContainerMouseEnter}
       onMouseLeave={handleContainerMouseLeave}
+      // Touch devices don't have a hover state distinct from a tap: the first
+      // tap only synthesizes `mouseenter` (mounting the hovered/editable
+      // overlay), so the click that opens the field lands on nothing and a
+      // second tap is needed. Firing the same handler on `touchstart` mounts
+      // the overlay before the tap's `click` phase, so one tap is enough.
+      onTouchStart={handleContainerMouseEnter}
     >
       {(IconLabel || label) && (
         <StyledLabelAndIconContainer id={labelId}>

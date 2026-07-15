@@ -11,6 +11,10 @@ import {
   extractCitationKeys,
   resolveCrossReferences,
 } from './manuscriptCrossReference';
+import {
+  splitAssetPlacementMarkers,
+  stripAssetPlacementMarkers,
+} from './manuscriptAssetPlacement';
 import { figureHasImage, figureToMarkdown } from './manuscriptImages';
 import { numberAssets } from './manuscriptNumbering';
 import {
@@ -56,7 +60,7 @@ export const slugifyTitle = (value: string): string =>
     .slice(0, 60) || 'manuscript';
 
 export const countWords = (markdown: string): number => {
-  const text = markdown
+  const text = stripAssetPlacementMarkers(markdown)
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ') // images
     .replace(/\[[#@][^\]]*\]/g, ' ') // cross-refs / citations
     .replace(/[#*_>`~-]/g, ' ')
@@ -130,11 +134,27 @@ const compareSections = (a: SectionLike, b: SectionLike): number => {
   return (a.name ?? '').localeCompare(b.name ?? '');
 };
 
+const sectionHeadingLevel = (section: SectionLike, heading: string): 2 | 3 => {
+  if (
+    section.sectionType === 'ABSTRACT' ||
+    section.sectionType === 'KEYWORDS'
+  ) {
+    return 3;
+  }
+  const numericPrefix = /^(\d+(?:\.\d+)+)\b/.exec(heading)?.[1];
+  return numericPrefix !== undefined && numericPrefix.split('.').length >= 3
+    ? 3
+    : 2;
+};
+
 export type ManuscriptMeta = {
   id: string;
   name?: string | null;
   targetVenue?: string | null;
   doi?: string | null;
+  authorLine?: string | null;
+  affiliations?: string | null;
+  correspondingAuthor?: string | null;
 };
 
 export type BuildBundleInput = {
@@ -151,10 +171,14 @@ export type ManuscriptBundle = {
     title: string;
     authors: string;
     abstract: string;
+    keywords: string[];
+    affiliations: string;
+    correspondingAuthor: string;
     journal: string;
     citationStyleId: string;
     citationMode: string;
   };
+  style: JournalStyle;
   mainMarkdown: string;
   supplementMarkdown: string;
   fullMarkdown: string;
@@ -216,16 +240,19 @@ export const buildManuscriptBundle = (
   const warnings: string[] = [];
 
   const numbered = numberAssets(input.figures, style);
+  const figuresByRefKey = new Map<string, NumberedFigure>();
   const figuresBySection = new Map<string, NumberedFigure[]>();
   const unanchoredMain: NumberedFigure[] = [];
   const supplementFigures: NumberedFigure[] = [];
   for (const figure of numbered) {
-    if (figure.placement === 'SUPPLEMENT') {
-      supplementFigures.push(figure);
-    } else if (isNonEmptyString(figure.sectionId)) {
+    figuresByRefKey.set(figure.refKey ?? figure.id, figure);
+    figuresByRefKey.set(figure.id, figure);
+    if (isNonEmptyString(figure.sectionId)) {
       const list = figuresBySection.get(figure.sectionId) ?? [];
       list.push(figure);
       figuresBySection.set(figure.sectionId, list);
+    } else if (figure.placement === 'SUPPLEMENT') {
+      supplementFigures.push(figure);
     } else {
       unanchoredMain.push(figure);
     }
@@ -240,7 +267,14 @@ export const buildManuscriptBundle = (
   }
 
   const sections = [...input.sections]
-    .filter((section) => section.includeInExport !== false)
+    // The manuscript metadata already renders the title, authors,
+    // affiliations, and corresponding author. A TITLE_PAGE import section is
+    // the source copy of that same material, not a second manuscript section.
+    .filter(
+      (section) =>
+        section.includeInExport !== false &&
+        section.sectionType !== 'TITLE_PAGE',
+    )
     .sort(compareSections);
 
   // First pass: resolve cross-refs and collect citation keys in document order.
@@ -272,24 +306,57 @@ export const buildManuscriptBundle = (
   const supplementBlocks: string[] = [];
   const mainNodes: ManuscriptDocNode[] = [];
   const supplementNodes: ManuscriptDocNode[] = [];
+  const placedFigureIds = new Set<string>();
   let mainWords = 0;
 
   sections.forEach((section, index) => {
     const part = rendered[index];
     const withCitations = renderCitationsInText(part.resolved, context);
-    const block = `## ${part.heading}\n\n${withCitations}`.trim();
-
     const anchored = figuresBySection.get(section.id) ?? [];
-    const figureBlocks = anchored.map((figure) => figureToMarkdown(figure));
 
     const isSupplement = section.placement === 'SUPPLEMENT';
     const target = isSupplement ? supplementBlocks : mainBlocks;
     const nodeTarget = isSupplement ? supplementNodes : mainNodes;
-    target.push(block);
-    for (const figureBlock of figureBlocks) target.push(figureBlock);
-    nodeTarget.push({ kind: 'heading', level: 2, text: part.heading });
-    nodeTarget.push({ kind: 'prose', markdown: withCitations });
-    for (const figure of anchored) nodeTarget.push(figureNode(figure));
+    target.push(`## ${part.heading}`);
+    nodeTarget.push({
+      kind: 'heading',
+      level: sectionHeadingLevel(section, part.heading),
+      text: part.heading,
+    });
+
+    for (const segment of splitAssetPlacementMarkers(withCitations)) {
+      if (segment.kind === 'prose') {
+        target.push(segment.markdown);
+        nodeTarget.push({ kind: 'prose', markdown: segment.markdown });
+        continue;
+      }
+      const figure = figuresByRefKey.get(segment.refKey);
+      if (figure === undefined) {
+        warnings.push(
+          `Section "${part.heading}" has an unknown asset placement [[asset:${segment.refKey}]]`,
+        );
+        continue;
+      }
+      if (placedFigureIds.has(figure.id)) {
+        warnings.push(
+          `${figure.label} has more than one placement marker; only the first is used`,
+        );
+        continue;
+      }
+      placedFigureIds.add(figure.id);
+      target.push(figureToMarkdown(figure));
+      nodeTarget.push(figureNode(figure));
+    }
+
+    // A section assignment remains a convenient coarse anchor. An explicit
+    // placement marker takes precedence; otherwise the asset follows the
+    // section prose as before.
+    for (const figure of anchored) {
+      if (placedFigureIds.has(figure.id)) continue;
+      placedFigureIds.add(figure.id);
+      target.push(figureToMarkdown(figure));
+      nodeTarget.push(figureNode(figure));
+    }
 
     // Word-limit checks.
     const words = countWords(section.content ?? '');
@@ -306,10 +373,12 @@ export const buildManuscriptBundle = (
   });
 
   for (const figure of unanchoredMain) {
+    if (placedFigureIds.has(figure.id)) continue;
     mainBlocks.push(figureToMarkdown(figure));
     mainNodes.push(figureNode(figure));
   }
   for (const figure of supplementFigures) {
+    if (placedFigureIds.has(figure.id)) continue;
     supplementBlocks.push(figureToMarkdown(figure));
     supplementNodes.push(figureNode(figure));
   }
@@ -337,6 +406,14 @@ export const buildManuscriptBundle = (
     (section) => section.sectionType === 'ABSTRACT',
   );
   const abstract = (abstractSection?.content ?? '').trim();
+  const keywordsSection = sections.find(
+    (section) => section.sectionType === 'KEYWORDS',
+  );
+  const keywords = (keywordsSection?.content ?? '')
+    .replace(/^keywords?\s*:\s*/i, '')
+    .split(/[;,\n]/)
+    .map((keyword) => keyword.trim())
+    .filter((keyword) => keyword.length > 0);
   if (
     isDefined(style.abstractWordLimit) &&
     style.abstractWordLimit > 0 &&
@@ -361,12 +438,16 @@ export const buildManuscriptBundle = (
   return {
     metadata: {
       title: manuscript.name ?? 'Untitled manuscript',
-      authors: input.authors ?? '',
+      authors: input.authors ?? manuscript.authorLine ?? '',
       abstract,
+      keywords,
+      affiliations: manuscript.affiliations ?? '',
+      correspondingAuthor: manuscript.correspondingAuthor ?? '',
       journal: style.name ?? manuscript.targetVenue ?? '',
       citationStyleId: style.citationStyleId ?? '',
       citationMode: style.citationMode ?? 'NUMERIC',
     },
+    style: { ...style },
     mainMarkdown,
     supplementMarkdown,
     fullMarkdown,

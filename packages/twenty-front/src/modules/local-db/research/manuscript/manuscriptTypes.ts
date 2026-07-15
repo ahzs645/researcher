@@ -61,12 +61,14 @@ export type ReferenceLike = {
   doi?: string | null;
   url?: string | null;
   cslJson?: string | null;
+  notes?: string | null;
 };
 
 // The journal format's knobs — everything the numbering/citation/layout logic
 // reads. Every field is optional; sensible defaults fill the gaps.
 export type JournalStyle = {
   name?: string | null;
+  profileKey?: string | null;
   citationMode?: string | null;
   citationStyleId?: string | null;
   figureLabelFormat?: string | null;
@@ -76,8 +78,34 @@ export type JournalStyle = {
   crossRefFormat?: string | null;
   figureCaptionPosition?: string | null;
   tableCaptionPosition?: string | null;
+  figurePageLayout?: string | null;
   abstractWordLimit?: number | null;
+  abstractWordMinimum?: number | null;
+  keywordMinimum?: number | null;
+  keywordMaximum?: number | null;
+  requiredArtifacts?: string[] | null;
+  lineNumbering?: boolean | null;
+  pageNumbering?: boolean | null;
+  sectionNumbering?: boolean | null;
   twoColumn?: boolean | null;
+  frontMatterLayout?: string | null;
+  fontFamily?: string | null;
+  bodyFontSize?: number | null;
+  titleFontSize?: number | null;
+  headingFontSize?: number | null;
+  subheadingFontSize?: number | null;
+  headingColor?: string | null;
+  lineSpacing?: number | null;
+  abstractLineSpacing?: number | null;
+  paragraphSpacingAfter?: number | null;
+  bodyAlignment?: string | null;
+  affiliationAlignment?: string | null;
+  affiliationNumberStyle?: string | null;
+  affiliationLineSpacing?: number | null;
+  affiliationSpacingAfter?: number | null;
+  tableStyle?: string | null;
+  tableFontSize?: number | null;
+  tableLineSpacing?: number | null;
   referenceDocUrl?: string | null;
 };
 

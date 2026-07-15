@@ -6,6 +6,7 @@
 
 import {
   parseMarkdownDocument,
+  parseWordStyleDefinitions,
   parseWordDocument,
   type ImportedDocument,
 } from './manuscriptDocImport';
@@ -21,7 +22,9 @@ const u16 = (view: DataView, offset: number): number =>
 // Inflate a raw DEFLATE stream (zip method 8) using the native API.
 const inflateRaw = async (bytes: Uint8Array): Promise<Uint8Array> => {
   const stream = new Response(
-    new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')),
+    new Blob([new Uint8Array(bytes).buffer])
+      .stream()
+      .pipeThrough(new DecompressionStream('deflate-raw')),
   );
   return new Uint8Array(await stream.arrayBuffer());
 };
@@ -84,6 +87,115 @@ export const extractDocxDocumentXml = async (
   return td.decode(entry);
 };
 
+const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+  bmp: 'image/bmp',
+  gif: 'image/gif',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  svg: 'image/svg+xml',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  webp: 'image/webp',
+};
+
+const bytesToBase64 = (bytes: Uint8Array): string => {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, offset + chunkSize),
+    );
+  }
+  return btoa(binary);
+};
+
+const relationshipTargets = (
+  relationshipsXml: string,
+): Record<string, string> =>
+  Object.fromEntries(
+    [
+      ...relationshipsXml.matchAll(
+        /<Relationship\b[^>]*\bId="([^"]+)"[^>]*\bTarget="([^"]+)"[^>]*\/?\s*>/g,
+      ),
+    ].map((match) => [match[1], match[2]]),
+  );
+
+const imageAltText = (documentXml: string, relationshipId: string): string => {
+  const paragraph = new RegExp(
+    `<w:p\\b[\\s\\S]*?<a:blip\\b[^>]*r:embed="${relationshipId}"[\\s\\S]*?<\\/w:p>`,
+  ).exec(documentXml)?.[0];
+  if (paragraph === undefined) return 'Imported figure';
+  const description = /<wp:docPr\b[^>]*\bdescr="([^"]*)"/.exec(paragraph)?.[1];
+  const name = /<wp:docPr\b[^>]*\bname="([^"]*)"/.exec(paragraph)?.[1];
+  return description?.trim() || name?.trim() || 'Imported figure';
+};
+
+const loadDocxImages = async (
+  buffer: ArrayBuffer,
+  documentXml: string,
+  relationshipsXml: string,
+): Promise<Record<string, { dataUrl: string; altText: string }>> => {
+  const images: Record<string, { dataUrl: string; altText: string }> = {};
+
+  for (const [relationshipId, target] of Object.entries(
+    relationshipTargets(relationshipsXml),
+  )) {
+    if (!target.startsWith('media/')) continue;
+    const bytes = await readZipEntry(buffer, `word/${target}`);
+    if (bytes === null) continue;
+    const extension = target.slice(target.lastIndexOf('.') + 1).toLowerCase();
+    const mimeType = IMAGE_MIME_BY_EXTENSION[extension];
+    if (mimeType === undefined) continue;
+    images[relationshipId] = {
+      dataUrl: `data:${mimeType};base64,${bytesToBase64(bytes)}`,
+      altText: imageAltText(documentXml, relationshipId),
+    };
+  }
+
+  return images;
+};
+
+const readOptionalXmlEntry = async (
+  buffer: ArrayBuffer,
+  entryName: string,
+): Promise<string> => {
+  const entry = await readZipEntry(buffer, entryName);
+  return entry === null ? '' : td.decode(entry);
+};
+
+export const readImportedWordDocument = async (
+  buffer: ArrayBuffer,
+): Promise<ImportedDocument> => {
+  const documentXml = await extractDocxDocumentXml(buffer);
+  const [stylesXml, relationshipsXml] = await Promise.all([
+    readOptionalXmlEntry(buffer, 'word/styles.xml'),
+    readOptionalXmlEntry(buffer, 'word/_rels/document.xml.rels'),
+  ]);
+  const imageByRelationshipId = await loadDocxImages(
+    buffer,
+    documentXml,
+    relationshipsXml,
+  );
+  const document = parseWordDocument(documentXml, {
+    styles: parseWordStyleDefinitions(stylesXml),
+    imageByRelationshipId,
+  });
+  const hasTiff = Object.values(imageByRelationshipId).some((image) =>
+    image.dataUrl.startsWith('data:image/tiff'),
+  );
+
+  return hasTiff
+    ? {
+        ...document,
+        warnings: [
+          ...(document.warnings ?? []),
+          'A TIFF figure was preserved, but browsers cannot preview TIFF reliably. Replace it with PNG before final export.',
+        ],
+      }
+    : document;
+};
+
 const fileExtension = (name: string): string =>
   name.slice(name.lastIndexOf('.') + 1).toLowerCase();
 
@@ -94,12 +206,13 @@ export const readImportedDocumentFile = async (
 ): Promise<ImportedDocument> => {
   const extension = fileExtension(file.name);
   if (extension === 'docx') {
-    const xml = await extractDocxDocumentXml(await file.arrayBuffer());
-    return parseWordDocument(xml);
+    return readImportedWordDocument(await file.arrayBuffer());
   }
   if (extension === 'pdf') {
     // Best-effort: PDFs carry no headings, so this usually yields one section.
-    return parseMarkdownDocument(await extractPdfText(await file.arrayBuffer()));
+    return parseMarkdownDocument(
+      await extractPdfText(await file.arrayBuffer()),
+    );
   }
   return parseMarkdownDocument(await file.text());
 };

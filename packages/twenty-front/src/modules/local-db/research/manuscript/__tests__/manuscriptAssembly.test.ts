@@ -107,6 +107,55 @@ describe('buildManuscriptBundle', () => {
     );
   });
 
+  it('uses an explicit asset linker to place a figure inside section prose', () => {
+    const preciselyPlaced = buildManuscriptBundle({
+      ...input,
+      sections: input.sections.map((section) =>
+        section.id === 's-res'
+          ? {
+              ...section,
+              content:
+                'Paragraph before.\n\n[[asset:arpes]]\n\nParagraph after [#fig:arpes].',
+            }
+          : section,
+      ),
+    });
+    const figureIndex = preciselyPlaced.nodes.findIndex(
+      (node) => node.kind === 'figure' && node.figure.id === 'f1',
+    );
+
+    expect(preciselyPlaced.nodes[figureIndex - 1]).toMatchObject({
+      kind: 'prose',
+      markdown: 'Paragraph before.',
+    });
+    expect(preciselyPlaced.nodes[figureIndex + 1]).toMatchObject({
+      kind: 'prose',
+      markdown: 'Paragraph after Figure 1.',
+    });
+    expect(
+      preciselyPlaced.nodes.filter(
+        (node) => node.kind === 'figure' && node.figure.id === 'f1',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('anchors a supplementary figure inside its owning supplementary section', () => {
+    const anchored = buildManuscriptBundle({
+      ...input,
+      figures: input.figures.map((figure) =>
+        figure.id === 'f2' ? { ...figure, sectionId: 's-sup' } : figure,
+      ),
+    });
+    const sectionIndex = anchored.nodes.findIndex(
+      (node) =>
+        node.kind === 'heading' && node.text === 'Supplementary methods',
+    );
+    expect(anchored.nodes[sectionIndex + 2]).toMatchObject({
+      kind: 'figure',
+      figure: { id: 'f2', number: 'S1' },
+    });
+  });
+
   it('builds a numbered bibliography and CSL JSON', () => {
     expect(bundle.mainMarkdown).toContain('## References');
     expect(bundle.bibliography[0].text).toMatch(/^1\. Smith/);

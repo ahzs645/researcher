@@ -257,6 +257,57 @@ const CAPTION_POSITION_OPTIONS: ResearchSelectOption[] = [
   { value: 'BELOW', label: 'Below', color: 'green' },
 ];
 
+const FIGURE_PAGE_LAYOUT_OPTIONS: ResearchSelectOption[] = [
+  { value: 'INLINE', label: 'Flow with section text', color: 'gray' },
+  { value: 'ONE_PER_PAGE', label: 'One figure per page', color: 'blue' },
+];
+
+const FRONT_MATTER_LAYOUT_OPTIONS: ResearchSelectOption[] = [
+  {
+    value: 'SEPARATE_TITLE_PAGE',
+    label: 'Separate title page',
+    color: 'blue',
+  },
+  {
+    value: 'TITLE_WITH_ABSTRACT',
+    label: 'Title + abstract on page 1',
+    color: 'turquoise',
+  },
+  { value: 'INLINE', label: 'Continuous / inline', color: 'gray' },
+];
+
+const BODY_ALIGNMENT_OPTIONS: ResearchSelectOption[] = [
+  { value: 'LEFT', label: 'Left aligned', color: 'gray' },
+  { value: 'JUSTIFIED', label: 'Justified', color: 'blue' },
+];
+
+const AFFILIATION_ALIGNMENT_OPTIONS: ResearchSelectOption[] = [
+  { value: 'LEFT', label: 'Left aligned', color: 'blue' },
+  { value: 'CENTER', label: 'Centered', color: 'gray' },
+  { value: 'RIGHT', label: 'Right aligned', color: 'turquoise' },
+];
+
+const AFFILIATION_NUMBER_STYLE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'SUPERSCRIPT', label: 'Superscript', color: 'blue' },
+  { value: 'BASELINE', label: 'Baseline', color: 'gray' },
+];
+
+const HEADING_COLOR_OPTIONS: ResearchSelectOption[] = [
+  { value: 'BLACK', label: 'Black', color: 'gray' },
+  { value: 'ADDIS_BLUE', label: 'Addis blue', color: 'blue' },
+];
+
+const TABLE_STYLE_OPTIONS: ResearchSelectOption[] = [
+  {
+    value: 'ACADEMIC',
+    label: 'Academic rules (Addis)',
+    color: 'blue',
+  },
+  { value: 'GRID', label: 'Full grid', color: 'gray' },
+  { value: 'SHADED_HEADER', label: 'Shaded header', color: 'turquoise' },
+  { value: 'BORDERLESS', label: 'Borderless', color: 'green' },
+];
+
 // In-text citation rendering mode — the journal's house style.
 const CITATION_MODE_OPTIONS: ResearchSelectOption[] = [
   { value: 'NUMERIC', label: 'Numeric [1]', color: 'blue' },
@@ -272,6 +323,27 @@ const OUTPUT_FORMAT_OPTIONS: ResearchSelectOption[] = [
   { value: 'JATS', label: 'JATS XML', color: 'purple' },
   { value: 'MARKDOWN', label: 'Markdown', color: 'gray' },
   { value: 'HTML', label: 'HTML', color: 'orange' },
+  { value: 'ZIP', label: 'Submission package (ZIP)', color: 'turquoise' },
+];
+
+const SUBMISSION_ARTIFACT_OPTIONS: ResearchSelectOption[] = [
+  { value: 'COVER_LETTER', label: 'Cover letter', color: 'blue' },
+  { value: 'HIGHLIGHTS', label: 'Highlights', color: 'yellow' },
+  {
+    value: 'COMPETING_INTERESTS',
+    label: 'Competing-interests declaration',
+    color: 'red',
+  },
+  {
+    value: 'SUGGESTED_REVIEWERS',
+    label: 'Suggested reviewers',
+    color: 'purple',
+  },
+  {
+    value: 'SEPARATE_FIGURES',
+    label: 'Separate figure files',
+    color: 'turquoise',
+  },
 ];
 
 // ── Obligations & assignment ───────────────────────────────────────────────
@@ -1237,6 +1309,52 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconBuildingBank',
       },
       {
+        name: 'authorLine',
+        label: 'Author line',
+        type: 'TEXT',
+        icon: 'IconUsers',
+        description: 'Ordered authors as they should appear in the manuscript',
+      },
+      {
+        name: 'affiliations',
+        label: 'Affiliations',
+        type: 'TEXT',
+        icon: 'IconBuilding',
+      },
+      {
+        name: 'correspondingAuthor',
+        label: 'Corresponding author',
+        type: 'TEXT',
+        icon: 'IconMail',
+        description: 'Name and active email address',
+      },
+      {
+        name: 'coverLetter',
+        label: 'Cover letter',
+        type: 'TEXT',
+        icon: 'IconFileText',
+      },
+      {
+        name: 'highlights',
+        label: 'Highlights',
+        type: 'TEXT',
+        icon: 'IconList',
+        description: 'One highlight per line',
+      },
+      {
+        name: 'competingInterests',
+        label: 'Competing interests',
+        type: 'TEXT',
+        icon: 'IconScale',
+      },
+      {
+        name: 'suggestedReviewers',
+        label: 'Suggested reviewers',
+        type: 'TEXT',
+        icon: 'IconUserSearch',
+        description: 'One reviewer per line with institution and email',
+      },
+      {
         name: 'progress',
         label: 'Progress %',
         type: 'NUMBER',
@@ -1822,6 +1940,13 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         options: CITATION_MODE_OPTIONS,
       },
       {
+        name: 'profileKey',
+        label: 'Profile key',
+        type: 'TEXT',
+        icon: 'IconKey',
+        description: 'Stable identifier used by submission validation',
+      },
+      {
         name: 'citationStyleId',
         label: 'CSL style id',
         type: 'TEXT',
@@ -1878,16 +2003,180 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         options: CAPTION_POSITION_OPTIONS,
       },
       {
+        name: 'figurePageLayout',
+        label: 'Figure pagination',
+        type: 'SELECT',
+        icon: 'IconFileDescription',
+        options: FIGURE_PAGE_LAYOUT_OPTIONS,
+      },
+      {
         name: 'abstractWordLimit',
         label: 'Abstract word limit',
         type: 'NUMBER',
         icon: 'IconRuler2',
       },
       {
+        name: 'abstractWordMinimum',
+        label: 'Abstract minimum',
+        type: 'NUMBER',
+        icon: 'IconRuler2',
+      },
+      {
+        name: 'keywordMinimum',
+        label: 'Minimum keywords',
+        type: 'NUMBER',
+        icon: 'IconTags',
+      },
+      {
+        name: 'keywordMaximum',
+        label: 'Maximum keywords',
+        type: 'NUMBER',
+        icon: 'IconTags',
+      },
+      {
+        name: 'requiredArtifacts',
+        label: 'Required submission files',
+        type: 'MULTI_SELECT',
+        icon: 'IconFiles',
+        options: SUBMISSION_ARTIFACT_OPTIONS,
+      },
+      {
+        name: 'lineNumbering',
+        label: 'Line numbering',
+        type: 'BOOLEAN',
+        icon: 'IconListNumbers',
+      },
+      {
+        name: 'pageNumbering',
+        label: 'Page numbering',
+        type: 'BOOLEAN',
+        icon: 'IconFileDigit',
+      },
+      {
+        name: 'sectionNumbering',
+        label: 'Numbered sections',
+        type: 'BOOLEAN',
+        icon: 'IconListNumbers',
+      },
+      {
         name: 'twoColumn',
         label: 'Two-column layout',
         type: 'BOOLEAN',
         icon: 'IconColumns2',
+      },
+      {
+        name: 'frontMatterLayout',
+        label: 'Front-matter layout',
+        type: 'SELECT',
+        icon: 'IconLayoutNavbar',
+        options: FRONT_MATTER_LAYOUT_OPTIONS,
+      },
+      {
+        name: 'fontFamily',
+        label: 'Manuscript font',
+        type: 'TEXT',
+        icon: 'IconTypography',
+      },
+      {
+        name: 'bodyFontSize',
+        label: 'Body font size (pt)',
+        type: 'NUMBER',
+        icon: 'IconTextSize',
+      },
+      {
+        name: 'titleFontSize',
+        label: 'Title font size (pt)',
+        type: 'NUMBER',
+        icon: 'IconTextSize',
+      },
+      {
+        name: 'headingFontSize',
+        label: 'Heading font size (pt)',
+        type: 'NUMBER',
+        icon: 'IconTextSize',
+      },
+      {
+        name: 'subheadingFontSize',
+        label: 'Subheading font size (pt)',
+        type: 'NUMBER',
+        icon: 'IconTextSize',
+      },
+      {
+        name: 'headingColor',
+        label: 'Heading color',
+        type: 'SELECT',
+        icon: 'IconPalette',
+        options: HEADING_COLOR_OPTIONS,
+      },
+      {
+        name: 'lineSpacing',
+        label: 'Line spacing',
+        type: 'NUMBER',
+        icon: 'IconLineHeight',
+      },
+      {
+        name: 'abstractLineSpacing',
+        label: 'Abstract line spacing',
+        type: 'NUMBER',
+        icon: 'IconLineHeight',
+      },
+      {
+        name: 'paragraphSpacingAfter',
+        label: 'Paragraph spacing after (pt)',
+        type: 'NUMBER',
+        icon: 'IconLineHeight',
+      },
+      {
+        name: 'bodyAlignment',
+        label: 'Body alignment',
+        type: 'SELECT',
+        icon: 'IconAlignJustified',
+        options: BODY_ALIGNMENT_OPTIONS,
+      },
+      {
+        name: 'affiliationAlignment',
+        label: 'Affiliation alignment',
+        type: 'SELECT',
+        icon: 'IconAlignLeft',
+        options: AFFILIATION_ALIGNMENT_OPTIONS,
+      },
+      {
+        name: 'affiliationLineSpacing',
+        label: 'Affiliation line spacing',
+        type: 'NUMBER',
+        icon: 'IconLineHeight',
+      },
+      {
+        name: 'affiliationNumberStyle',
+        label: 'Affiliation numbering',
+        type: 'SELECT',
+        icon: 'IconSuperscript',
+        options: AFFILIATION_NUMBER_STYLE_OPTIONS,
+      },
+      {
+        name: 'affiliationSpacingAfter',
+        label: 'Affiliation spacing after (pt)',
+        type: 'NUMBER',
+        icon: 'IconLineHeight',
+      },
+      {
+        name: 'tableStyle',
+        label: 'Table style',
+        type: 'SELECT',
+        icon: 'IconTable',
+        options: TABLE_STYLE_OPTIONS,
+      },
+      {
+        name: 'tableFontSize',
+        label: 'Table font size (pt)',
+        type: 'NUMBER',
+        icon: 'IconTextSize',
+      },
+      {
+        name: 'tableLineSpacing',
+        label: 'Table line spacing',
+        type: 'NUMBER',
+        icon: 'IconLineHeight',
       },
       {
         name: 'referenceDocUrl',
@@ -1911,6 +2200,7 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
       'numberingScope',
       'figureLabelFormat',
       'citationStyleId',
+      'frontMatterLayout',
       'twoColumn',
     ],
   },

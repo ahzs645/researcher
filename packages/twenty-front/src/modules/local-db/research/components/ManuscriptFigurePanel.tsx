@@ -9,6 +9,7 @@ import {
   tableMarkdownToChartData,
 } from '@/local-db/research/manuscript/manuscriptChart';
 import { rasterizeSvgToPngDataUrl } from '@/local-db/research/manuscript/manuscriptChartImage';
+import { assetPlacementMarker } from '@/local-db/research/manuscript/manuscriptAssetPlacement';
 import {
   describeImageSource,
   resolveFigureImage,
@@ -17,6 +18,7 @@ import { numberAssets } from '@/local-db/research/manuscript/manuscriptNumbering
 import {
   type FigureLike,
   type JournalStyle,
+  type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
@@ -62,6 +64,7 @@ const PLACEMENT_OPTIONS: SelectOption<string>[] = [
 type ManuscriptFigurePanelProps = {
   manuscriptId: string;
   figures: FigureLike[];
+  sections: SectionLike[];
   style: JournalStyle;
   onChanged: () => void;
 };
@@ -140,10 +143,32 @@ const StyledInput = styled.input`
   padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
 `;
 
+const StyledCaptionArea = styled.textarea`
+  background: ${themeCssVariables.background.primary};
+  border: 1px solid ${themeCssVariables.border.color.medium};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.primary};
+  font-family: inherit;
+  font-size: ${themeCssVariables.font.size.sm};
+  min-height: 52px;
+  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
+  resize: vertical;
+`;
+
 const StyledActions = styled.div`
   display: flex;
+  flex-wrap: wrap;
   gap: ${themeCssVariables.spacing[2]};
 `;
+
+const StyledAssetEditor = styled.div`
+  display: grid;
+  gap: ${themeCssVariables.spacing[2]};
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr);
+  padding: ${themeCssVariables.spacing[1]} 0 ${themeCssVariables.spacing[2]};
+`;
+
+const UNASSIGNED_SECTION = '__UNASSIGNED__';
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -162,6 +187,7 @@ const slugify = (value: string): string =>
 export const ManuscriptFigurePanel = ({
   manuscriptId,
   figures,
+  sections,
   style,
   onChanged,
 }: ManuscriptFigurePanelProps) => {
@@ -196,6 +222,49 @@ export const ManuscriptFigurePanel = ({
     () => numberAssets(figures, style),
     [figures, style],
   );
+
+  const persistFigure = (
+    figure: FigureLike,
+    values: Record<string, unknown>,
+  ) => {
+    void updateOneRecord({
+      objectNameSingular: 'figure',
+      idToUpdate: figure.id,
+      updateOneRecordInput: values,
+    }).then(onChanged);
+  };
+
+  const orderedPeers = (figure: FigureLike) =>
+    numbered.filter(
+      (candidate) =>
+        candidate.assetKind === figure.assetKind &&
+        candidate.placement === figure.placement,
+    );
+
+  const moveFigure = (figure: FigureLike, direction: -1 | 1) => {
+    const peers = orderedPeers(figure);
+    const index = peers.findIndex((candidate) => candidate.id === figure.id);
+    const adjacent = peers[index + direction];
+    if (!isDefined(adjacent)) return;
+    const figureOrder =
+      figure.orderIndex ??
+      numbered.findIndex((candidate) => candidate.id === figure.id);
+    const adjacentOrder =
+      adjacent.orderIndex ??
+      numbered.findIndex((candidate) => candidate.id === adjacent.id);
+    void Promise.all([
+      updateOneRecord({
+        objectNameSingular: 'figure',
+        idToUpdate: figure.id,
+        updateOneRecordInput: { orderIndex: adjacentOrder },
+      }),
+      updateOneRecord({
+        objectNameSingular: 'figure',
+        idToUpdate: adjacent.id,
+        updateOneRecordInput: { orderIndex: figureOrder },
+      }),
+    ]).then(onChanged);
+  };
 
   // Create a chart figure from a Markdown data table: store it as a numbered
   // FIGURE (GENERATED source) with the rendered PNG, and keep the source table
@@ -306,6 +375,23 @@ export const ManuscriptFigurePanel = ({
     <StyledPanel>
       {numbered.map((figure) => {
         const image = resolveFigureImage(figure);
+        const peers = orderedPeers(figure);
+        const peerIndex = peers.findIndex(
+          (candidate) => candidate.id === figure.id,
+        );
+        const sectionOptions: SelectOption<string>[] = [
+          { value: UNASSIGNED_SECTION, label: 'End of document' },
+          ...sections
+            .filter((section) =>
+              figure.placement === 'SUPPLEMENT'
+                ? section.placement === 'SUPPLEMENT'
+                : section.placement !== 'SUPPLEMENT',
+            )
+            .map((section) => ({
+              value: section.id,
+              label: section.name ?? section.sectionType ?? 'Section',
+            })),
+        ];
         return (
           <div key={figure.id}>
             <StyledRow>
@@ -315,6 +401,7 @@ export const ManuscriptFigurePanel = ({
                 </StyledLabel>
                 <StyledMeta>
                   [#{figure.refKey ?? figure.id}] ·{' '}
+                  {assetPlacementMarker(figure.refKey ?? figure.id)} ·{' '}
                   {describeImageSource(figure)}
                 </StyledMeta>
               </StyledMain>
@@ -322,6 +409,88 @@ export const ManuscriptFigurePanel = ({
                 <StyledThumb src={image.src} alt={figure.altText ?? ''} />
               ) : null}
             </StyledRow>
+            <StyledAssetEditor>
+              <StyledInput
+                aria-label={`${figure.label} name`}
+                defaultValue={figure.name ?? ''}
+                placeholder="Figure name"
+                onBlur={(event) =>
+                  persistFigure(figure, { name: event.target.value.trim() })
+                }
+              />
+              <StyledCaptionArea
+                aria-label={`${figure.label} caption`}
+                defaultValue={figure.caption ?? figure.name ?? ''}
+                placeholder="Full figure caption"
+                onBlur={(event) =>
+                  persistFigure(figure, { caption: event.target.value.trim() })
+                }
+              />
+              <Select
+                dropdownId={`figure-section-${figure.id}`}
+                options={sectionOptions}
+                value={figure.sectionId ?? UNASSIGNED_SECTION}
+                onChange={(value) =>
+                  persistFigure(figure, {
+                    sectionId:
+                      value === UNASSIGNED_SECTION ? null : value,
+                  })
+                }
+              />
+              <Select
+                dropdownId={`figure-placement-${figure.id}`}
+                options={PLACEMENT_OPTIONS}
+                value={figure.placement ?? 'MAIN'}
+                onChange={(value) =>
+                  persistFigure(figure, {
+                    placement: value,
+                    sectionId: null,
+                  })
+                }
+              />
+              <StyledActions>
+                <Button
+                  title="Move up"
+                  variant="secondary"
+                  size="small"
+                  disabled={peerIndex === 0}
+                  onClick={() => moveFigure(figure, -1)}
+                />
+                <Button
+                  title="Move down"
+                  variant="secondary"
+                  size="small"
+                  disabled={peerIndex === peers.length - 1}
+                  onClick={() => moveFigure(figure, 1)}
+                />
+                <Button
+                  title="Copy reference"
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(
+                      `[#${figure.refKey ?? figure.id}]`,
+                    );
+                    enqueueSuccessSnackBar({
+                      message: `Copied live reference for ${figure.label}`,
+                    });
+                  }}
+                />
+                <Button
+                  title="Copy placement linker"
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(
+                      assetPlacementMarker(figure.refKey ?? figure.id),
+                    );
+                    enqueueSuccessSnackBar({
+                      message: `Copied placement linker for ${figure.label}`,
+                    });
+                  }}
+                />
+              </StyledActions>
+            </StyledAssetEditor>
             {figure.assetKind === 'TABLE' ? (
               <>
                 <StyledTableArea

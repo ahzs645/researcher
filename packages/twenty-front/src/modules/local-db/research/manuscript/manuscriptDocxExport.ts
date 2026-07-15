@@ -2,10 +2,35 @@ import {
   DOCXExporter,
   docxDefaultSchemaMappings,
 } from '@blocknote/xl-docx-exporter';
+import { BlockNoteEditor, type PartialBlock } from '@blocknote/core';
+import {
+  AlignmentType,
+  ExternalHyperlink,
+  Footer,
+  HeadingLevel,
+  LineNumberRestartFormat,
+  LineRuleType,
+  Math as DocxMath,
+  PageNumber,
+  Paragraph,
+  TextRun,
+} from 'docx';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import { buildBlockNoteDocument } from './manuscriptBlocks';
+import { manuscriptAuthorLineSegments } from './manuscriptContributors';
+import { latexToMathComponents } from './manuscriptDocxMath';
+import {
+  createManuscriptTableMapping,
+  type ManuscriptTableStyle,
+} from './manuscriptDocxTable';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
+import { isImageDataUrl } from './manuscriptImages';
+import {
+  hasManuscriptScripts,
+  manuscriptScriptSegments,
+  stripManuscriptScriptMarkers,
+} from './manuscriptScripts';
 
 // DOCX export via BlockNote's official docx exporter. Shares the block builder
 // with the PDF exporter, so figures (embedded images) and tables (real Word
@@ -14,12 +39,476 @@ import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+type ManuscriptDocxMappingOptions = {
+  bodyLineSpacing: number;
+  abstractLineSpacing: number;
+  paragraphSpacingAfter: number;
+  affiliationLineSpacing: number;
+  affiliationSpacingAfter: number;
+  tableStyle: ManuscriptTableStyle;
+  fontFamily: string;
+  tableFontSize: number;
+  tableLineSpacing: number;
+};
+
+const inlineContentText = (value: unknown): string => {
+  if (Array.isArray(value)) return value.map(inlineContentText).join('');
+  if (typeof value !== 'object' || value === null) return '';
+  if ('text' in value && typeof value.text === 'string') return value.text;
+  return 'content' in value ? inlineContentText(value.content) : '';
+};
+
+type InlineTextStyles = {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+};
+
+type ManuscriptTextInlineContent = {
+  type: 'text';
+  text: string;
+  styles: InlineTextStyles;
+};
+
+type ManuscriptLinkInlineContent = {
+  type: 'link';
+  href: string;
+  content: ManuscriptTextInlineContent[];
+};
+
+const isTextInlineContent = (
+  value: unknown,
+): value is ManuscriptTextInlineContent =>
+  typeof value === 'object' &&
+  value !== null &&
+  'type' in value &&
+  value.type === 'text' &&
+  'text' in value &&
+  typeof value.text === 'string' &&
+  'styles' in value &&
+  typeof value.styles === 'object' &&
+  value.styles !== null;
+
+const isLinkInlineContent = (
+  value: unknown,
+): value is ManuscriptLinkInlineContent =>
+  typeof value === 'object' &&
+  value !== null &&
+  'type' in value &&
+  value.type === 'link' &&
+  'href' in value &&
+  typeof value.href === 'string' &&
+  'content' in value &&
+  Array.isArray(value.content) &&
+  value.content.every(isTextInlineContent);
+
+const manuscriptTextRuns = (
+  text: string,
+  styles: InlineTextStyles,
+  forceItalics: boolean,
+  hyperlink = false,
+): TextRun[] =>
+  manuscriptScriptSegments(text).map(
+    (segment) =>
+      new TextRun({
+        text: segment.text,
+        bold: styles.bold === true,
+        italics: forceItalics || styles.italic === true,
+        underline: styles.underline === true ? {} : undefined,
+        strike: styles.strike === true,
+        style: hyperlink ? 'Hyperlink' : undefined,
+        superScript: segment.position === 'SUPERSCRIPT',
+        subScript: segment.position === 'SUBSCRIPT',
+      }),
+  );
+
+const createManuscriptDocxMappings = ({
+  bodyLineSpacing,
+  abstractLineSpacing,
+  paragraphSpacingAfter,
+  affiliationLineSpacing,
+  affiliationSpacingAfter,
+  tableStyle,
+  fontFamily,
+  tableFontSize,
+  tableLineSpacing,
+}: ManuscriptDocxMappingOptions): typeof docxDefaultSchemaMappings => ({
+  ...docxDefaultSchemaMappings,
+  blockMapping: {
+    ...docxDefaultSchemaMappings.blockMapping,
+    image: async (
+      block,
+      exporter,
+      nestingLevel,
+      numberedListIndex,
+      children,
+    ) => {
+      const caption = block.props.caption;
+      const mappedImage = await docxDefaultSchemaMappings.blockMapping.image(
+        typeof caption === 'string' && hasManuscriptScripts(caption)
+          ? {
+              ...block,
+              props: {
+                ...block.props,
+                caption: stripManuscriptScriptMarkers(caption),
+              },
+            }
+          : block,
+        exporter,
+        nestingLevel,
+        numberedListIndex,
+        children,
+      );
+      if (
+        typeof caption !== 'string' ||
+        !hasManuscriptScripts(caption) ||
+        !Array.isArray(mappedImage)
+      ) {
+        return mappedImage;
+      }
+      return [
+        ...mappedImage.slice(0, -1),
+        new Paragraph({
+          style: 'Caption',
+          children: manuscriptScriptSegments(caption).map(
+            (segment) =>
+              new TextRun({
+                text: segment.text,
+                superScript: segment.position === 'SUPERSCRIPT',
+                subScript: segment.position === 'SUBSCRIPT',
+              }),
+          ),
+        }),
+      ];
+    },
+    heading: (block, exporter) => {
+      const text = block.content
+        .map((content) =>
+          'text' in content && typeof content.text === 'string'
+            ? content.text
+            : '',
+        )
+        .join('');
+      const heading =
+        block.props.level === 1
+          ? HeadingLevel.HEADING_1
+          : block.props.level === 2
+            ? HeadingLevel.HEADING_2
+            : block.props.level === 3
+              ? HeadingLevel.HEADING_3
+              : block.props.level === 4
+                ? HeadingLevel.HEADING_4
+                : block.props.level === 5
+                  ? HeadingLevel.HEADING_5
+                  : HeadingLevel.HEADING_6;
+      return new Paragraph({
+        heading,
+        alignment:
+          block.props.textAlignment === 'center'
+            ? AlignmentType.CENTER
+            : block.props.textAlignment === 'right'
+              ? AlignmentType.RIGHT
+              : AlignmentType.LEFT,
+        children: hasManuscriptScripts(text)
+          ? manuscriptScriptSegments(text).map(
+              (segment) =>
+                new TextRun({
+                  text: segment.text,
+                  superScript: segment.position === 'SUPERSCRIPT',
+                  subScript: segment.position === 'SUBSCRIPT',
+                }),
+            )
+          : exporter.transformInlineContent(block.content),
+      });
+    },
+    paragraph: (block, exporter) => {
+      const equation = inlineContentText(block.content).trim();
+      if (block.props.textColor === 'equation') {
+        return new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: {
+            before: 120,
+            after: 120,
+            line: 276,
+            lineRule: LineRuleType.AUTO,
+          },
+          children: [
+            new DocxMath({ children: latexToMathComponents(equation) }),
+          ],
+        });
+      }
+      if (block.props.textColor === 'author-line') {
+        return new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 120, line: 240, lineRule: LineRuleType.AUTO },
+          children: manuscriptAuthorLineSegments(equation).map(
+            (segment) =>
+              new TextRun({
+                text: segment.text,
+                bold: true,
+                superScript: segment.superscript,
+              }),
+          ),
+        });
+      }
+      const alignment =
+        block.props.textAlignment === 'center'
+          ? AlignmentType.CENTER
+          : block.props.textAlignment === 'right'
+            ? AlignmentType.RIGHT
+            : block.props.textAlignment === 'justify'
+              ? AlignmentType.JUSTIFIED
+              : AlignmentType.LEFT;
+      const isAbstract = block.props.textColor === 'abstract-body';
+      const isTableCaption = block.props.textColor === 'table-caption';
+      const isFigureCaption = block.props.textColor === 'figure-caption';
+      const isAffiliation = block.props.textColor === 'affiliation-line';
+      const lineSpacing = isAbstract
+        ? abstractLineSpacing
+        : isTableCaption
+          ? tableLineSpacing
+          : isAffiliation
+            ? affiliationLineSpacing
+            : bodyLineSpacing;
+      const children = hasManuscriptScripts(equation)
+        ? block.content.flatMap((content) => {
+            const text = inlineContentText(content);
+            if (!hasManuscriptScripts(text)) {
+              return exporter.transformInlineContent([content]);
+            }
+            if (isLinkInlineContent(content)) {
+              return [
+                new ExternalHyperlink({
+                  link: content.href,
+                  children: content.content.flatMap((linkedContent) =>
+                    manuscriptTextRuns(
+                      linkedContent.text,
+                      linkedContent.styles,
+                      isAffiliation,
+                      true,
+                    ),
+                  ),
+                }),
+              ];
+            }
+            return isTextInlineContent(content)
+              ? manuscriptTextRuns(
+                  content.text,
+                  content.styles,
+                  isAffiliation,
+                )
+              : exporter.transformInlineContent([content]);
+          })
+        : exporter.transformInlineContent(block.content);
+      return new Paragraph({
+        alignment,
+        spacing: {
+          after: isTableCaption || isFigureCaption
+            ? 0
+            : Math.round(
+                (isAffiliation
+                  ? affiliationSpacingAfter
+                  : paragraphSpacingAfter) * 20,
+              ),
+          line: Math.round(240 * lineSpacing),
+          lineRule: LineRuleType.AUTO,
+        },
+        children,
+      });
+    },
+    table: createManuscriptTableMapping(
+      tableStyle,
+      fontFamily,
+      tableFontSize,
+      tableLineSpacing,
+    ),
+  },
+});
+
 export const exportManuscriptToDocxBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
   const { editor, blocks } = buildBlockNoteDocument(bundle);
+  const fontFamily = bundle.style.fontFamily?.trim() || 'Times New Roman';
+  const bodyFontSize = bundle.style.bodyFontSize ?? 12;
+  const titleFontSize = bundle.style.titleFontSize ?? 16;
+  const headingFontSize = bundle.style.headingFontSize ?? 12;
+  const subheadingFontSize =
+    bundle.style.subheadingFontSize ?? bundle.style.bodyFontSize ?? 12;
+  const requestedHeadingColor =
+    bundle.style.headingColor === 'ADDIS_BLUE'
+      ? '0F4761'
+      : bundle.style.headingColor === 'BLACK'
+        ? '000000'
+        : bundle.style.headingColor?.replace(/^#/, '');
+  const headingColor =
+    requestedHeadingColor !== undefined &&
+    /^[\dA-F]{6}$/i.test(requestedHeadingColor)
+      ? requestedHeadingColor.toUpperCase()
+      : '000000';
+  const lineSpacing = Math.max(1, bundle.style.lineSpacing ?? 1.5);
+  const abstractLineSpacing = Math.max(
+    1,
+    bundle.style.abstractLineSpacing ?? 1.15,
+  );
+  const paragraphSpacingAfter = Math.max(
+    0,
+    bundle.style.paragraphSpacingAfter ?? 0,
+  );
+  const affiliationLineSpacing = Math.max(
+    1,
+    bundle.style.affiliationLineSpacing ?? 1,
+  );
+  const affiliationSpacingAfter = Math.max(
+    0,
+    bundle.style.affiliationSpacingAfter ?? 0,
+  );
+  const tableStyle = (bundle.style.tableStyle ??
+    'ACADEMIC') as ManuscriptTableStyle;
+  const tableFontSize = Math.max(8, bundle.style.tableFontSize ?? bodyFontSize);
+  const tableLineSpacing = Math.max(1, bundle.style.tableLineSpacing ?? 1);
+  const exporter = new DOCXExporter(
+    editor.schema,
+    createManuscriptDocxMappings({
+      bodyLineSpacing: lineSpacing,
+      abstractLineSpacing,
+      paragraphSpacingAfter,
+      affiliationLineSpacing,
+      affiliationSpacingAfter,
+      tableStyle,
+      fontFamily,
+      tableFontSize,
+      tableLineSpacing,
+    }),
+  );
+  const resolveExternalFile = exporter.options.resolveFileUrl;
+  exporter.options.resolveFileUrl = async (url) =>
+    isImageDataUrl(url)
+      ? (await fetch(url)).blob()
+      : (resolveExternalFile?.(url) ?? url);
+  const bodyAlignment =
+    bundle.style.bodyAlignment === 'JUSTIFIED'
+      ? AlignmentType.JUSTIFIED
+      : AlignmentType.LEFT;
+  return exporter.toBlob(blocks, {
+    documentOptions: {
+      creator: bundle.metadata.authors,
+      title: bundle.metadata.title,
+      subject: bundle.metadata.journal,
+      // Replace BlockNote's Inter-based template instead of appending duplicate
+      // Heading/Normal definitions. The journal profile is the style authority.
+      externalStyles: undefined,
+      styles: {
+        default: {
+          document: {
+            run: {
+              font: fontFamily,
+              size: bodyFontSize * 2,
+            },
+            paragraph: {
+              alignment: bodyAlignment,
+              spacing: {
+                after: Math.round(paragraphSpacingAfter * 20),
+                line: Math.round(240 * lineSpacing),
+                lineRule: LineRuleType.AUTO,
+              },
+            },
+          },
+          heading1: {
+            run: {
+              font: fontFamily,
+              size: titleFontSize * 2,
+              bold: true,
+              color: '000000',
+            },
+            paragraph: {
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              spacing: { before: 240, after: 240, line: 280 },
+            },
+          },
+          heading2: {
+            run: {
+              font: fontFamily,
+              size: headingFontSize * 2,
+              bold: true,
+              color: headingColor,
+            },
+            paragraph: {
+              alignment: AlignmentType.LEFT,
+              keepNext: true,
+              spacing: { before: 240, after: 120, line: 280 },
+            },
+          },
+          heading3: {
+            run: {
+              font: fontFamily,
+              size: subheadingFontSize * 2,
+              bold: true,
+              color: headingColor,
+            },
+            paragraph: {
+              alignment: AlignmentType.LEFT,
+              keepNext: true,
+              spacing: { before: 160, after: 80, line: 280 },
+            },
+          },
+        },
+      },
+    },
+    sectionOptions: {
+      properties: {
+        page: {
+          margin: {
+            top: 1440,
+            right: 1440,
+            bottom: 1440,
+            left: 1440,
+          },
+        },
+        ...(bundle.style.lineNumbering === true
+          ? {
+              lineNumbers: {
+                countBy: 1,
+                restart: LineNumberRestartFormat.CONTINUOUS,
+              },
+            }
+          : {}),
+        ...(bundle.style.twoColumn === true
+          ? { column: { count: 2, equalWidth: true, space: 720 } }
+          : {}),
+      },
+      ...(bundle.style.pageNumbering === true
+        ? {
+            footers: {
+              default: new Footer({
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [new TextRun({ children: [PageNumber.CURRENT] })],
+                  }),
+                ],
+              }),
+            },
+          }
+        : {}),
+    },
+  });
+};
+
+export const exportStandaloneMarkdownToDocxBlob = async (
+  title: string,
+  markdown: string,
+): Promise<Blob> => {
+  const editor = BlockNoteEditor.create();
+  const partialBlocks: PartialBlock[] = [
+    { type: 'heading', props: { level: 1 }, content: title },
+    ...editor.tryParseMarkdownToBlocks(markdown),
+  ];
+  editor.replaceBlocks(editor.document, partialBlocks);
   const exporter = new DOCXExporter(editor.schema, docxDefaultSchemaMappings);
-  return exporter.toBlob(blocks);
+  return exporter.toBlob(editor.document);
 };
 
 export const blocknoteDocxExporter: ManuscriptExporter = {

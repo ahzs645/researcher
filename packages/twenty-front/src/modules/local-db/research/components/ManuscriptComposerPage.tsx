@@ -26,6 +26,10 @@ import { ManuscriptFigurePanel } from '@/local-db/research/components/Manuscript
 import { ManuscriptImportPanel } from '@/local-db/research/components/ManuscriptImportPanel';
 import { ManuscriptReferencePanel } from '@/local-db/research/components/ManuscriptReferencePanel';
 import { ManuscriptSectionEditor } from '@/local-db/research/components/ManuscriptSectionEditor';
+import {
+  ManuscriptSubmissionDetailsPanel,
+  type ManuscriptSubmissionDetails,
+} from '@/local-db/research/components/ManuscriptSubmissionDetailsPanel';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
@@ -43,6 +47,13 @@ type ManuscriptRecord = {
   status?: string | null;
   manuscriptType?: string | null;
   targetVenue?: string | null;
+  authorLine?: string | null;
+  affiliations?: string | null;
+  correspondingAuthor?: string | null;
+  coverLetter?: string | null;
+  highlights?: string | null;
+  competingInterests?: string | null;
+  suggestedReviewers?: string | null;
   targetJournal?: { id?: string | null } | null;
 };
 type JournalRecord = JournalStyle & { id: string };
@@ -187,8 +198,35 @@ const JOURNAL_GQL = {
   crossRefFormat: true,
   figureCaptionPosition: true,
   tableCaptionPosition: true,
+  figurePageLayout: true,
   abstractWordLimit: true,
+  abstractWordMinimum: true,
+  keywordMinimum: true,
+  keywordMaximum: true,
+  requiredArtifacts: true,
+  profileKey: true,
+  lineNumbering: true,
+  pageNumbering: true,
+  sectionNumbering: true,
   twoColumn: true,
+  frontMatterLayout: true,
+  fontFamily: true,
+  bodyFontSize: true,
+  titleFontSize: true,
+  headingFontSize: true,
+  subheadingFontSize: true,
+  headingColor: true,
+  lineSpacing: true,
+  abstractLineSpacing: true,
+  paragraphSpacingAfter: true,
+  bodyAlignment: true,
+  affiliationAlignment: true,
+  affiliationNumberStyle: true,
+  affiliationLineSpacing: true,
+  affiliationSpacingAfter: true,
+  tableStyle: true,
+  tableFontSize: true,
+  tableLineSpacing: true,
   referenceDocUrl: true,
 };
 
@@ -196,17 +234,25 @@ const belongsTo = (record: WithManuscript, manuscriptId: string): boolean =>
   record.manuscript?.id === manuscriptId;
 
 export const ManuscriptComposerPage = () => {
-  const { records: manuscriptRecords } = useFindManyRecords({
-    objectNameSingular: 'manuscript',
-    recordGqlFields: {
-      id: true,
-      name: true,
-      status: true,
-      manuscriptType: true,
-      targetVenue: true,
-      targetJournal: { id: true },
-    },
-  });
+  const { records: manuscriptRecords, refetch: refetchManuscripts } =
+    useFindManyRecords({
+      objectNameSingular: 'manuscript',
+      recordGqlFields: {
+        id: true,
+        name: true,
+        status: true,
+        manuscriptType: true,
+        targetVenue: true,
+        authorLine: true,
+        affiliations: true,
+        correspondingAuthor: true,
+        coverLetter: true,
+        highlights: true,
+        competingInterests: true,
+        suggestedReviewers: true,
+        targetJournal: { id: true },
+      },
+    });
   const { records: journalRecords } = useFindManyRecords({
     objectNameSingular: 'journalTemplate',
     recordGqlFields: JOURNAL_GQL,
@@ -283,6 +329,12 @@ export const ManuscriptComposerPage = () => {
   const handleSelectManuscript = (nextManuscriptId: string) => {
     setManuscriptId(nextManuscriptId);
     setSectionId(null);
+    setJournalId(
+      manuscripts.find((item) => item.id === nextManuscriptId)?.targetJournal
+        ?.id ??
+        journals[0]?.id ??
+        null,
+    );
     updateSelectionParams(nextManuscriptId, null);
   };
 
@@ -348,6 +400,9 @@ export const ManuscriptComposerPage = () => {
         id: manuscript.id,
         name: manuscript.name,
         targetVenue: manuscript.targetVenue,
+        authorLine: manuscript.authorLine,
+        affiliations: manuscript.affiliations,
+        correspondingAuthor: manuscript.correspondingAuthor,
       },
       sections,
       figures,
@@ -397,6 +452,32 @@ export const ManuscriptComposerPage = () => {
     await refetchSections();
     const createdId = (created as { id?: string } | undefined)?.id;
     if (isDefined(createdId)) setSectionId(createdId);
+  };
+
+  const saveSubmissionDetails = async (values: ManuscriptSubmissionDetails) => {
+    await updateOneRecord({
+      objectNameSingular: 'manuscript',
+      idToUpdate: manuscript.id,
+      updateOneRecordInput: values,
+    });
+    await refetchManuscripts();
+  };
+
+  const selectJournal = (nextJournalId: string) => {
+    setJournalId(nextJournalId);
+    const selectedJournal = journals.find(
+      (journal) => journal.id === nextJournalId,
+    );
+    void updateOneRecord({
+      objectNameSingular: 'manuscript',
+      idToUpdate: manuscript.id,
+      updateOneRecordInput: {
+        targetJournalId: nextJournalId,
+        ...(isDefined(selectedJournal?.name)
+          ? { targetVenue: selectedJournal.name }
+          : {}),
+      },
+    }).then(() => refetchManuscripts());
   };
 
   // Generate the journal-appropriate section skeleton (IMRaD / thesis / chapter)
@@ -495,7 +576,14 @@ export const ManuscriptComposerPage = () => {
             manuscriptId={manuscript.id}
             manuscriptName={manuscript.name}
             existingSectionCount={sections.length}
-            onChanged={() => void refetchSections()}
+            onChanged={() => {
+              void Promise.all([
+                refetchManuscripts(),
+                refetchSections(),
+                refetchFigures(),
+                refetchReferences(),
+              ]);
+            }}
           />
         </StyledPanel>
 
@@ -538,8 +626,28 @@ export const ManuscriptComposerPage = () => {
           <ManuscriptFigurePanel
             manuscriptId={manuscript.id}
             figures={figures}
+            sections={sections}
             style={style}
             onChanged={() => void refetchFigures()}
+          />
+        </StyledPanel>
+
+        <StyledPanel>
+          <H2Title title="Submission details" />
+          <ManuscriptSubmissionDetailsPanel
+            key={manuscript.id}
+            initialValues={{
+              authorLine: manuscript.authorLine,
+              affiliations: manuscript.affiliations,
+              correspondingAuthor: manuscript.correspondingAuthor,
+              coverLetter: manuscript.coverLetter,
+              highlights: manuscript.highlights,
+              competingInterests: manuscript.competingInterests,
+              suggestedReviewers: manuscript.suggestedReviewers,
+            }}
+            journalName={style.name ?? manuscript.targetVenue ?? ''}
+            requiredArtifacts={style.requiredArtifacts ?? []}
+            onSave={saveSubmissionDetails}
           />
         </StyledPanel>
 
@@ -554,7 +662,13 @@ export const ManuscriptComposerPage = () => {
                   name: journal.name ?? 'Journal',
                 }))}
                 selectedJournalId={journalId}
-                onSelectJournal={setJournalId}
+                onSelectJournal={selectJournal}
+                materials={{
+                  coverLetter: manuscript.coverLetter,
+                  highlights: manuscript.highlights,
+                  competingInterests: manuscript.competingInterests,
+                  suggestedReviewers: manuscript.suggestedReviewers,
+                }}
               />
               <ManuscriptCslBibliography
                 cslItems={bundle.cslJson}

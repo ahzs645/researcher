@@ -371,7 +371,7 @@ describe('research executable schema', () => {
         }>;
       };
     };
-    expect(data.journalTemplates.totalCount).toBe(3);
+    expect(data.journalTemplates.totalCount).toBe(15);
     expect(data.references.totalCount).toBe(5);
     expect(data.manuscriptSections.totalCount).toBe(7);
     expect(data.figures.totalCount).toBe(4);

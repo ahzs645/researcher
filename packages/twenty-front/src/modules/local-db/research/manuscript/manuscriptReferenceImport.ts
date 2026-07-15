@@ -139,7 +139,8 @@ const bibtexEntryToCslItem = (
   if (isNonEmptyString(container)) item['container-title'] = container;
   if (isNonEmptyString(fields.volume)) item.volume = fields.volume;
   if (isNonEmptyString(fields.number)) item.issue = fields.number;
-  if (isNonEmptyString(fields.pages)) item.page = fields.pages.replace(/--/g, '–');
+  if (isNonEmptyString(fields.pages))
+    item.page = fields.pages.replace(/--/g, '–');
   if (isNonEmptyString(fields.doi)) item.DOI = fields.doi;
   if (isNonEmptyString(fields.url)) item.URL = fields.url;
   if (isNonEmptyString(fields.publisher)) item.publisher = fields.publisher;
@@ -166,14 +167,16 @@ const parseBibtexFields = (body: string): Record<string, string> => {
 
 export const parseBibtex = (text: string): ReferenceDraft[] => {
   const drafts: ReferenceDraft[] = [];
-  const entryPattern = /@(\w+)\s*\{\s*([^,]+),([\s\S]*?)\n\}/g;
+  const entryPattern = /@(\w+)\s*\{\s*([^,]+),([\s\S]*?)\}\s*(?=@\w|$)/g;
   for (const match of text.matchAll(entryPattern)) {
     const type = match[1].toLowerCase();
     const key = match[2].trim();
     const fields = parseBibtexFields(match[3]);
     // Build a real CSL item, then derive the draft the same way every other
     // path does — so BibTeX imports are stored CSL-JSON-first, not flat-only.
-    const draft = cslItemToReferenceDraft(bibtexEntryToCslItem(type, key, fields));
+    const draft = cslItemToReferenceDraft(
+      bibtexEntryToCslItem(type, key, fields),
+    );
     drafts.push({ ...draft, citationKey: key });
   }
   return drafts;

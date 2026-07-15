@@ -31619,7 +31619,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"docx@npm:^9.5.1":
+"docx@npm:9.6.0, docx@npm:^9.5.1":
   version: 9.6.0
   resolution: "docx@npm:9.6.0"
   dependencies:
@@ -54213,8 +54213,10 @@ __metadata:
     date-fns-tz: "npm:^2.0.0"
     deep-equal: "npm:^2.2.2"
     dexie: "npm:^4.4.2"
+    docx: "npm:9.6.0"
     dotenv-cli: "npm:^7.4.4"
     fake-indexeddb: "npm:^6.2.5"
+    fflate: "npm:^0.8.2"
     file-saver: "npm:^2.0.5"
     framer-motion: "npm:^11.18.0"
     fuse.js: "npm:^7.1.0"

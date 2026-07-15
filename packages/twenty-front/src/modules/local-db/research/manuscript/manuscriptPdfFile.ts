@@ -11,7 +11,9 @@ const latin1 = new TextDecoder('latin1');
 // Inflate a zlib (RFC-1950) stream — PDF's FlateDecode — via the native API.
 const inflateZlib = async (bytes: Uint8Array): Promise<Uint8Array> => {
   const stream = new Response(
-    new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate')),
+    new Blob([new Uint8Array(bytes).buffer])
+      .stream()
+      .pipeThrough(new DecompressionStream('deflate')),
   );
   return new Uint8Array(await stream.arrayBuffer());
 };
@@ -54,7 +56,9 @@ const collectContentStreams = async (buffer: ArrayBuffer): Promise<string> => {
 // line-continuation backslash.
 const decodePdfString = (raw: string): string =>
   raw
-    .replace(/\\(\d{1,3})/g, (_m, oct: string) => String.fromCharCode(parseInt(oct, 8)))
+    .replace(/\\(\d{1,3})/g, (_m, oct: string) =>
+      String.fromCharCode(parseInt(oct, 8)),
+    )
     .replace(/\\n/g, '\n')
     .replace(/\\r/g, '\n')
     .replace(/\\t/g, '\t')

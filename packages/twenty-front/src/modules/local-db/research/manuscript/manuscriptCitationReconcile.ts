@@ -27,7 +27,9 @@ export type ParsedReferenceEntry = {
 // Split a References section body into individual entries. Handles numbered
 // lists ("1. …", "[1] …", "1) …") with multi-line wrapping, and falls back to
 // one-entry-per-line.
-const splitReferenceEntries = (text: string): { index: number; raw: string }[] => {
+const splitReferenceEntries = (
+  text: string,
+): { index: number; raw: string }[] => {
   const lines = text
     .replace(/\r\n?/g, '\n')
     .split('\n')
@@ -36,7 +38,10 @@ const splitReferenceEntries = (text: string): { index: number; raw: string }[] =
     .filter(
       (line, position) =>
         line.length > 0 &&
-        !(position === 0 && /^(references|bibliography|works cited)$/i.test(line)),
+        !(
+          position === 0 &&
+          /^(references|bibliography|works cited)$/i.test(line)
+        ),
     );
 
   const marker = /^\[?(\d+)[\].)]\s+(.*)$/;
@@ -66,7 +71,8 @@ const firstAuthorFamily = (raw: string): string => {
   // "Mendell, M. J.; …" → Mendell · "M. Mendell and …" → Mendell · "Mendell MJ" → Mendell
   const beforeComma = head.split(/[,;]/)[0]?.trim() ?? '';
   const token = beforeComma.includes('.')
-    ? beforeComma.split(/\s+/).find((part) => !part.includes('.')) ?? beforeComma
+    ? (beforeComma.split(/\s+/).find((part) => !part.includes('.')) ??
+      beforeComma)
     : (beforeComma.split(/\s+/).pop() ?? beforeComma);
   return token.replace(/[^A-Za-z-]/g, '');
 };
@@ -77,7 +83,9 @@ const guessTitle = (raw: string): string => {
   const afterYear = raw.split(YEAR_RE).slice(1).join(' ').trim();
   const candidate = afterYear.length > 0 ? afterYear : raw;
   const firstSentence = candidate.split(/(?<=[.?])\s/)[0]?.trim() ?? candidate;
-  return (firstSentence.length >= 8 ? firstSentence : raw).replace(/\s+/g, ' ').trim();
+  return (firstSentence.length >= 8 ? firstSentence : raw)
+    .replace(/\s+/g, ' ')
+    .trim();
 };
 
 const parseEntryToDraft = (
@@ -107,21 +115,27 @@ const parseEntryToDraft = (
 
 export const parseReferenceList = (text: string): ParsedReferenceEntry[] => {
   const taken = new Set<string>();
-  return splitReferenceEntries(text).map(({ index, raw }) => ({
-    index,
-    draft: parseEntryToDraft(raw, taken),
-  }));
+  return splitReferenceEntries(text)
+    .filter(
+      ({ raw }) =>
+        !/^(?:table|fig(?:ure)?|\[#)/i.test(raw) &&
+        (YEAR_RE.test(raw) || DOI_RE.test(raw)),
+    )
+    .map(({ index, raw }) => ({
+      index,
+      draft: parseEntryToDraft(raw, taken),
+    }));
 };
 
 export type CitationStyleGuess = 'numeric' | 'author-date' | 'none';
 
 // Decide which in-text convention the body uses, so we relink the right one.
 export const detectCitationStyle = (body: string): CitationStyleGuess => {
-  const numeric = (body.match(/\[\d+(?:\s*[–-]\s*\d+)?(?:\s*,\s*\d+)*\]/g) ?? [])
-    .length;
-  const authorDate = (
-    body.match(/\([^)]*\b(?:19|20)\d{2}[a-z]?\)/g) ?? []
+  const numeric = (
+    body.match(/\[\d+(?:\s*[–-]\s*\d+)?(?:\s*,\s*\d+)*\]/g) ?? []
   ).length;
+  const authorDate = (body.match(/\([^)]*\b(?:19|20)\d{2}[a-z]?\)/g) ?? [])
+    .length;
   if (numeric === 0 && authorDate === 0) return 'none';
   return numeric >= authorDate ? 'numeric' : 'author-date';
 };
@@ -164,20 +178,23 @@ const relinkAuthorDate = (
   byAuthorYear: Map<string, string>,
 ): { content: string; linked: number } => {
   let linked = 0;
-  const next = content.replace(/\(([^)]*\b(?:19|20)\d{2}[a-z]?[^)]*)\)/g, (whole, inner: string) => {
-    // Split multiple citations in one paren group: "A, 2019; B et al., 2020".
-    const parts = inner.split(';').map((part) => part.trim());
-    const keys: string[] = [];
-    for (const part of parts) {
-      const year = YEAR_RE.exec(part)?.[0];
-      const family = firstAuthorFamily(part).toLowerCase();
-      const key = year ? byAuthorYear.get(`${family}|${year}`) : undefined;
-      if (key === undefined) return whole; // leave the whole group untouched
-      keys.push(key);
-    }
-    linked += keys.length;
-    return `[${keys.map((key) => `@${key}`).join('; ')}]`;
-  });
+  const next = content.replace(
+    /\(([^)]*\b(?:19|20)\d{2}[a-z]?[^)]*)\)/g,
+    (whole, inner: string) => {
+      // Split multiple citations in one paren group: "A, 2019; B et al., 2020".
+      const parts = inner.split(';').map((part) => part.trim());
+      const keys: string[] = [];
+      for (const part of parts) {
+        const year = YEAR_RE.exec(part)?.[0];
+        const family = firstAuthorFamily(part).toLowerCase();
+        const key = year ? byAuthorYear.get(`${family}|${year}`) : undefined;
+        if (key === undefined) return whole; // leave the whole group untouched
+        keys.push(key);
+      }
+      linked += keys.length;
+      return `[${keys.map((key) => `@${key}`).join('; ')}]`;
+    },
+  );
   return { content: next, linked };
 };
 
@@ -205,7 +222,9 @@ export const reconcileImportedCitations = (
     return { sections, references: [], linkedCount: 0, style: 'none' };
   }
 
-  const byIndex = new Map(entries.map((entry) => [entry.index, entry.draft.citationKey as string]));
+  const byIndex = new Map(
+    entries.map((entry) => [entry.index, entry.draft.citationKey as string]),
+  );
   const byAuthorYear = new Map(
     entries.map((entry) => [
       `${(entry.draft.authors ?? '').split(/[,;]/)[0]?.trim().toLowerCase()}|${entry.draft.year ?? ''}`,

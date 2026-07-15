@@ -1,10 +1,14 @@
 import {
   classifyHeading,
+  extractImagesToFigures,
   extractTablesToFigures,
+  linkImportedAssetReferences,
   parseMarkdownDocument,
   parseWordDocument,
   parseWordMlToMarkdown,
-} from '../manuscriptDocImport';
+  parseWordStyleDefinitions,
+} from '@/local-db/research/manuscript/manuscriptDocImport';
+import { stripManuscriptScriptMarkers } from '@/local-db/research/manuscript/manuscriptScripts';
 
 describe('classifyHeading', () => {
   it('classifies common IMRaD headings regardless of numbering/case', () => {
@@ -111,6 +115,17 @@ describe('parseMarkdownDocument', () => {
     ]);
   });
 
+  it('keeps third-level headings inside their parent section', () => {
+    const doc = parseMarkdownDocument(
+      ['## Methods', 'Overview.', '### Study site', 'Downtown station.'].join(
+        '\n',
+      ),
+    );
+    expect(doc.sections).toHaveLength(1);
+    expect(doc.sections[0].sectionType).toBe('METHODS');
+    expect(doc.sections[0].content).toContain('### Study site');
+  });
+
   it('wraps an unstructured document in a single Body section', () => {
     const doc = parseMarkdownDocument('Just one paragraph of text.');
     expect(doc.title).toBe('Just one paragraph of text.');
@@ -150,7 +165,7 @@ describe('extractTablesToFigures', () => {
     expect(figures[0].caption).toBe('Growth parameters');
     expect(figures[0].tableData).toContain('| Site | PM2.5 |');
     // The table is replaced by a resolvable cross-ref, not duplicated.
-    expect(sections[0].content).toContain('[#imported-table-1]');
+    expect(sections[0].content).toContain('[[asset:imported-table-1]]');
     expect(sections[0].content).not.toContain('| Site | PM2.5 |');
   });
 
@@ -158,6 +173,77 @@ describe('extractTablesToFigures', () => {
     const doc = parseMarkdownDocument('## Intro\nJust prose, no tables.');
     const { figures } = extractTablesToFigures(doc.sections);
     expect(figures).toHaveLength(0);
+  });
+});
+
+describe('extractImagesToFigures', () => {
+  it('lifts an embedded data URL and its following caption into a figure', () => {
+    const sections = parseMarkdownDocument(
+      [
+        '## Results',
+        '![Map](data:image/png;base64,AAAA)',
+        'Figure 1. Sampling locations',
+      ].join('\n'),
+    ).sections;
+    const { sections: nextSections, figures } =
+      extractImagesToFigures(sections);
+
+    expect(figures).toHaveLength(1);
+    expect(figures[0]).toMatchObject({
+      assetKind: 'FIGURE',
+      caption: 'Sampling locations',
+      imageSource: 'UPLOAD',
+      refKey: 'imported-figure-1',
+    });
+    expect(nextSections[0].content).toContain(
+      '[[asset:imported-figure-1]]',
+    );
+    expect(nextSections[0].content).not.toContain('data:image/png');
+  });
+
+  it('links source figure labels and preserves panels and supplement ownership', () => {
+    const sections = parseMarkdownDocument(
+      [
+        '## Results',
+        'The wood-burning factor had sharp peaks (Fig. 2.6b).',
+        'The same composite is also called Fig. 6 in the source.',
+        '![Factors](data:image/png;base64,AAAA)',
+        'Figure 2.6. Factor profiles',
+        '## Supplementary Material',
+        'The seasonal behavior is shown in Fig. S2.18.',
+        'The abbreviated source label is Fig. S18.',
+        '![Seasonal](data:image/png;base64,BBBB)',
+        'Fig. 10. S2.18: Seasonal behavior',
+      ].join('\n'),
+    ).sections;
+    const extracted = extractImagesToFigures(sections);
+    const linked = linkImportedAssetReferences(
+      extracted.sections,
+      extracted.figures,
+    );
+
+    expect(linked.figures[0]).toMatchObject({
+      sourceLabel: '2.6',
+      refKey: 'imported-figure-2-6',
+      placement: 'MAIN',
+      sectionOrderIndex: 0,
+    });
+    expect(linked.figures[1]).toMatchObject({
+      sourceLabel: 'S2.18',
+      refKey: 'imported-figure-s2-18',
+      placement: 'SUPPLEMENT',
+      sectionOrderIndex: 1,
+    });
+    expect(linked.sections[0].content).toContain(
+      '([#imported-figure-2-6]b)',
+    );
+    expect(linked.sections[0].content).toContain(
+      '[#imported-figure-2-6] in the source',
+    );
+    expect(linked.sections[1].content).toContain(
+      '[#imported-figure-s2-18]',
+    );
+    expect(linked.linkedCount).toBe(4);
   });
 });
 
@@ -191,6 +277,19 @@ describe('parseWordMlToMarkdown', () => {
     expect(md).toContain('| A | 12 |');
   });
 
+  it('keeps a table after a self-closing spacer paragraph', () => {
+    const cell = (text: string): string =>
+      `<w:tc><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+    const row = (cells: string[]): string =>
+      `<w:tr>${cells.map(cell).join('')}</w:tr>`;
+    const xml = `<w:body><w:p w:rsidR="1"/><w:tbl>${row([
+      'Sample',
+      'Value',
+    ])}${row(['A', '12'])}</w:tbl></w:body>`;
+
+    expect(parseWordMlToMarkdown(xml)).toContain('| Sample | Value |');
+  });
+
   it('parses a whole Word document end to end', () => {
     const xml = `<w:body>${para('Thesis', 'Title')}${para(
       'Introduction',
@@ -201,5 +300,68 @@ describe('parseWordMlToMarkdown', () => {
     expect(doc.sections).toHaveLength(1);
     expect(doc.sections[0].sectionType).toBe('INTRODUCTION');
     expect(doc.sections[0].content).toContain('Indoor air quality matters.');
+  });
+
+  it('uses styles.xml definitions and semantic text for custom Word headings', () => {
+    const styles = parseWordStyleDefinitions(
+      '<w:styles><w:style w:styleId="CustomHead"><w:name w:val="Heading 2"/></w:style></w:styles>',
+    );
+    const xml = `<w:body>${para('Paper title')}${para(
+      'Introduction',
+      'CustomHead',
+    )}${para('Body.')}</w:body>`;
+    const doc = parseWordDocument(xml, { styles });
+
+    expect(doc.title).toBe('Paper title');
+    expect(doc.sections.map((section) => section.sectionType)).toEqual([
+      'INTRODUCTION',
+    ]);
+  });
+
+  it('preserves OMML equations and embedded image relationships', () => {
+    const xml = `<w:body>${para('Paper title')}${para(
+      'Methods',
+      'Heading1',
+    )}<w:p><m:oMath><m:r><m:t>C</m:t></m:r><m:sSub><m:e><m:r><m:t>f</m:t></m:r></m:e><m:sub><m:r><m:t>i</m:t></m:r></m:sub></m:sSub></m:oMath></w:p><w:p><w:r><w:drawing><a:blip r:embed="rId9"/></w:drawing></w:r></w:p></w:body>`;
+    const doc = parseWordDocument(xml, {
+      imageByRelationshipId: {
+        rId9: {
+          dataUrl: 'data:image/png;base64,AAAA',
+          altText: 'Sampling map',
+        },
+      },
+    });
+
+    expect(doc.sections[0].content).toContain('$$');
+    expect(doc.sections[0].content).toContain('data:image/png;base64,AAAA');
+    expect(doc.stats).toMatchObject({
+      embeddedImageCount: 1,
+      equationCount: 1,
+    });
+  });
+
+  it('preserves summation limits and expressions from OMML equations', () => {
+    const xml = `<w:body>${para('Paper title')}${para(
+      'Methods',
+      'Heading1',
+    )}<w:p><m:oMath><m:r><m:t>C_d=</m:t></m:r><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub><m:r><m:t>i=1</m:t></m:r></m:sub><m:sup><m:r><m:t>n</m:t></m:r></m:sup><m:e><m:sSub><m:e><m:r><m:t>C</m:t></m:r></m:e><m:sub><m:r><m:t>f</m:t></m:r></m:sub></m:sSub></m:e></m:nary></m:oMath></w:p></w:body>`;
+    const doc = parseWordDocument(xml);
+
+    expect(doc.sections[0].content).toContain(
+      String.raw`C_d=\sum_{i=1}^{n} C_{f}`,
+    );
+  });
+
+  it('preserves Word superscript and subscript runs in imported prose', () => {
+    const xml = `<w:body>${para('Paper title')}${para(
+      'Introduction',
+      'Heading1',
+    )}<w:p><w:r><w:t>PM</w:t></w:r><w:r><w:rPr><w:vertAlign w:val="subscript"/></w:rPr><w:t>2.5</w:t></w:r><w:r><w:t> uses μg/m</w:t></w:r><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t>3</w:t></w:r></w:p></w:body>`;
+    const doc = parseWordDocument(xml);
+
+    expect(doc.sections[0].content).not.toBe('PM2.5 uses μg/m3');
+    expect(stripManuscriptScriptMarkers(doc.sections[0].content)).toBe(
+      'PM2.5 uses μg/m3',
+    );
   });
 });

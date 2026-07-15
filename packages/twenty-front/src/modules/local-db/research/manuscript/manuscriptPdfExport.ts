@@ -2,7 +2,8 @@ import {
   PDFExporter,
   pdfDefaultSchemaMappings,
 } from '@blocknote/xl-pdf-exporter';
-import { pdf } from '@react-pdf/renderer';
+import { pdf, Text } from '@react-pdf/renderer';
+import { createElement } from 'react';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import { buildBlockNoteDocument } from './manuscriptBlocks';
@@ -18,8 +19,82 @@ export const exportManuscriptToPdfBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
   const { editor, blocks } = buildBlockNoteDocument(bundle);
-  const exporter = new PDFExporter(editor.schema, pdfDefaultSchemaMappings);
-  const document = await exporter.toReactPDFDocument(blocks);
+  const fontFamily = /times/i.test(bundle.style.fontFamily ?? '')
+    ? 'Times-Roman'
+    : 'Inter';
+  const bodyLineSpacing = Math.max(1, bundle.style.lineSpacing ?? 1.5);
+  const abstractLineSpacing = Math.max(
+    1,
+    bundle.style.abstractLineSpacing ?? bodyLineSpacing,
+  );
+  type PdfTextElement = Awaited<
+    ReturnType<(typeof pdfDefaultSchemaMappings.blockMapping)['paragraph']>
+  >;
+  const paragraphMapping: (typeof pdfDefaultSchemaMappings.blockMapping)['paragraph'] =
+    (block, exporter) =>
+      // The exporter declares ReactElement<Text> instead of TextProps. The
+      // runtime component is correct; bridge the upstream generic mismatch.
+      createElement(Text, {
+        key: `paragraph${block.id}`,
+        style: {
+          lineHeight:
+            block.props.textColor === 'abstract-body'
+              ? abstractLineSpacing
+              : bodyLineSpacing,
+          textAlign:
+            block.props.textAlignment === 'justify'
+              ? 'justify'
+              : block.props.textAlignment,
+        },
+        children: exporter.transformInlineContent(block.content),
+      }) as unknown as PdfTextElement;
+  const headingMapping: (typeof pdfDefaultSchemaMappings.blockMapping)['heading'] =
+    (block, exporter) =>
+      createElement(Text, {
+        key: `heading${block.id}`,
+        style: {
+          fontSize:
+            block.props.level === 1
+              ? (bundle.style.titleFontSize ?? 16)
+              : (bundle.style.headingFontSize ?? 12),
+          fontWeight: 700,
+          lineHeight: 1.25,
+          textAlign:
+            block.props.textAlignment === 'justify'
+              ? 'justify'
+              : block.props.textAlignment,
+        },
+        children: exporter.transformInlineContent(block.content),
+      }) as unknown as PdfTextElement;
+  const exporter = new PDFExporter(editor.schema, {
+    ...pdfDefaultSchemaMappings,
+    blockMapping: {
+      ...pdfDefaultSchemaMappings.blockMapping,
+      paragraph: paragraphMapping,
+      heading: headingMapping,
+    },
+  });
+  exporter.styles.page = {
+    ...exporter.styles.page,
+    paddingTop: 72,
+    paddingBottom: 72,
+    paddingHorizontal: 72,
+    fontFamily,
+    fontSize: bundle.style.bodyFontSize ?? 12,
+    lineHeight: bodyLineSpacing,
+  };
+  const document = await exporter.toReactPDFDocument(blocks, {
+    ...(bundle.style.pageNumbering === true
+      ? {
+          footer: createElement(Text, {
+            fixed: true,
+            render: ({ pageNumber }: { pageNumber: number }) =>
+              String(pageNumber),
+            style: { fontFamily, fontSize: 10, textAlign: 'center' },
+          }),
+        }
+      : {}),
+  });
   return pdf(document).toBlob();
 };
 

@@ -14,6 +14,7 @@ export type ResolvedImage =
   | { kind: 'none' };
 
 const DATA_URL_PREFIX = /^data:image\//i;
+const UNSUPPORTED_INLINE_DATA_URL = /^data:image\/(?:tiff?)(?:;|,)/i;
 const HTTP_URL = /^https?:\/\//i;
 
 export const isImageDataUrl = (value: string | null | undefined): boolean =>
@@ -25,7 +26,10 @@ export const isHttpUrl = (value: string | null | undefined): boolean =>
 // Where the figure's image actually resolves from, regardless of the declared
 // `imageSource` (which is the user's intent; this is the runtime reality).
 export const resolveFigureImage = (figure: FigureLike): ResolvedImage => {
-  if (isImageDataUrl(figure.imageUrl)) {
+  if (
+    isImageDataUrl(figure.imageUrl) &&
+    !UNSUPPORTED_INLINE_DATA_URL.test(figure.imageUrl as string)
+  ) {
     return { kind: 'dataurl', src: figure.imageUrl as string };
   }
   if (isHttpUrl(figure.imageUrl)) {
@@ -56,7 +60,12 @@ export const figureToMarkdown = (figure: NumberedFigure): string => {
   }
 
   const captionParts = [`**${figure.label}.**`];
-  if (isNonEmptyString(figure.caption)) captionParts.push(figure.caption);
+  const caption = isNonEmptyString(figure.caption)
+    ? figure.caption
+    : isNonEmptyString(figure.name)
+      ? figure.name
+      : '';
+  if (caption.length > 0) captionParts.push(caption);
   lines.push(captionParts.join(' '));
 
   // Tables render their grid (a GFM Markdown table) under the caption.

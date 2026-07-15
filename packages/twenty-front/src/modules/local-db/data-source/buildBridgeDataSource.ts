@@ -104,6 +104,18 @@ const seedMissingTables = async (
   );
 };
 
+// Built-in journal profiles are product-owned templates rather than user
+// records. Refresh their stable ids on every boot so returning workspaces gain
+// new typography and page-layout fields, while records with user-created ids
+// remain untouched.
+const synchronizeBuiltInJournalTemplates = async (
+  dataSource: ReturnType<typeof getBridgeDataSource>,
+): Promise<void> => {
+  const journalTemplates = buildStarterSeed().journalTemplate ?? [];
+  if (journalTemplates.length === 0) return;
+  await dataSource.db.table('journalTemplate').bulkPut(journalTemplates);
+};
+
 export const getBridgeDataSource = () => {
   if (cachedDataSource === undefined) {
     cachedDataSource = createDexieDataSource({
@@ -122,7 +134,8 @@ export const getBridgeDataSource = () => {
       //   6 → 7  obligations tracker: obligation / obligationDocument +
       //          projectMembership (researcher↔project roster) objects and
       //          their relations
-      schemaVersion: 7,
+      //   7 → 8  journal export page-layout and typography fields
+      schemaVersion: 8,
     });
   }
   return cachedDataSource;
@@ -146,12 +159,14 @@ export const ensureBridgeDataSourceSeeded = async (): Promise<void> => {
       } else {
         await dataSource.reset(buildSeed());
       }
+      await synchronizeBuiltInJournalTemplates(dataSource);
       return;
     }
 
     // Blank mode: seed only the starter format library, idempotently, so the
     // workspace is never empty of templates but carries no demo content.
     await seedMissingTables(dataSource, buildStarterSeed());
+    await synchronizeBuiltInJournalTemplates(dataSource);
   })();
   return seedPromise;
 };

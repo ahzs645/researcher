@@ -8,6 +8,7 @@ import {
   ensureBridgeDataSourceSeeded,
   getBridgeDataSource,
 } from '@/local-db/data-source/buildBridgeDataSource';
+import { getResearchStarterRecords } from '@/local-db/research/researchSeedRecords';
 
 const BRIDGE_RECORDS_DEXIE_NAME = 'twenty-bridge-data-source';
 
@@ -76,7 +77,11 @@ describe('buildBridgeDataSource', () => {
       {},
     );
     const companies = await dataSource.findMany('company', { first: 1 }, {});
-    const manuscripts = await dataSource.findMany('manuscript', { first: 1 }, {});
+    const manuscripts = await dataSource.findMany(
+      'manuscript',
+      { first: 1 },
+      {},
+    );
 
     // Templates are present...
     expect(journalTemplates.totalCount).toBeGreaterThan(0);
@@ -114,10 +119,57 @@ describe('buildBridgeDataSource', () => {
       { first: 100 },
       {},
     );
-    // The table was non-empty, so the starter pack is skipped entirely.
-    expect(journalTemplates.totalCount).toBe(1);
     expect(
-      (journalTemplates.records[0] as { id?: string }).id,
-    ).toBe('my-template');
+      journalTemplates.records.some(
+        (record) => (record as { id?: string }).id === 'my-template',
+      ),
+    ).toBe(true);
+    expect(journalTemplates.totalCount).toBeGreaterThan(1);
+  });
+
+  it('refreshes built-in journal styles for returning workspaces', async () => {
+    setUrl('/');
+    window.sessionStorage.clear();
+    const dataSource = getBridgeDataSource();
+    const atmosphericEnvironment =
+      getResearchStarterRecords().journalTemplate.find(
+        (record) =>
+          (record as { profileKey?: string }).profileKey ===
+          'elsevier-atmospheric-environment',
+      );
+    if (atmosphericEnvironment === undefined) {
+      throw new Error('Expected Atmospheric Environment starter profile');
+    }
+    await dataSource.db.table('journalTemplate').bulkPut([
+      {
+        ...atmosphericEnvironment,
+        frontMatterLayout: 'INLINE',
+        fontFamily: 'Inter',
+        lineSpacing: 1.5,
+      },
+    ]);
+
+    await ensureBridgeDataSourceSeeded();
+
+    const journalTemplates = await dataSource.findMany(
+      'journalTemplate',
+      { first: 100 },
+      {},
+    );
+    const refreshed = journalTemplates.records.find(
+      (record) =>
+        (record as { profileKey?: string }).profileKey ===
+        'elsevier-atmospheric-environment',
+    ) as
+      | {
+          frontMatterLayout?: string;
+          fontFamily?: string;
+          lineSpacing?: number;
+        }
+      | undefined;
+
+    expect(refreshed?.frontMatterLayout).toBe('SEPARATE_TITLE_PAGE');
+    expect(refreshed?.fontFamily).toBe('Times New Roman');
+    expect(refreshed?.lineSpacing).toBe(2);
   });
 });

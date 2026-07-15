@@ -44,9 +44,7 @@ const captionText = (figure: NumberedFigure): string =>
     .filter((part) => part.length > 0)
     .join(' ');
 
-const figureCaptionBlock = (
-  figure: NumberedFigure,
-): ExportPartialBlock => ({
+const figureCaptionBlock = (figure: NumberedFigure): ExportPartialBlock => ({
   type: 'paragraph',
   props: { textColor: 'figure-caption' },
   content: captionText(figure),
@@ -271,6 +269,71 @@ const bundleToBlocks = (
     const node = bundle.nodes[nodeIndex];
     switch (node.kind) {
       case 'heading':
+        if (
+          bundle.style.supplementStartLayout === 'NEW_COVER_PAGE' &&
+          /^(supplementary material|supplementary information)$/i.test(
+            node.text.trim(),
+          )
+        ) {
+          pushPageBreakUnlessPresent();
+          const nextNode = bundle.nodes[nodeIndex + 1];
+          const hasPreparedSupplementCover =
+            (nextNode?.kind === 'prose' &&
+              /^\s*Supplemental Information for\b/i.test(nextNode.markdown)) ||
+            (nextNode?.kind === 'heading' &&
+              /^\s*Supplemental Information for\b/i.test(nextNode.text));
+
+          if (!hasPreparedSupplementCover) {
+            blocks.push({
+              type: 'paragraph',
+              props: { textAlignment: 'center' },
+              content: 'Supplemental Information for',
+            });
+            blocks.push({
+              type: 'heading',
+              props: { level: 1, textAlignment: 'center' },
+              content: bundle.metadata.title,
+            });
+            if (isNonEmptyString(bundle.metadata.authors)) {
+              blocks.push({
+                type: 'paragraph',
+                props: { textAlignment: 'center', textColor: 'author-line' },
+                content: [
+                  {
+                    type: 'text',
+                    text: formatManuscriptAuthorLine(
+                      bundle.metadata.authors,
+                      bundle.metadata.affiliations,
+                    ),
+                    styles: { bold: true },
+                  },
+                ],
+              });
+            }
+            if (isNonEmptyString(bundle.metadata.affiliations)) {
+              const affiliationAlignment =
+                bundle.style.affiliationAlignment === 'CENTER'
+                  ? 'center'
+                  : bundle.style.affiliationAlignment === 'RIGHT'
+                    ? 'right'
+                    : 'left';
+              blocks.push(
+                ...bundle.metadata.affiliations
+                  .split(/\r?\n|;\s*(?=\d+\s)/)
+                  .map((affiliation) => affiliation.trim())
+                  .filter((affiliation) => affiliation.length > 0)
+                  .map((affiliation) =>
+                    affiliationParagraph(
+                      affiliation,
+                      affiliationAlignment,
+                      bundle.style.affiliationNumberStyle !== 'BASELINE',
+                    ),
+                  ),
+              );
+            }
+          }
+          break;
+        }
         if (
           frontMatterLayout === 'TITLE_WITH_ABSTRACT' &&
           abstractSeen &&

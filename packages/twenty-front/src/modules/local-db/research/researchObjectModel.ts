@@ -264,7 +264,20 @@ const FIGURE_PAGE_LAYOUT_OPTIONS: ResearchSelectOption[] = [
     label: 'Main inline; supplement one per page',
     color: 'green',
   },
-  { value: 'ONE_PER_PAGE', label: 'Every figure on a separate page', color: 'blue' },
+  {
+    value: 'ONE_PER_PAGE',
+    label: 'Every figure on a separate page',
+    color: 'blue',
+  },
+];
+
+const SUPPLEMENT_START_LAYOUT_OPTIONS: ResearchSelectOption[] = [
+  {
+    value: 'NEW_COVER_PAGE',
+    label: 'New supplemental-information page',
+    color: 'green',
+  },
+  { value: 'CONTINUOUS', label: 'Continue after main paper', color: 'gray' },
 ];
 
 const FRONT_MATTER_LAYOUT_OPTIONS: ResearchSelectOption[] = [
@@ -2001,6 +2014,18 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         options: CAPTION_POSITION_OPTIONS,
       },
       {
+        name: 'figureCaptionFontSize',
+        label: 'Figure caption font size (pt)',
+        type: 'NUMBER',
+        icon: 'IconTextSize',
+      },
+      {
+        name: 'figureCaptionLineSpacing',
+        label: 'Figure caption line spacing',
+        type: 'NUMBER',
+        icon: 'IconLineHeight',
+      },
+      {
         name: 'tableCaptionPosition',
         label: 'Table caption',
         type: 'SELECT',
@@ -2013,6 +2038,13 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         type: 'SELECT',
         icon: 'IconFileDescription',
         options: FIGURE_PAGE_LAYOUT_OPTIONS,
+      },
+      {
+        name: 'supplementStartLayout',
+        label: 'Supplement start',
+        type: 'SELECT',
+        icon: 'IconFileDescription',
+        options: SUPPLEMENT_START_LAYOUT_OPTIONS,
       },
       {
         name: 'abstractWordLimit',

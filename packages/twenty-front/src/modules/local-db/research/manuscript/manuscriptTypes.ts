@@ -77,8 +77,11 @@ export type JournalStyle = {
   numberingScope?: string | null;
   crossRefFormat?: string | null;
   figureCaptionPosition?: string | null;
+  figureCaptionFontSize?: number | null;
+  figureCaptionLineSpacing?: number | null;
   tableCaptionPosition?: string | null;
   figurePageLayout?: string | null;
+  supplementStartLayout?: string | null;
   abstractWordLimit?: number | null;
   abstractWordMinimum?: number | null;
   keywordMinimum?: number | null;

@@ -36,8 +36,11 @@ type ExportStyleOverrides = Pick<
   | 'tableFontSize'
   | 'tableLineSpacing'
   | 'figureCaptionPosition'
+  | 'figureCaptionFontSize'
+  | 'figureCaptionLineSpacing'
   | 'tableCaptionPosition'
   | 'figurePageLayout'
+  | 'supplementStartLayout'
 >;
 
 const HEADING_COLOR_OPTIONS: SelectOption<string>[] = [
@@ -94,6 +97,14 @@ const CAPTION_POSITION_OPTIONS: SelectOption<string>[] = [
   { value: 'ABOVE', label: 'Above figure' },
 ];
 
+const FIGURE_CAPTION_FONT_SIZE_OPTIONS: SelectOption<string>[] = [
+  { value: '8', label: '8 pt' },
+  { value: '9', label: '9 pt' },
+  { value: '10', label: '10 pt (Addis)' },
+  { value: '11', label: '11 pt' },
+  { value: '12', label: '12 pt' },
+];
+
 const TABLE_CAPTION_POSITION_OPTIONS: SelectOption<string>[] = [
   { value: 'ABOVE', label: 'Above table (Addis)' },
   { value: 'BELOW', label: 'Below table' },
@@ -106,6 +117,14 @@ const FIGURE_PAGE_LAYOUT_OPTIONS: SelectOption<string>[] = [
   },
   { value: 'ONE_PER_PAGE', label: 'Every figure on a separate page' },
   { value: 'INLINE', label: 'All figures flow with section text' },
+];
+
+const SUPPLEMENT_START_LAYOUT_OPTIONS: SelectOption<string>[] = [
+  {
+    value: 'NEW_COVER_PAGE',
+    label: 'New supplemental-information page (Addis)',
+  },
+  { value: 'CONTINUOUS', label: 'Continue after main paper' },
 ];
 
 type ManuscriptExportPanelProps = {
@@ -452,6 +471,35 @@ export const ManuscriptExportPanel = ({
           }
         />
         <Select
+          dropdownId="manuscript-export-figure-caption-font-size-select"
+          label="Figure caption text size"
+          fullWidth
+          options={FIGURE_CAPTION_FONT_SIZE_OPTIONS}
+          value={String(
+            effectiveStyle.figureCaptionFontSize ??
+              Math.max(8, (effectiveStyle.bodyFontSize ?? 12) - 2),
+          )}
+          onChange={(value) =>
+            setStyleOverrides((current) => ({
+              ...current,
+              figureCaptionFontSize: Number(value),
+            }))
+          }
+        />
+        <Select
+          dropdownId="manuscript-export-figure-caption-spacing-select"
+          label="Figure caption line spacing"
+          fullWidth
+          options={LINE_SPACING_OPTIONS}
+          value={String(effectiveStyle.figureCaptionLineSpacing ?? 1)}
+          onChange={(value) =>
+            setStyleOverrides((current) => ({
+              ...current,
+              figureCaptionLineSpacing: Number(value),
+            }))
+          }
+        />
+        <Select
           dropdownId="manuscript-export-figure-page-layout-select"
           label="Figure pagination"
           fullWidth
@@ -461,6 +509,19 @@ export const ManuscriptExportPanel = ({
             setStyleOverrides((current) => ({
               ...current,
               figurePageLayout: value,
+            }))
+          }
+        />
+        <Select
+          dropdownId="manuscript-export-supplement-start-select"
+          label="Supplement start"
+          fullWidth
+          options={SUPPLEMENT_START_LAYOUT_OPTIONS}
+          value={effectiveStyle.supplementStartLayout ?? 'CONTINUOUS'}
+          onChange={(value) =>
+            setStyleOverrides((current) => ({
+              ...current,
+              supplementStartLayout: value,
             }))
           }
         />
@@ -499,11 +560,15 @@ export const ManuscriptExportPanel = ({
         {` · ${(effectiveStyle.tableStyle ?? 'ACADEMIC').toLowerCase()} tables`}
         {` · ${effectiveStyle.tableLineSpacing ?? 1}× table spacing`}
         {` · figure captions ${(effectiveStyle.figureCaptionPosition ?? 'BELOW').toLowerCase()}`}
+        {` at ${effectiveStyle.figureCaptionFontSize ?? Math.max(8, (effectiveStyle.bodyFontSize ?? 12) - 2)} pt/${effectiveStyle.figureCaptionLineSpacing ?? 1}× spacing`}
         {effectiveStyle.figurePageLayout === 'ONE_PER_PAGE'
           ? ' · every figure on a separate page'
           : effectiveStyle.figurePageLayout === 'SUPPLEMENT_ONE_PER_PAGE'
             ? ' · main figures inline; supplementary figures one per page'
             : ' · all figures flow with sections'}
+        {effectiveStyle.supplementStartLayout === 'NEW_COVER_PAGE'
+          ? ' · supplement starts on a new information page'
+          : ' · supplement continues after the main paper'}
         {' · native Word equations'}
         {effectiveStyle.lineNumbering === true ? ' · line numbers' : ''}
         {effectiveStyle.pageNumbering === true ? ' · page numbers' : ''}

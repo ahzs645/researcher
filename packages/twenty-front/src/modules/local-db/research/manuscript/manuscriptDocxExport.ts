@@ -49,6 +49,8 @@ type ManuscriptDocxMappingOptions = {
   fontFamily: string;
   tableFontSize: number;
   tableLineSpacing: number;
+  figureCaptionFontSize: number;
+  figureCaptionLineSpacing: number;
 };
 
 const inlineContentText = (value: unknown): string => {
@@ -133,6 +135,8 @@ const createManuscriptDocxMappings = ({
   fontFamily,
   tableFontSize,
   tableLineSpacing,
+  figureCaptionFontSize,
+  figureCaptionLineSpacing,
 }: ManuscriptDocxMappingOptions): typeof docxDefaultSchemaMappings => ({
   ...docxDefaultSchemaMappings,
   blockMapping: {
@@ -162,7 +166,7 @@ const createManuscriptDocxMappings = ({
       );
       if (
         typeof caption !== 'string' ||
-        !hasManuscriptScripts(caption) ||
+        caption.length === 0 ||
         !Array.isArray(mappedImage)
       ) {
         return mappedImage;
@@ -171,10 +175,19 @@ const createManuscriptDocxMappings = ({
         ...mappedImage.slice(0, -1),
         new Paragraph({
           style: 'Caption',
+          keepLines: true,
+          spacing: {
+            after: 0,
+            line: Math.round(240 * figureCaptionLineSpacing),
+            lineRule: LineRuleType.AUTO,
+          },
           children: manuscriptScriptSegments(caption).map(
             (segment) =>
               new TextRun({
                 text: segment.text,
+                font: fontFamily,
+                size: figureCaptionFontSize * 2,
+                italics: true,
                 superScript: segment.position === 'SUPERSCRIPT',
                 subScript: segment.position === 'SUBSCRIPT',
               }),
@@ -268,49 +281,64 @@ const createManuscriptDocxMappings = ({
         ? abstractLineSpacing
         : isTableCaption
           ? tableLineSpacing
-          : isAffiliation
-            ? affiliationLineSpacing
-            : bodyLineSpacing;
-      const children = hasManuscriptScripts(equation)
-        ? block.content.flatMap((content) => {
-            const text = inlineContentText(content);
-            if (!hasManuscriptScripts(text)) {
-              return exporter.transformInlineContent([content]);
-            }
-            if (isLinkInlineContent(content)) {
-              return [
-                new ExternalHyperlink({
-                  link: content.href,
-                  children: content.content.flatMap((linkedContent) =>
-                    manuscriptTextRuns(
-                      linkedContent.text,
-                      linkedContent.styles,
-                      isAffiliation,
-                      true,
+          : isFigureCaption
+            ? figureCaptionLineSpacing
+            : isAffiliation
+              ? affiliationLineSpacing
+              : bodyLineSpacing;
+      const children = isFigureCaption
+        ? manuscriptScriptSegments(equation).map(
+            (segment) =>
+              new TextRun({
+                text: segment.text,
+                font: fontFamily,
+                size: figureCaptionFontSize * 2,
+                italics: true,
+                superScript: segment.position === 'SUPERSCRIPT',
+                subScript: segment.position === 'SUBSCRIPT',
+              }),
+          )
+        : hasManuscriptScripts(equation)
+          ? block.content.flatMap((content) => {
+              const text = inlineContentText(content);
+              if (!hasManuscriptScripts(text)) {
+                return exporter.transformInlineContent([content]);
+              }
+              if (isLinkInlineContent(content)) {
+                return [
+                  new ExternalHyperlink({
+                    link: content.href,
+                    children: content.content.flatMap((linkedContent) =>
+                      manuscriptTextRuns(
+                        linkedContent.text,
+                        linkedContent.styles,
+                        isAffiliation,
+                        true,
+                      ),
                     ),
-                  ),
-                }),
-              ];
-            }
-            return isTextInlineContent(content)
-              ? manuscriptTextRuns(
-                  content.text,
-                  content.styles,
-                  isAffiliation,
-                )
-              : exporter.transformInlineContent([content]);
-          })
-        : exporter.transformInlineContent(block.content);
+                  }),
+                ];
+              }
+              return isTextInlineContent(content)
+                ? manuscriptTextRuns(
+                    content.text,
+                    content.styles,
+                    isAffiliation,
+                  )
+                : exporter.transformInlineContent([content]);
+            })
+          : exporter.transformInlineContent(block.content);
       return new Paragraph({
         alignment,
         spacing: {
-          after: isTableCaption || isFigureCaption
-            ? 0
-            : Math.round(
-                (isAffiliation
-                  ? affiliationSpacingAfter
-                  : paragraphSpacingAfter) * 20,
-              ),
+          after:
+            isTableCaption || isFigureCaption
+              ? 0
+              : Math.round(
+                  (isAffiliation
+                    ? affiliationSpacingAfter
+                    : paragraphSpacingAfter) * 20,
+                ),
           line: Math.round(240 * lineSpacing),
           lineRule: LineRuleType.AUTO,
         },
@@ -368,6 +396,14 @@ export const exportManuscriptToDocxBlob = async (
     'ACADEMIC') as ManuscriptTableStyle;
   const tableFontSize = Math.max(8, bundle.style.tableFontSize ?? bodyFontSize);
   const tableLineSpacing = Math.max(1, bundle.style.tableLineSpacing ?? 1);
+  const figureCaptionFontSize = Math.max(
+    8,
+    bundle.style.figureCaptionFontSize ?? Math.max(8, bodyFontSize - 2),
+  );
+  const figureCaptionLineSpacing = Math.max(
+    1,
+    bundle.style.figureCaptionLineSpacing ?? 1,
+  );
   const exporter = new DOCXExporter(
     editor.schema,
     createManuscriptDocxMappings({
@@ -380,6 +416,8 @@ export const exportManuscriptToDocxBlob = async (
       fontFamily,
       tableFontSize,
       tableLineSpacing,
+      figureCaptionFontSize,
+      figureCaptionLineSpacing,
     }),
   );
   const resolveExternalFile = exporter.options.resolveFileUrl;

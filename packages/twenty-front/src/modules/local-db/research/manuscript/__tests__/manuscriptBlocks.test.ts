@@ -133,9 +133,7 @@ describe('buildBlockNoteDocument', () => {
     );
 
     expect(captionIndex).toBe(imageIndex - 1);
-    expect(blocks[captionIndex].content).toBe(
-      'Figure 1. Seasonal composition',
-    );
+    expect(blocks[captionIndex].content).toBe('Figure 1. Seasonal composition');
     expect(blocks[imageIndex - 2].type).toBe('pageBreak');
     expect(blocks[imageIndex + 1].type).toBe('pageBreak');
   });
@@ -190,6 +188,48 @@ describe('buildBlockNoteDocument', () => {
     expect(blocks[mainImageIndex + 1].type).not.toBe('pageBreak');
     expect(blocks[supplementImageIndex - 1].type).toBe('pageBreak');
     expect(blocks[supplementImageIndex + 1].type).toBe('pageBreak');
+  });
+
+  it('starts a prepared supplemental-information cover on a new page', () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: {
+        id: 'paper',
+        name: 'Organic aerosol concentration in Addis Ababa',
+        authorLine: 'Anwar M. N.1,7; Takahama S.2',
+        affiliations:
+          '1 Air Quality Research Center, University of California, Davis',
+      },
+      style: { supplementStartLayout: 'NEW_COVER_PAGE' },
+      sections: [
+        {
+          id: 'results',
+          name: 'Results',
+          placement: 'MAIN',
+          content: 'Main-paper results.',
+        },
+        {
+          id: 'supplement',
+          name: 'Supplementary Material',
+          placement: 'SUPPLEMENT',
+          content:
+            'Supplemental Information for\n\nOrganic aerosol concentration in Addis Ababa\n\nAnwar M. N.1,7, Takahama S.2',
+        },
+      ],
+      figures: [],
+      references: [],
+    });
+
+    const { blocks } = buildBlockNoteDocument(bundle);
+    const serialized = JSON.stringify(blocks);
+    const coverIndex = blocks.findIndex(
+      (block) =>
+        block.type === 'paragraph' &&
+        JSON.stringify(block.content).includes('Supplemental Information for'),
+    );
+
+    expect(coverIndex).toBeGreaterThan(0);
+    expect(blocks[coverIndex - 1].type).toBe('pageBreak');
+    expect(serialized).not.toContain('Supplementary Material');
   });
 
   it('keeps a compact abstract on page one before starting the numbered body', () => {

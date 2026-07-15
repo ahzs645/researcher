@@ -105,6 +105,16 @@
       "import": "./dist/metadata.mjs",
       "require": "./dist/metadata.cjs"
     },
+    "./portable": {
+      "types": "./dist/portable/index.d.ts",
+      "import": "./dist/portable.mjs",
+      "require": "./dist/portable.cjs"
+    },
+    "./portable-functions": {
+      "types": "./dist/portable-functions/index.d.ts",
+      "import": "./dist/portable-functions.mjs",
+      "require": "./dist/portable-functions.cjs"
+    },
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing.mjs",
@@ -151,6 +161,8 @@
     "i18n",
     "logic-function",
     "metadata",
+    "portable",
+    "portable-functions",
     "testing",
     "translations",
     "types",
@@ -184,6 +196,12 @@
       ],
       "metadata": [
         "dist/metadata/index.d.ts"
+      ],
+      "portable": [
+        "dist/portable/index.d.ts"
+      ],
+      "portable-functions": [
+        "dist/portable-functions/index.d.ts"
       ],
       "testing": [
         "dist/testing/index.d.ts"

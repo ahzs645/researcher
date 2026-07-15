@@ -93,6 +93,60 @@ describe('buildManuscriptBundle', () => {
     expect(bundle.supplementMarkdown).toContain('Supplementary methods');
   });
 
+  it('places acknowledgements and generated references after the conclusion and before the supplement', () => {
+    const ordered = buildManuscriptBundle({
+      ...input,
+      sections: [
+        {
+          id: 'conclusion',
+          name: 'Conclusion',
+          sectionType: 'CONCLUSION',
+          placement: 'MAIN',
+          orderIndex: 10,
+          content: 'Main-paper conclusion [@smith2020].',
+        },
+        {
+          id: 'acknowledgements',
+          name: 'Acknowledgements',
+          sectionType: 'ACKNOWLEDGMENTS',
+          placement: 'BACK_MATTER',
+          orderIndex: 11,
+          content: 'Thanks to the field team.',
+        },
+        {
+          id: 'imported-references',
+          name: 'References',
+          sectionType: 'REFERENCES',
+          placement: 'BACK_MATTER',
+          orderIndex: 12,
+          content: 'SOURCE LIST THAT MUST NOT BE DUPLICATED',
+        },
+        {
+          id: 'supplement-methods',
+          name: 'S2.1: Details about PMF analysis',
+          sectionType: 'SUPPLEMENT',
+          placement: 'SUPPLEMENT',
+          orderIndex: 2,
+          content: 'Supplemental method details.',
+        },
+      ],
+    });
+    const headings = ordered.nodes.flatMap((node) =>
+      node.kind === 'heading' ? [node.text] : [],
+    );
+
+    expect(headings).toEqual([
+      'Conclusion',
+      'Acknowledgements',
+      'References',
+      'Supplementary Material',
+      'S2.1: Details about PMF analysis',
+    ]);
+    expect(ordered.mainMarkdown).not.toContain(
+      'SOURCE LIST THAT MUST NOT BE DUPLICATED',
+    );
+  });
+
   it('resolves cross-references and renders numeric citations', () => {
     expect(bundle.mainMarkdown).toContain('As shown in Figure 1');
     expect(bundle.mainMarkdown).toContain('the films are clean [1]');

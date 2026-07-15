@@ -274,9 +274,10 @@ const FIGURE_PAGE_LAYOUT_OPTIONS: ResearchSelectOption[] = [
 const SUPPLEMENT_START_LAYOUT_OPTIONS: ResearchSelectOption[] = [
   {
     value: 'NEW_COVER_PAGE',
-    label: 'New supplemental-information page',
+    label: 'New supplemental-information page (legacy)',
     color: 'green',
   },
+  { value: 'NEW_PAGE', label: 'Start on a new page', color: 'blue' },
   { value: 'CONTINUOUS', label: 'Continue after main paper', color: 'gray' },
 ];
 
@@ -2026,6 +2027,18 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconLineHeight',
       },
       {
+        name: 'figureCaptionGap',
+        label: 'Image-to-caption gap (pt)',
+        type: 'NUMBER',
+        icon: 'IconSpacingVertical',
+      },
+      {
+        name: 'figureCaptionSpacingAfter',
+        label: 'Spacing after figure caption (pt)',
+        type: 'NUMBER',
+        icon: 'IconSpacingVertical',
+      },
+      {
         name: 'tableCaptionPosition',
         label: 'Table caption',
         type: 'SELECT',
@@ -2045,6 +2058,12 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         type: 'SELECT',
         icon: 'IconFileDescription',
         options: SUPPLEMENT_START_LAYOUT_OPTIONS,
+      },
+      {
+        name: 'supplementCoverPage',
+        label: 'Supplement cover page',
+        type: 'BOOLEAN',
+        icon: 'IconFileDescription',
       },
       {
         name: 'abstractWordLimit',

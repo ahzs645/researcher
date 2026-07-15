@@ -51,6 +51,8 @@ type ManuscriptDocxMappingOptions = {
   tableLineSpacing: number;
   figureCaptionFontSize: number;
   figureCaptionLineSpacing: number;
+  figureCaptionGap: number;
+  figureCaptionSpacingAfter: number;
 };
 
 const inlineContentText = (value: unknown): string => {
@@ -137,6 +139,8 @@ const createManuscriptDocxMappings = ({
   tableLineSpacing,
   figureCaptionFontSize,
   figureCaptionLineSpacing,
+  figureCaptionGap,
+  figureCaptionSpacingAfter,
 }: ManuscriptDocxMappingOptions): typeof docxDefaultSchemaMappings => ({
   ...docxDefaultSchemaMappings,
   blockMapping: {
@@ -177,7 +181,8 @@ const createManuscriptDocxMappings = ({
           style: 'Caption',
           keepLines: true,
           spacing: {
-            after: 0,
+            before: Math.round(figureCaptionGap * 20),
+            after: Math.round(figureCaptionSpacingAfter * 20),
             line: Math.round(240 * figureCaptionLineSpacing),
             lineRule: LineRuleType.AUTO,
           },
@@ -331,9 +336,10 @@ const createManuscriptDocxMappings = ({
       return new Paragraph({
         alignment,
         spacing: {
-          after:
-            isTableCaption || isFigureCaption
-              ? 0
+          after: isTableCaption
+            ? 0
+            : isFigureCaption
+              ? Math.round(figureCaptionGap * 20)
               : Math.round(
                   (isAffiliation
                     ? affiliationSpacingAfter
@@ -404,6 +410,11 @@ export const exportManuscriptToDocxBlob = async (
     1,
     bundle.style.figureCaptionLineSpacing ?? 1,
   );
+  const figureCaptionGap = Math.max(0, bundle.style.figureCaptionGap ?? 3);
+  const figureCaptionSpacingAfter = Math.max(
+    0,
+    bundle.style.figureCaptionSpacingAfter ?? 6,
+  );
   const exporter = new DOCXExporter(
     editor.schema,
     createManuscriptDocxMappings({
@@ -418,6 +429,8 @@ export const exportManuscriptToDocxBlob = async (
       tableLineSpacing,
       figureCaptionFontSize,
       figureCaptionLineSpacing,
+      figureCaptionGap,
+      figureCaptionSpacingAfter,
     }),
   );
   const resolveExternalFile = exporter.options.resolveFileUrl;

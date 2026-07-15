@@ -259,6 +259,13 @@ const bundleToBlocks = (
     /^(abstract|keywords|acknowledge?ments?|author contributions?|funding|competing interests?|conflicts? of interest|data availability|references|supplementary material)$/i;
 
   const figurePageLayout = bundle.style.figurePageLayout ?? 'INLINE';
+  const supplementStartsOnNewPage = ['NEW_COVER_PAGE', 'NEW_PAGE'].includes(
+    bundle.style.supplementStartLayout ?? '',
+  );
+  const includeSupplementCover =
+    bundle.style.supplementCoverPage ??
+    bundle.style.supplementStartLayout === 'NEW_COVER_PAGE';
+  let preparedSupplementCoverNeedsTrailingPageBreak = false;
   const pushPageBreakUnlessPresent = () => {
     if (blocks[blocks.length - 1]?.type !== 'pageBreak') {
       blocks.push(pageBreakBlock());
@@ -270,12 +277,11 @@ const bundleToBlocks = (
     switch (node.kind) {
       case 'heading':
         if (
-          bundle.style.supplementStartLayout === 'NEW_COVER_PAGE' &&
           /^(supplementary material|supplementary information)$/i.test(
             node.text.trim(),
           )
         ) {
-          pushPageBreakUnlessPresent();
+          if (supplementStartsOnNewPage) pushPageBreakUnlessPresent();
           const nextNode = bundle.nodes[nodeIndex + 1];
           const hasPreparedSupplementCover =
             (nextNode?.kind === 'prose' &&
@@ -283,7 +289,7 @@ const bundleToBlocks = (
             (nextNode?.kind === 'heading' &&
               /^\s*Supplemental Information for\b/i.test(nextNode.text));
 
-          if (!hasPreparedSupplementCover) {
+          if (includeSupplementCover && !hasPreparedSupplementCover) {
             blocks.push({
               type: 'paragraph',
               props: { textAlignment: 'center' },
@@ -331,8 +337,11 @@ const bundleToBlocks = (
                   ),
               );
             }
+            pushPageBreakUnlessPresent();
           }
-          break;
+          preparedSupplementCoverNeedsTrailingPageBreak =
+            includeSupplementCover && hasPreparedSupplementCover;
+          if (includeSupplementCover || hasPreparedSupplementCover) break;
         }
         if (
           frontMatterLayout === 'TITLE_WITH_ABSTRACT' &&
@@ -372,6 +381,10 @@ const bundleToBlocks = (
             currentSectionIsAbstract,
           ),
         );
+        if (preparedSupplementCoverNeedsTrailingPageBreak) {
+          pushPageBreakUnlessPresent();
+          preparedSupplementCoverNeedsTrailingPageBreak = false;
+        }
         break;
       case 'figure':
         const isolateFigureOnPage =

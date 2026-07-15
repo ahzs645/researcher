@@ -38,9 +38,12 @@ type ExportStyleOverrides = Pick<
   | 'figureCaptionPosition'
   | 'figureCaptionFontSize'
   | 'figureCaptionLineSpacing'
+  | 'figureCaptionGap'
+  | 'figureCaptionSpacingAfter'
   | 'tableCaptionPosition'
   | 'figurePageLayout'
   | 'supplementStartLayout'
+  | 'supplementCoverPage'
 >;
 
 const HEADING_COLOR_OPTIONS: SelectOption<string>[] = [
@@ -105,6 +108,20 @@ const FIGURE_CAPTION_FONT_SIZE_OPTIONS: SelectOption<string>[] = [
   { value: '12', label: '12 pt' },
 ];
 
+const FIGURE_CAPTION_GAP_OPTIONS: SelectOption<string>[] = [
+  { value: '0', label: 'None (0 pt)' },
+  { value: '3', label: 'Tight (3 pt, Addis)' },
+  { value: '6', label: 'Comfortable (6 pt)' },
+  { value: '12', label: 'Open (12 pt)' },
+];
+
+const FIGURE_CAPTION_AFTER_OPTIONS: SelectOption<string>[] = [
+  { value: '0', label: 'None (0 pt)' },
+  { value: '3', label: 'Tight (3 pt)' },
+  { value: '6', label: 'Comfortable (6 pt, Addis)' },
+  { value: '12', label: 'Open (12 pt)' },
+];
+
 const TABLE_CAPTION_POSITION_OPTIONS: SelectOption<string>[] = [
   { value: 'ABOVE', label: 'Above table (Addis)' },
   { value: 'BELOW', label: 'Below table' },
@@ -120,11 +137,16 @@ const FIGURE_PAGE_LAYOUT_OPTIONS: SelectOption<string>[] = [
 ];
 
 const SUPPLEMENT_START_LAYOUT_OPTIONS: SelectOption<string>[] = [
-  {
-    value: 'NEW_COVER_PAGE',
-    label: 'New supplemental-information page (Addis)',
-  },
+  { value: 'NEW_PAGE', label: 'Start on a new page (Addis)' },
   { value: 'CONTINUOUS', label: 'Continue after main paper' },
+];
+
+const SUPPLEMENT_COVER_PAGE_OPTIONS: SelectOption<string>[] = [
+  {
+    value: 'INCLUDE',
+    label: 'Include title, authors & affiliations (Addis)',
+  },
+  { value: 'OMIT', label: 'Do not include a cover page' },
 ];
 
 type ManuscriptExportPanelProps = {
@@ -500,6 +522,32 @@ export const ManuscriptExportPanel = ({
           }
         />
         <Select
+          dropdownId="manuscript-export-figure-caption-gap-select"
+          label="Image-to-caption gap"
+          fullWidth
+          options={FIGURE_CAPTION_GAP_OPTIONS}
+          value={String(effectiveStyle.figureCaptionGap ?? 3)}
+          onChange={(value) =>
+            setStyleOverrides((current) => ({
+              ...current,
+              figureCaptionGap: Number(value),
+            }))
+          }
+        />
+        <Select
+          dropdownId="manuscript-export-figure-caption-after-select"
+          label="Spacing after figure caption"
+          fullWidth
+          options={FIGURE_CAPTION_AFTER_OPTIONS}
+          value={String(effectiveStyle.figureCaptionSpacingAfter ?? 6)}
+          onChange={(value) =>
+            setStyleOverrides((current) => ({
+              ...current,
+              figureCaptionSpacingAfter: Number(value),
+            }))
+          }
+        />
+        <Select
           dropdownId="manuscript-export-figure-page-layout-select"
           label="Figure pagination"
           fullWidth
@@ -517,11 +565,33 @@ export const ManuscriptExportPanel = ({
           label="Supplement start"
           fullWidth
           options={SUPPLEMENT_START_LAYOUT_OPTIONS}
-          value={effectiveStyle.supplementStartLayout ?? 'CONTINUOUS'}
+          value={
+            effectiveStyle.supplementStartLayout === 'NEW_COVER_PAGE'
+              ? 'NEW_PAGE'
+              : (effectiveStyle.supplementStartLayout ?? 'CONTINUOUS')
+          }
           onChange={(value) =>
             setStyleOverrides((current) => ({
               ...current,
               supplementStartLayout: value,
+            }))
+          }
+        />
+        <Select
+          dropdownId="manuscript-export-supplement-cover-select"
+          label="Supplement cover page"
+          fullWidth
+          options={SUPPLEMENT_COVER_PAGE_OPTIONS}
+          value={
+            (effectiveStyle.supplementCoverPage ??
+            effectiveStyle.supplementStartLayout === 'NEW_COVER_PAGE')
+              ? 'INCLUDE'
+              : 'OMIT'
+          }
+          onChange={(value) =>
+            setStyleOverrides((current) => ({
+              ...current,
+              supplementCoverPage: value === 'INCLUDE',
             }))
           }
         />
@@ -561,14 +631,22 @@ export const ManuscriptExportPanel = ({
         {` · ${effectiveStyle.tableLineSpacing ?? 1}× table spacing`}
         {` · figure captions ${(effectiveStyle.figureCaptionPosition ?? 'BELOW').toLowerCase()}`}
         {` at ${effectiveStyle.figureCaptionFontSize ?? Math.max(8, (effectiveStyle.bodyFontSize ?? 12) - 2)} pt/${effectiveStyle.figureCaptionLineSpacing ?? 1}× spacing`}
+        {` · ${effectiveStyle.figureCaptionGap ?? 3} pt image-to-caption gap`}
+        {` · ${effectiveStyle.figureCaptionSpacingAfter ?? 6} pt after captions`}
         {effectiveStyle.figurePageLayout === 'ONE_PER_PAGE'
           ? ' · every figure on a separate page'
           : effectiveStyle.figurePageLayout === 'SUPPLEMENT_ONE_PER_PAGE'
             ? ' · main figures inline; supplementary figures one per page'
             : ' · all figures flow with sections'}
-        {effectiveStyle.supplementStartLayout === 'NEW_COVER_PAGE'
-          ? ' · supplement starts on a new information page'
+        {['NEW_PAGE', 'NEW_COVER_PAGE'].includes(
+          effectiveStyle.supplementStartLayout ?? '',
+        )
+          ? ' · supplement starts on a new page'
           : ' · supplement continues after the main paper'}
+        {(effectiveStyle.supplementCoverPage ??
+        effectiveStyle.supplementStartLayout === 'NEW_COVER_PAGE')
+          ? ' · supplemental-information cover included'
+          : ' · no supplement cover'}
         {' · native Word equations'}
         {effectiveStyle.lineNumbering === true ? ' · line numbers' : ''}
         {effectiveStyle.pageNumbering === true ? ' · page numbers' : ''}

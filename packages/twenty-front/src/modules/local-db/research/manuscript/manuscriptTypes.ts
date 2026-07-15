@@ -79,9 +79,12 @@ export type JournalStyle = {
   figureCaptionPosition?: string | null;
   figureCaptionFontSize?: number | null;
   figureCaptionLineSpacing?: number | null;
+  figureCaptionGap?: number | null;
+  figureCaptionSpacingAfter?: number | null;
   tableCaptionPosition?: string | null;
   figurePageLayout?: string | null;
   supplementStartLayout?: string | null;
+  supplementCoverPage?: boolean | null;
   abstractWordLimit?: number | null;
   abstractWordMinimum?: number | null;
   keywordMinimum?: number | null;

@@ -232,6 +232,57 @@ describe('buildBlockNoteDocument', () => {
     expect(serialized).not.toContain('Supplementary Material');
   });
 
+  it('can generate a supplemental cover independently from its page break setting', () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: {
+        id: 'paper',
+        name: 'Organic aerosol concentration in Addis Ababa',
+        authorLine: 'Anwar M. N.1,7; Takahama S.2',
+        affiliations:
+          '1 Air Quality Research Center, University of California, Davis\n2 EPFL, Lausanne, Switzerland',
+      },
+      style: {
+        supplementStartLayout: 'NEW_PAGE',
+        supplementCoverPage: true,
+      },
+      sections: [
+        {
+          id: 'conclusion',
+          name: 'Conclusion',
+          placement: 'MAIN',
+          content: 'Conclusion text.',
+        },
+        {
+          id: 'supplement',
+          name: 'S2.1: PMF analysis',
+          placement: 'SUPPLEMENT',
+          content: 'Supplement method.',
+        },
+      ],
+      figures: [],
+      references: [],
+    });
+
+    const { blocks } = buildBlockNoteDocument(bundle);
+    const coverIndex = blocks.findIndex((block) =>
+      (JSON.stringify(block.content) ?? '').includes(
+        'Supplemental Information for',
+      ),
+    );
+    const serialized = JSON.stringify(blocks);
+
+    expect(blocks[coverIndex - 1].type).toBe('pageBreak');
+    expect(serialized).toContain(
+      'Organic aerosol concentration in Addis Ababa',
+    );
+    expect(serialized).toContain('Anwar M. N.');
+    expect(serialized).toContain('S2.1: PMF analysis');
+    const supplementalMethodIndex = blocks.findIndex((block) =>
+      (JSON.stringify(block.content) ?? '').includes('S2.1: PMF analysis'),
+    );
+    expect(blocks[supplementalMethodIndex - 1].type).toBe('pageBreak');
+  });
+
   it('keeps a compact abstract on page one before starting the numbered body', () => {
     const bundle = buildManuscriptBundle({
       manuscript: {

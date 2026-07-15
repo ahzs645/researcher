@@ -61,6 +61,11 @@ type SectionRule = {
 
 const SECTION_RULES: SectionRule[] = [
   {
+    sectionType: 'SUPPLEMENT',
+    placement: 'SUPPLEMENT',
+    pattern: /^s\d+(?:\.\d+)*(?:[.):]|\s)/,
+  },
+  {
     sectionType: 'TITLE_PAGE',
     placement: 'FRONT_MATTER',
     pattern: /^title page\b/,
@@ -921,10 +926,7 @@ export const extractImagesToFigures = (
         previousCaptionIndex -= 1;
       }
       const previousLine = out[previousCaptionIndex]?.trim() ?? '';
-      const previousCaption = parseImportedAssetCaption(
-        previousLine,
-        'FIGURE',
-      );
+      const previousCaption = parseImportedAssetCaption(previousLine, 'FIGURE');
       let nextCaptionIndex = index + 1;
       while (
         nextCaptionIndex < lines.length &&
@@ -1049,11 +1051,7 @@ export const linkImportedAssetReferences = (
       'FIGURE',
       IMPORTED_FIGURE_REFERENCE,
     );
-    const content = replace(
-      withFigures,
-      'TABLE',
-      IMPORTED_TABLE_REFERENCE,
-    );
+    const content = replace(withFigures, 'TABLE', IMPORTED_TABLE_REFERENCE);
     return { ...section, content, wordCount: countWords(content) };
   });
 

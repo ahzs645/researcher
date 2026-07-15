@@ -273,7 +273,11 @@ export const buildManuscriptBundle = (
     .filter(
       (section) =>
         section.includeInExport !== false &&
-        section.sectionType !== 'TITLE_PAGE',
+        section.sectionType !== 'TITLE_PAGE' &&
+        // Once reconciliation has created structured reference records, the
+        // generated bibliography replaces the imported source list. Keeping
+        // both would duplicate References and disturb back-matter ordering.
+        !(section.sectionType === 'REFERENCES' && input.references.length > 0),
     )
     .sort(compareSections);
 

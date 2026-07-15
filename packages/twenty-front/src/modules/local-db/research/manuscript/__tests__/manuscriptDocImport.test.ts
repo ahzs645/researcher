@@ -48,6 +48,11 @@ describe('classifyHeading', () => {
     expect(classifyHeading('Supplementary Material').placement).toBe(
       'SUPPLEMENT',
     );
+    expect(
+      classifyHeading(
+        'S2.1: Details about the methodology of Positive Matrix Factorization (PMF) analysis',
+      ),
+    ).toEqual({ sectionType: 'SUPPLEMENT', placement: 'SUPPLEMENT' });
   });
 
   it('falls back to OTHER for unrecognized headings', () => {
@@ -195,9 +200,7 @@ describe('extractImagesToFigures', () => {
       imageSource: 'UPLOAD',
       refKey: 'imported-figure-1',
     });
-    expect(nextSections[0].content).toContain(
-      '[[asset:imported-figure-1]]',
-    );
+    expect(nextSections[0].content).toContain('[[asset:imported-figure-1]]');
     expect(nextSections[0].content).not.toContain('data:image/png');
   });
 
@@ -234,15 +237,11 @@ describe('extractImagesToFigures', () => {
       placement: 'SUPPLEMENT',
       sectionOrderIndex: 1,
     });
-    expect(linked.sections[0].content).toContain(
-      '([#imported-figure-2-6]b)',
-    );
+    expect(linked.sections[0].content).toContain('([#imported-figure-2-6]b)');
     expect(linked.sections[0].content).toContain(
       '[#imported-figure-2-6] in the source',
     );
-    expect(linked.sections[1].content).toContain(
-      '[#imported-figure-s2-18]',
-    );
+    expect(linked.sections[1].content).toContain('[#imported-figure-s2-18]');
     expect(linked.linkedCount).toBe(4);
   });
 });

@@ -1397,6 +1397,7 @@ const journalTemplateRecords = (): SeedRecord[] => [
     crossRefFormat: 'Figure {n}',
     figureCaptionPosition: 'BELOW',
     tableCaptionPosition: 'ABOVE',
+    figurePageLayout: 'SUPPLEMENT_ONE_PER_PAGE',
     abstractWordLimit: 350,
     lineNumbering: false,
     pageNumbering: true,

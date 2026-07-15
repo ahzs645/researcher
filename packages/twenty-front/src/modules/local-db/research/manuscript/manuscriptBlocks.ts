@@ -260,7 +260,7 @@ const bundleToBlocks = (
   const unnumberedHeading =
     /^(abstract|keywords|acknowledge?ments?|author contributions?|funding|competing interests?|conflicts? of interest|data availability|references|supplementary material)$/i;
 
-  const oneFigurePerPage = bundle.style.figurePageLayout === 'ONE_PER_PAGE';
+  const figurePageLayout = bundle.style.figurePageLayout ?? 'INLINE';
   const pushPageBreakUnlessPresent = () => {
     if (blocks[blocks.length - 1]?.type !== 'pageBreak') {
       blocks.push(pageBreakBlock());
@@ -311,14 +311,18 @@ const bundleToBlocks = (
         );
         break;
       case 'figure':
-        if (oneFigurePerPage) pushPageBreakUnlessPresent();
+        const isolateFigureOnPage =
+          figurePageLayout === 'ONE_PER_PAGE' ||
+          (figurePageLayout === 'SUPPLEMENT_ONE_PER_PAGE' &&
+            node.figure.placement === 'SUPPLEMENT');
+        if (isolateFigureOnPage) pushPageBreakUnlessPresent();
         blocks.push(
           ...figureToBlocks(
             node.figure,
             bundle.style.figureCaptionPosition ?? 'BELOW',
           ),
         );
-        if (oneFigurePerPage && nodeIndex < bundle.nodes.length - 1) {
+        if (isolateFigureOnPage && nodeIndex < bundle.nodes.length - 1) {
           pushPageBreakUnlessPresent();
         }
         break;

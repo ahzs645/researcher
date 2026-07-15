@@ -100,8 +100,12 @@ const TABLE_CAPTION_POSITION_OPTIONS: SelectOption<string>[] = [
 ];
 
 const FIGURE_PAGE_LAYOUT_OPTIONS: SelectOption<string>[] = [
-  { value: 'ONE_PER_PAGE', label: 'One figure per page (Addis)' },
-  { value: 'INLINE', label: 'Flow with section text' },
+  {
+    value: 'SUPPLEMENT_ONE_PER_PAGE',
+    label: 'Main inline; supplement one per page (Addis)',
+  },
+  { value: 'ONE_PER_PAGE', label: 'Every figure on a separate page' },
+  { value: 'INLINE', label: 'All figures flow with section text' },
 ];
 
 type ManuscriptExportPanelProps = {
@@ -496,8 +500,10 @@ export const ManuscriptExportPanel = ({
         {` · ${effectiveStyle.tableLineSpacing ?? 1}× table spacing`}
         {` · figure captions ${(effectiveStyle.figureCaptionPosition ?? 'BELOW').toLowerCase()}`}
         {effectiveStyle.figurePageLayout === 'ONE_PER_PAGE'
-          ? ' · one figure per page'
-          : ' · figures flow with sections'}
+          ? ' · every figure on a separate page'
+          : effectiveStyle.figurePageLayout === 'SUPPLEMENT_ONE_PER_PAGE'
+            ? ' · main figures inline; supplementary figures one per page'
+            : ' · all figures flow with sections'}
         {' · native Word equations'}
         {effectiveStyle.lineNumbering === true ? ' · line numbers' : ''}
         {effectiveStyle.pageNumbering === true ? ' · page numbers' : ''}

@@ -140,6 +140,58 @@ describe('buildBlockNoteDocument', () => {
     expect(blocks[imageIndex + 1].type).toBe('pageBreak');
   });
 
+  it('isolates supplementary figures while main figures stay inline', () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: { id: 'paper', name: 'Mixed figure layout' },
+      style: { figurePageLayout: 'SUPPLEMENT_ONE_PER_PAGE' },
+      sections: [
+        {
+          id: 'results',
+          name: 'Results',
+          placement: 'MAIN',
+          content: 'Main before.\n\n[[asset:main-figure]]\n\nMain after.',
+        },
+        {
+          id: 'supplement',
+          name: 'Supplementary material',
+          placement: 'SUPPLEMENT',
+          content:
+            'Supplement before.\n\n[[asset:supplement-figure]]\n\nSupplement after.',
+        },
+      ],
+      figures: [
+        {
+          id: 'main',
+          refKey: 'main-figure',
+          name: 'Main result',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+          imageUrl: 'data:image/png;base64,AAAA',
+        },
+        {
+          id: 'supplement',
+          refKey: 'supplement-figure',
+          name: 'Supplement result',
+          assetKind: 'FIGURE',
+          placement: 'SUPPLEMENT',
+          imageUrl: 'data:image/png;base64,BBBB',
+        },
+      ],
+      references: [],
+    });
+
+    const { blocks } = buildBlockNoteDocument(bundle);
+    const imageIndexes = blocks
+      .map((block, index) => (block.type === 'image' ? index : -1))
+      .filter((index) => index >= 0);
+    const [mainImageIndex, supplementImageIndex] = imageIndexes;
+
+    expect(blocks[mainImageIndex - 1].type).not.toBe('pageBreak');
+    expect(blocks[mainImageIndex + 1].type).not.toBe('pageBreak');
+    expect(blocks[supplementImageIndex - 1].type).toBe('pageBreak');
+    expect(blocks[supplementImageIndex + 1].type).toBe('pageBreak');
+  });
+
   it('keeps a compact abstract on page one before starting the numbered body', () => {
     const bundle = buildManuscriptBundle({
       manuscript: {

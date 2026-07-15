@@ -259,7 +259,12 @@ const CAPTION_POSITION_OPTIONS: ResearchSelectOption[] = [
 
 const FIGURE_PAGE_LAYOUT_OPTIONS: ResearchSelectOption[] = [
   { value: 'INLINE', label: 'Flow with section text', color: 'gray' },
-  { value: 'ONE_PER_PAGE', label: 'One figure per page', color: 'blue' },
+  {
+    value: 'SUPPLEMENT_ONE_PER_PAGE',
+    label: 'Main inline; supplement one per page',
+    color: 'green',
+  },
+  { value: 'ONE_PER_PAGE', label: 'Every figure on a separate page', color: 'blue' },
 ];
 
 const FRONT_MATTER_LAYOUT_OPTIONS: ResearchSelectOption[] = [

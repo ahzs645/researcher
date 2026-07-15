@@ -10,10 +10,10 @@ object's `nameSingular` (capitalized) / `nameSingular` / `namePlural`.
 
 ## Query endpoints
 
-| Apollo client | Endpoint                                  | Operations                     |
-|---------------|-------------------------------------------|--------------------------------|
-| `ApolloProvider` (`apolloClient`)       | `${REACT_APP_SERVER_BASE_URL}/metadata` | Workspace metadata (objects, fields, views, navigation, command menu items, system queries like `IntrospectionQuery`, `GetCurrentUser`) |
-| `ApolloCoreProvider` (`apolloCoreClient`) | `${REACT_APP_SERVER_BASE_URL}/graphql`  | All per-object record operations below, plus `search`, billing, workflow, settings |
+| Apollo client                             | Endpoint                                | Operations                                                                                                                              |
+| ----------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `ApolloProvider` (`apolloClient`)         | `${REACT_APP_SERVER_BASE_URL}/metadata` | Workspace metadata (objects, fields, views, navigation, command menu items, system queries like `IntrospectionQuery`, `GetCurrentUser`) |
+| `ApolloCoreProvider` (`apolloCoreClient`) | `${REACT_APP_SERVER_BASE_URL}/graphql`  | All per-object record operations below, plus `search`, billing, workflow, settings                                                      |
 
 ## Per-object operations (templated)
 
@@ -22,24 +22,24 @@ the frontend builds:
 
 ### Queries
 
-| Operation name | Resolver field | Variables | Response |
-|----------------|----------------|-----------|----------|
-| `FindManyCompanies` | `companies` | `filter: CompanyFilterInput, orderBy: [CompanyOrderByInput], lastCursor: String, limit: Int, offset: Int` (uses `first/after` for forward, `last/before` for backward) | `CompanyConnection { edges: [{ node: Company, cursor }], pageInfo: { hasNextPage, hasPreviousPage, startCursor, endCursor }, totalCount }` |
-| `FindOneCompany` | `company` | `objectRecordId: UUID!` (passed inline as `filter: { id: { eq: $objectRecordId } }`; with `withSoftDeleted=true` also accepts deleted records via `or: [{ deletedAt: { is: NULL } }, { deletedAt: { is: NOT_NULL } }]`) | `Company` |
-| `AggregateCompanies` | `companies` | `filter: CompanyFilterInput` | Object with the aggregate fields selected — see "Aggregate fields" |
-| `FindDuplicateCompany` | `companyDuplicates` | `ids: [UUID!]!` | `CompanyConnection { edges, pageInfo }` |
-| `GroupByCompanies` | `companiesGroupBy` | `groupBy: [CompanyGroupByInput!]!, filter, orderBy: [CompanyOrderByWithGroupByInput!], orderByForRecords: [CompanyOrderByInput], viewId: UUID` | `CompanyGroupByConnection { edges, pageInfo, totalCount, groupByDimensionValues }` |
-| `GroupByAggregateCompanies` | `companiesGroupByAggregate` (named in `getGroupByAggregateQueryName`) | `groupBy, filter, orderBy, viewId, limit` | `{ groupByDimensionValues, ...aggregateFields }` |
+| Operation name              | Resolver field                                                        | Variables                                                                                                                                                                                                               | Response                                                                                                                                   |
+| --------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `FindManyCompanies`         | `companies`                                                           | `filter: CompanyFilterInput, orderBy: [CompanyOrderByInput], lastCursor: String, limit: Int, offset: Int` (uses `first/after` for forward, `last/before` for backward)                                                  | `CompanyConnection { edges: [{ node: Company, cursor }], pageInfo: { hasNextPage, hasPreviousPage, startCursor, endCursor }, totalCount }` |
+| `FindOneCompany`            | `company`                                                             | `objectRecordId: UUID!` (passed inline as `filter: { id: { eq: $objectRecordId } }`; with `withSoftDeleted=true` also accepts deleted records via `or: [{ deletedAt: { is: NULL } }, { deletedAt: { is: NOT_NULL } }]`) | `Company`                                                                                                                                  |
+| `AggregateCompanies`        | `companies`                                                           | `filter: CompanyFilterInput`                                                                                                                                                                                            | Object with the aggregate fields selected — see "Aggregate fields"                                                                         |
+| `FindDuplicateCompany`      | `companyDuplicates`                                                   | `ids: [UUID!]!`                                                                                                                                                                                                         | `CompanyConnection { edges, pageInfo }`                                                                                                    |
+| `GroupByCompanies`          | `companiesGroupBy`                                                    | `groupBy: [CompanyGroupByInput!]!, filter, orderBy: [CompanyOrderByWithGroupByInput!], orderByForRecords: [CompanyOrderByInput], viewId: UUID`                                                                          | `CompanyGroupByConnection { edges, pageInfo, totalCount, groupByDimensionValues }`                                                         |
+| `GroupByAggregateCompanies` | `companiesGroupByAggregate` (named in `getGroupByAggregateQueryName`) | `groupBy, filter, orderBy, viewId, limit`                                                                                                                                                                               | `{ groupByDimensionValues, ...aggregateFields }`                                                                                           |
 
 ### Mutations
 
-| Operation name | Resolver field | Variables | Response |
-|----------------|----------------|-----------|----------|
-| `CreateOneCompany` | `createCompany` | `input: CompanyCreateInput!` (renamed `data: $input` in the mutation) | `Company` |
-| `UpdateOneCompany` | `updateCompany` | `idToUpdate: UUID!, input: CompanyUpdateInput!` (renamed `id, data` in the mutation) | `Company` |
-| `DeleteOneCompany` | `deleteCompany` | `idToDelete: UUID!` | `Company` with `deletedAt` set + the soft-delete metadata fields |
-| `DestroyOneCompany` | `destroyCompany` | `idToDestroy: UUID!` | `{ id }` |
-| `RestoreManyCompanies` | `restoreCompanies` | `filter: CompanyFilterInput!` | `[{ id }]` |
+| Operation name         | Resolver field     | Variables                                                                            | Response                                                         |
+| ---------------------- | ------------------ | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `CreateOneCompany`     | `createCompany`    | `input: CompanyCreateInput!` (renamed `data: $input` in the mutation)                | `Company`                                                        |
+| `UpdateOneCompany`     | `updateCompany`    | `idToUpdate: UUID!, input: CompanyUpdateInput!` (renamed `id, data` in the mutation) | `Company`                                                        |
+| `DeleteOneCompany`     | `deleteCompany`    | `idToDelete: UUID!`                                                                  | `Company` with `deletedAt` set + the soft-delete metadata fields |
+| `DestroyOneCompany`    | `destroyCompany`   | `idToDestroy: UUID!`                                                                 | `{ id }`                                                         |
+| `RestoreManyCompanies` | `restoreCompanies` | `filter: CompanyFilterInput!`                                                        | `[{ id }]`                                                       |
 
 Many-record variants (`CreateMany`, `UpdateMany`, `DeleteMany`, `DestroyMany`)
 follow the same pattern with `[CompanyCreateInput!]!` / filter inputs.
@@ -70,9 +70,9 @@ subscription OnEventSubscription($eventStreamId: String!) {
 
 ## Shared (non-templated) record operations
 
-| Operation | Resolver field | Variables | Notes |
-|-----------|----------------|-----------|-------|
-| `Search` | `search` | `searchInput: String!, limit: Int!, after: String, excludedObjectNameSingulars: [String!], includedObjectNameSingulars: [String!], filter: ObjectRecordFilterInput` | Returns `SearchRecordConnection { edges: [{ node: SearchRecordDTO, cursor }], pageInfo }` |
+| Operation | Resolver field | Variables                                                                                                                                                           | Notes                                                                                     |
+| --------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `Search`  | `search`       | `searchInput: String!, limit: Int!, after: String, excludedObjectNameSingulars: [String!], includedObjectNameSingulars: [String!], filter: ObjectRecordFilterInput` | Returns `SearchRecordConnection { edges: [{ node: SearchRecordDTO, cursor }], pageInfo }` |
 
 ## Filter input shape
 
@@ -153,19 +153,19 @@ fields alphabetically, and emits a selection set wrapped in `{ __typename, ... }
 
 `AggregateCompanies` selection emits one or more of:
 
-| Operation | Field name template |
-|-----------|---------------------|
-| `COUNT` | `totalCount` (always available) |
-| `COUNT_UNIQUE_VALUES` | `countUniqueValues<FieldName>` |
-| `COUNT_EMPTY` | `countEmpty<FieldName>` |
-| `COUNT_NOT_EMPTY` | `countNotEmpty<FieldName>` |
-| `PERCENTAGE_EMPTY` | `percentageEmpty<FieldName>` |
-| `PERCENTAGE_NOT_EMPTY` | `percentageNotEmpty<FieldName>` |
-| `MIN/MAX/AVG/SUM` (number) | `min<FieldName>` etc. |
-| `MIN/MAX/AVG/SUM` (currency) | `min<FieldName>AmountMicros` etc. |
+| Operation                          | Field name template                              |
+| ---------------------------------- | ------------------------------------------------ |
+| `COUNT`                            | `totalCount` (always available)                  |
+| `COUNT_UNIQUE_VALUES`              | `countUniqueValues<FieldName>`                   |
+| `COUNT_EMPTY`                      | `countEmpty<FieldName>`                          |
+| `COUNT_NOT_EMPTY`                  | `countNotEmpty<FieldName>`                       |
+| `PERCENTAGE_EMPTY`                 | `percentageEmpty<FieldName>`                     |
+| `PERCENTAGE_NOT_EMPTY`             | `percentageNotEmpty<FieldName>`                  |
+| `MIN/MAX/AVG/SUM` (number)         | `min<FieldName>` etc.                            |
+| `MIN/MAX/AVG/SUM` (currency)       | `min<FieldName>AmountMicros` etc.                |
 | `COUNT_TRUE/COUNT_FALSE` (boolean) | `countTrue<FieldName>` / `countFalse<FieldName>` |
-| `EARLIEST/LATEST` (date kinds) | `min<FieldName>` / `max<FieldName>` |
-| Relation field `COUNT` | `totalCount` (on the relation join) |
+| `EARLIEST/LATEST` (date kinds)     | `min<FieldName>` / `max<FieldName>`              |
+| Relation field `COUNT`             | `totalCount` (on the relation join)              |
 
 ## Cross-cutting / non-record operations not in scope here
 

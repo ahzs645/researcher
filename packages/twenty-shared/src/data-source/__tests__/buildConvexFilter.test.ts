@@ -23,7 +23,9 @@ const q = {
   not: (arg: Expr) => ({ op: 'not', arg }) as Expr,
 };
 
-const build = (filter: RecordGqlOperationFilter | null | undefined): Expr | null => {
+const build = (
+  filter: RecordGqlOperationFilter | null | undefined,
+): Expr | null => {
   const fn = tryBuildConvexFilter(filter);
   if (fn === null) return null;
   return fn(q as never) as Expr;
@@ -59,7 +61,9 @@ describe('tryBuildConvexFilter', () => {
 
   it('expands `in` into an OR over equality', () => {
     expect(
-      build({ status: { in: ['ACTIVE', 'PENDING'] } } as RecordGqlOperationFilter),
+      build({
+        status: { in: ['ACTIVE', 'PENDING'] },
+      } as RecordGqlOperationFilter),
     ).toEqual({
       op: 'or',
       args: [
@@ -87,7 +91,11 @@ describe('tryBuildConvexFilter', () => {
       op: 'and',
       args: [
         { op: 'eq', lhs: { op: 'field', path: 'name.firstName' }, rhs: 'Ada' },
-        { op: 'eq', lhs: { op: 'field', path: 'name.lastName' }, rhs: 'Lovelace' },
+        {
+          op: 'eq',
+          lhs: { op: 'field', path: 'name.lastName' },
+          rhs: 'Lovelace',
+        },
       ],
     });
   });
@@ -120,12 +128,18 @@ describe('tryBuildConvexFilter', () => {
   });
 
   it('returns null for ilike (no native equivalent)', () => {
-    expect(build({ name: { ilike: '%acme%' } } as RecordGqlOperationFilter)).toBeNull();
+    expect(
+      build({ name: { ilike: '%acme%' } } as RecordGqlOperationFilter),
+    ).toBeNull();
   });
 
   it('returns null for regex / iregex', () => {
-    expect(build({ name: { regex: '^A' } } as RecordGqlOperationFilter)).toBeNull();
-    expect(build({ name: { iregex: '^a' } } as RecordGqlOperationFilter)).toBeNull();
+    expect(
+      build({ name: { regex: '^A' } } as RecordGqlOperationFilter),
+    ).toBeNull();
+    expect(
+      build({ name: { iregex: '^a' } } as RecordGqlOperationFilter),
+    ).toBeNull();
   });
 
   it('returns null for array operators (containsAny / isEmptyArray)', () => {

@@ -13,15 +13,28 @@
 
 import { v } from 'convex/values';
 
-import { action, internalMutation, internalQuery, query } from './_generated/server';
+import {
+  teamProfilePortable,
+  upsertOpportunitiesPortable,
+  type GrantOpportunityCandidate,
+  type TeamProfile,
+} from 'twenty-shared/portable-functions';
+
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  query,
+} from './_generated/server';
 import { internal } from './_generated/api';
 import {
   BUILT_IN_GRANT_SOURCES,
   BUILT_IN_GRANT_SOURCE_PROFILES,
 } from './grantSources/grantSourceLibrary';
-import { scoreOpportunity, type TeamProfile } from './lib/opportunityMatching';
-
-const isoNow = () => new Date().toISOString();
+import {
+  toPortableMutationContext,
+  toPortableQueryContext,
+} from './lib/portable';
 
 // A normalized opportunity candidate before it becomes a grantOpportunity row.
 type Candidate = {
@@ -52,29 +65,14 @@ export const library = query({
 });
 
 // Derive the team profile (interests + known funders) from existing records so
-// scoring reflects what the team actually works on.
+// scoring reflects what the team actually works on. The body is the portable
+// handler in twenty-shared/portable-functions — the same code the browser-local
+// runtime executes offline.
 export const teamProfile = internalQuery({
   args: {},
   returns: v.any(),
-  handler: async (ctx): Promise<TeamProfile> => {
-    const interests = new Set<string>();
-    const knownFunders = new Set<string>();
-
-    const teams = await ctx.db.query('researchTeam').collect();
-    for (const team of teams) {
-      for (const area of (team.focusAreas as string[] | undefined) ?? []) {
-        interests.add(area);
-      }
-    }
-    const grants = await ctx.db.query('grant').collect();
-    for (const grant of grants) {
-      if (typeof grant.funder === 'string' && grant.funder.length > 0) {
-        knownFunders.add(grant.funder);
-      }
-    }
-
-    return { interests: [...interests], knownFunders: [...knownFunders] };
-  },
+  handler: async (ctx): Promise<TeamProfile> =>
+    teamProfilePortable(await toPortableQueryContext(ctx)),
 });
 
 // Map a raw feed item to a Candidate using the source profile's field mappings.
@@ -129,7 +127,9 @@ const fetchCandidates = async (
       headers: { accept: 'application/json' },
     });
     if (!response.ok) {
-      throw new Error(`Feed fetch failed (${response.status}) for ${libraryKey}`);
+      throw new Error(
+        `Feed fetch failed (${response.status}) for ${libraryKey}`,
+      );
     }
     const payload = (await response.json()) as unknown;
     const items = Array.isArray(payload)
@@ -164,58 +164,18 @@ const fetchCandidates = async (
     .filter((candidate): candidate is Candidate => candidate !== null);
 };
 
-// Upsert scored candidates as grantOpportunity records (dedup by URL/title).
+// Upsert scored candidates as grantOpportunity records (dedup by URL). The
+// body is the portable handler in twenty-shared/portable-functions — scoring,
+// confidence banding, and dedup are shared verbatim with the browser-local
+// runtime instead of hand-mirrored.
 export const upsertOpportunities = internalMutation({
   args: { profile: v.any(), candidates: v.any() },
   returns: v.any(),
-  handler: async (ctx, { profile, candidates }) => {
-    const teamProfileValue = profile as TeamProfile;
-    const rows = candidates as Array<Candidate & { fitScore: number }>;
-    const existing = await ctx.db.query('grantOpportunity').collect();
-    const byUrl = new Map<string, { _id: string }>(
-      existing
-        .filter((row) => typeof row.opportunityUrl === 'string')
-        .map((row) => [row.opportunityUrl as string, row as { _id: string }]),
-    );
-
-    let inserted = 0;
-    let updated = 0;
-    for (const candidate of rows) {
-      const match = scoreOpportunity(candidate, teamProfileValue);
-      const record = {
-        name: candidate.title,
-        funder: candidate.funder,
-        program: candidate.program,
-        opportunityUrl: candidate.opportunityUrl,
-        applicationDueDate: candidate.applicationDueDate,
-        registrationDueDate: candidate.registrationDueDate,
-        amountText: candidate.amountText,
-        eligibility: candidate.eligibility,
-        description: candidate.description,
-        topicTags: candidate.topicTags ?? match.matchedInterests,
-        fitScore: match.fitScore,
-        confidence: match.fitScore >= 4 ? 'HIGH' : match.fitScore >= 2 ? 'MEDIUM' : 'LOW',
-        status: 'NEW',
-        updatedAt: isoNow(),
-      };
-      const found = candidate.opportunityUrl
-        ? byUrl.get(candidate.opportunityUrl)
-        : undefined;
-      if (found) {
-        await ctx.db.patch(found._id, record);
-        updated += 1;
-      } else {
-        await ctx.db.insert('grantOpportunity', {
-          id: crypto.randomUUID(),
-          createdAt: isoNow(),
-          position: 0,
-          ...record,
-        });
-        inserted += 1;
-      }
-    }
-    return { inserted, updated };
-  },
+  handler: async (ctx, { profile, candidates }) =>
+    upsertOpportunitiesPortable(await toPortableMutationContext(ctx), {
+      profile: profile as TeamProfile,
+      candidates: candidates as GrantOpportunityCandidate[],
+    }),
 });
 
 // Pull one source end-to-end: fetch → score → upsert.

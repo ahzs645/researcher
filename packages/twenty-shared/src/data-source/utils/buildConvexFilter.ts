@@ -62,7 +62,10 @@ const buildLeaf = (
     );
   if (isComposite) {
     const subBuilders: BuildResult[] = operators.map((subKey) =>
-      buildLeaf(`${fieldPath}.${subKey}`, leaf[subKey] as Record<string, unknown>),
+      buildLeaf(
+        `${fieldPath}.${subKey}`,
+        leaf[subKey] as Record<string, unknown>,
+      ),
     );
     return reduceAnd(subBuilders);
   }
@@ -75,7 +78,10 @@ const buildLeaf = (
         // so we OR both. `NOT_NULL` mirrors that as a NOT.
         if (value === 'NULL') {
           return (q) =>
-            q.or(q.eq(q.field(fieldPath), null), q.eq(q.field(fieldPath), undefined));
+            q.or(
+              q.eq(q.field(fieldPath), null),
+              q.eq(q.field(fieldPath), undefined),
+            );
         }
         if (value === 'NOT_NULL') {
           return (q) =>
@@ -121,7 +127,9 @@ const buildLeaf = (
 };
 
 const reduceAnd = (parts: BuildResult[]): BuildResult => {
-  const native = parts.filter((part): part is NativeBuilder => part !== UNTRANSLATABLE);
+  const native = parts.filter(
+    (part): part is NativeBuilder => part !== UNTRANSLATABLE,
+  );
   if (native.length !== parts.length) return UNTRANSLATABLE;
   if (native.length === 0) return () => true as never;
   if (native.length === 1) return native[0];

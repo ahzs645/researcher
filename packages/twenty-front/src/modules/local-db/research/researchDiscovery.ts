@@ -1,9 +1,16 @@
 import {
+  buildTeamProfileFromRecords,
+  confidenceFromFitScore,
   scoreOpportunity,
   type TeamProfile,
-} from './researchOpportunityMatching';
+} from 'twenty-shared/portable-functions';
 
 export type { WorkspaceMode } from './researchObjectModel';
+
+// Profile building and confidence banding live in the shared portable kernel
+// (one implementation with the Convex path); re-exported here for existing
+// import sites.
+export { buildTeamProfileFromRecords, confidenceFromFitScore };
 
 // The local/demo "discovery" engine. The Convex runtime pulls live candidates
 // from a source (JSON feed or the connector-runner browser), scores them, and
@@ -72,40 +79,6 @@ const slugify = (value: string): string =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
-
-export const confidenceFromFitScore = (
-  fitScore: number,
-): DiscoveredOpportunityDraft['confidence'] => {
-  if (fitScore >= 4) return 'HIGH';
-  if (fitScore >= 3) return 'MEDIUM';
-  return 'LOW';
-};
-
-// Build the scoring profile from the workspace's own records: the team's focus
-// areas become interests, and funders the team already holds grants with become
-// known funders (a +1 fit signal).
-export const buildTeamProfileFromRecords = (
-  teams: { focusAreas?: string[] | null }[],
-  grants: { funder?: string | null }[],
-): TeamProfile => {
-  const interests = new Set<string>();
-  for (const team of teams) {
-    for (const area of team.focusAreas ?? []) {
-      if (typeof area === 'string' && area.trim().length > 0) {
-        interests.add(area.trim());
-      }
-    }
-  }
-
-  const knownFunders = new Set<string>();
-  for (const grant of grants) {
-    if (typeof grant.funder === 'string' && grant.funder.trim().length > 0) {
-      knownFunders.add(grant.funder.trim());
-    }
-  }
-
-  return { interests: [...interests], knownFunders: [...knownFunders] };
-};
 
 type SourceCandidate = {
   title: string;

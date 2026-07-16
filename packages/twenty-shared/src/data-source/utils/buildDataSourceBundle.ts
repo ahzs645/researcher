@@ -1,5 +1,5 @@
-import { FieldMetadataType } from '../../types/FieldMetadataType';
-import { RelationType } from '../../types/RelationType';
+import { type FieldMetadataType } from '../../types/FieldMetadataType';
+import { type RelationType } from '../../types/RelationType';
 import {
   type DataSourceField,
   type DataSourceFieldOption,

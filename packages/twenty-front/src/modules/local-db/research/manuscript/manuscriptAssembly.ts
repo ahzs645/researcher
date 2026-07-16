@@ -155,6 +155,9 @@ export type ManuscriptMeta = {
   authorLine?: string | null;
   affiliations?: string | null;
   correspondingAuthor?: string | null;
+  supplementTitle?: string | null;
+  supplementAuthorLine?: string | null;
+  supplementAffiliations?: string | null;
 };
 
 export type BuildBundleInput = {
@@ -174,6 +177,9 @@ export type ManuscriptBundle = {
     keywords: string[];
     affiliations: string;
     correspondingAuthor: string;
+    supplementTitle: string;
+    supplementAuthors: string;
+    supplementAffiliations: string;
     journal: string;
     citationStyleId: string;
     citationMode: string;
@@ -447,6 +453,9 @@ export const buildManuscriptBundle = (
       keywords,
       affiliations: manuscript.affiliations ?? '',
       correspondingAuthor: manuscript.correspondingAuthor ?? '',
+      supplementTitle: manuscript.supplementTitle?.trim() || '',
+      supplementAuthors: manuscript.supplementAuthorLine?.trim() || '',
+      supplementAffiliations: manuscript.supplementAffiliations?.trim() || '',
       journal: style.name ?? manuscript.targetVenue ?? '',
       citationStyleId: style.citationStyleId ?? '',
       citationMode: style.citationMode ?? 'NUMERIC',

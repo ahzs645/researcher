@@ -17,6 +17,10 @@ import {
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 import {
+  parseManuscriptExportStyleOverrides,
+  serializeManuscriptExportStyleOverrides,
+} from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
+import {
   buildSectionSkeleton,
   wordLimitStatus,
 } from '@/local-db/research/manuscript/manuscriptScaffold';
@@ -26,6 +30,7 @@ import { ManuscriptFigurePanel } from '@/local-db/research/components/Manuscript
 import { ManuscriptImportPanel } from '@/local-db/research/components/ManuscriptImportPanel';
 import { ManuscriptReferencePanel } from '@/local-db/research/components/ManuscriptReferencePanel';
 import { ManuscriptSectionEditor } from '@/local-db/research/components/ManuscriptSectionEditor';
+import { ManuscriptSectionMetadataPanel } from '@/local-db/research/components/ManuscriptSectionMetadataPanel';
 import {
   ManuscriptSubmissionDetailsPanel,
   type ManuscriptSubmissionDetails,
@@ -50,6 +55,10 @@ type ManuscriptRecord = {
   authorLine?: string | null;
   affiliations?: string | null;
   correspondingAuthor?: string | null;
+  supplementTitle?: string | null;
+  supplementAuthorLine?: string | null;
+  supplementAffiliations?: string | null;
+  exportStyleOverrides?: string | null;
   coverLetter?: string | null;
   highlights?: string | null;
   competingInterests?: string | null;
@@ -252,6 +261,10 @@ export const ManuscriptComposerPage = () => {
         authorLine: true,
         affiliations: true,
         correspondingAuthor: true,
+        supplementTitle: true,
+        supplementAuthorLine: true,
+        supplementAffiliations: true,
+        exportStyleOverrides: true,
         coverLetter: true,
         highlights: true,
         competingInterests: true,
@@ -398,6 +411,14 @@ export const ManuscriptComposerPage = () => {
     () => journals.find((journal) => journal.id === journalId) ?? {},
     [journals, journalId],
   );
+  const styleOverrides = useMemo(
+    () => parseManuscriptExportStyleOverrides(manuscript?.exportStyleOverrides),
+    [manuscript?.exportStyleOverrides],
+  );
+  const effectiveStyle: JournalStyle = useMemo(
+    () => ({ ...style, ...styleOverrides }),
+    [style, styleOverrides],
+  );
 
   const bundle = useMemo(() => {
     if (!isDefined(manuscript)) return undefined;
@@ -409,13 +430,16 @@ export const ManuscriptComposerPage = () => {
         authorLine: manuscript.authorLine,
         affiliations: manuscript.affiliations,
         correspondingAuthor: manuscript.correspondingAuthor,
+        supplementTitle: manuscript.supplementTitle,
+        supplementAuthorLine: manuscript.supplementAuthorLine,
+        supplementAffiliations: manuscript.supplementAffiliations,
       },
       sections,
       figures,
       references,
-      style,
+      style: effectiveStyle,
     });
-  }, [manuscript, sections, figures, references, style]);
+  }, [manuscript, sections, figures, references, effectiveStyle]);
 
   const selectedSection = sections.find((section) => section.id === sectionId);
 
@@ -596,6 +620,15 @@ export const ManuscriptComposerPage = () => {
         <StyledPanel>
           {isDefined(selectedSection) ? (
             <>
+              <ManuscriptSectionMetadataPanel
+                key={`section-metadata-${selectedSection.id}`}
+                section={selectedSection}
+                sections={sections}
+                figures={figures}
+                onChanged={() => {
+                  void Promise.all([refetchSections(), refetchFigures()]);
+                }}
+              />
               <ManuscriptSectionEditor
                 key={selectedSection.id}
                 initialMarkdown={selectedSection.content ?? ''}
@@ -633,7 +666,7 @@ export const ManuscriptComposerPage = () => {
             manuscriptId={manuscript.id}
             figures={figures}
             sections={sections}
-            style={style}
+            style={effectiveStyle}
             onChanged={() => void refetchFigures()}
           />
         </StyledPanel>
@@ -646,6 +679,9 @@ export const ManuscriptComposerPage = () => {
               authorLine: manuscript.authorLine,
               affiliations: manuscript.affiliations,
               correspondingAuthor: manuscript.correspondingAuthor,
+              supplementTitle: manuscript.supplementTitle,
+              supplementAuthorLine: manuscript.supplementAuthorLine,
+              supplementAffiliations: manuscript.supplementAffiliations,
               coverLetter: manuscript.coverLetter,
               highlights: manuscript.highlights,
               competingInterests: manuscript.competingInterests,
@@ -662,6 +698,7 @@ export const ManuscriptComposerPage = () => {
           {isDefined(bundle) ? (
             <>
               <ManuscriptExportPanel
+                key={`manuscript-export-${manuscript.id}`}
                 bundle={bundle}
                 journals={journals.map((journal) => ({
                   id: journal.id,
@@ -669,6 +706,18 @@ export const ManuscriptComposerPage = () => {
                 }))}
                 selectedJournalId={journalId}
                 onSelectJournal={selectJournal}
+                initialStyleOverrides={styleOverrides}
+                onSaveStyleOverrides={async (overrides) => {
+                  await updateOneRecord({
+                    objectNameSingular: 'manuscript',
+                    idToUpdate: manuscript.id,
+                    updateOneRecordInput: {
+                      exportStyleOverrides:
+                        serializeManuscriptExportStyleOverrides(overrides),
+                    },
+                  });
+                  await refetchManuscripts();
+                }}
                 materials={{
                   coverLetter: manuscript.coverLetter,
                   highlights: manuscript.highlights,

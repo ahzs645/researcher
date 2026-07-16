@@ -240,6 +240,9 @@ describe('buildBlockNoteDocument', () => {
         authorLine: 'Anwar M. N.1,7; Takahama S.2',
         affiliations:
           '1 Air Quality Research Center, University of California, Davis\n2 EPFL, Lausanne, Switzerland',
+        supplementTitle: 'Custom supplemental title',
+        supplementAuthorLine: 'Supplement Author1',
+        supplementAffiliations: '1 Supplement Institute',
       },
       style: {
         supplementStartLayout: 'NEW_PAGE',
@@ -272,10 +275,9 @@ describe('buildBlockNoteDocument', () => {
     const serialized = JSON.stringify(blocks);
 
     expect(blocks[coverIndex - 1].type).toBe('pageBreak');
-    expect(serialized).toContain(
-      'Organic aerosol concentration in Addis Ababa',
-    );
-    expect(serialized).toContain('Anwar M. N.');
+    expect(serialized).toContain('Custom supplemental title');
+    expect(serialized).toContain('Supplement Author');
+    expect(serialized).toContain('Supplement Institute');
     expect(serialized).toContain('S2.1: PMF analysis');
     const supplementalMethodIndex = blocks.findIndex((block) =>
       (JSON.stringify(block.content) ?? '').includes('S2.1: PMF analysis'),

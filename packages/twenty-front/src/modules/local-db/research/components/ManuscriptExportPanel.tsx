@@ -4,7 +4,7 @@ import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { type ManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
-import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
+import { type ManuscriptExportStyleOverrides } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import {
   downloadExportFile,
   getManuscriptExporters,
@@ -14,6 +14,9 @@ import {
   validateSubmission,
 } from '@/local-db/research/manuscript/manuscriptSubmission';
 import { createSubmissionPackage } from '@/local-db/research/manuscript/manuscriptSubmissionPackage';
+import { ManuscriptExportProfileSummary } from '@/local-db/research/components/ManuscriptExportProfileSummary';
+import { ManuscriptExportStyleControls } from '@/local-db/research/components/ManuscriptExportStyleControls';
+import { ManuscriptSubmissionReadinessPanel } from '@/local-db/research/components/ManuscriptSubmissionReadinessPanel';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { Select } from '@/ui/input/components/Select';
 
@@ -23,137 +26,15 @@ import { Select } from '@/ui/input/components/Select';
 
 type JournalOption = { id: string; name: string };
 
-type ExportStyleOverrides = Pick<
-  JournalStyle,
-  | 'headingColor'
-  | 'lineSpacing'
-  | 'paragraphSpacingAfter'
-  | 'affiliationAlignment'
-  | 'affiliationNumberStyle'
-  | 'affiliationLineSpacing'
-  | 'affiliationSpacingAfter'
-  | 'tableStyle'
-  | 'tableFontSize'
-  | 'tableLineSpacing'
-  | 'figureCaptionPosition'
-  | 'figureCaptionFontSize'
-  | 'figureCaptionLineSpacing'
-  | 'figureCaptionGap'
-  | 'figureCaptionSpacingAfter'
-  | 'tableCaptionPosition'
-  | 'figurePageLayout'
-  | 'supplementStartLayout'
-  | 'supplementCoverPage'
->;
-
-const HEADING_COLOR_OPTIONS: SelectOption<string>[] = [
-  { value: 'BLACK', label: 'Black' },
-  { value: 'ADDIS_BLUE', label: 'Addis blue' },
-];
-
-const LINE_SPACING_OPTIONS: SelectOption<string>[] = [
-  { value: '1', label: 'Single (1.0×)' },
-  { value: '1.15', label: 'Compact (1.15×)' },
-  { value: '1.5', label: 'One-and-a-half (1.5×)' },
-  { value: '2', label: 'Double (2.0×)' },
-];
-
-const PARAGRAPH_SPACING_OPTIONS: SelectOption<string>[] = [
-  { value: '0', label: 'No extra space' },
-  { value: '6', label: '6 pt after' },
-  { value: '12', label: '12 pt after' },
-];
-
-const AFFILIATION_ALIGNMENT_OPTIONS: SelectOption<string>[] = [
-  { value: 'LEFT', label: 'Left aligned (Addis)' },
-  { value: 'CENTER', label: 'Centered' },
-  { value: 'RIGHT', label: 'Right aligned' },
-];
-
-const AFFILIATION_NUMBER_STYLE_OPTIONS: SelectOption<string>[] = [
-  { value: 'SUPERSCRIPT', label: 'Superscript (Addis)' },
-  { value: 'BASELINE', label: 'Baseline' },
-];
-
-const AFFILIATION_GAP_OPTIONS: SelectOption<string>[] = [
-  { value: '0', label: 'Tight (0 pt)' },
-  { value: '3', label: 'Compact (3 pt)' },
-  { value: '6', label: 'Open (6 pt)' },
-];
-
-const TABLE_STYLE_OPTIONS: SelectOption<string>[] = [
-  { value: 'ACADEMIC', label: 'Academic rules (Addis)' },
-  { value: 'GRID', label: 'Full grid' },
-  { value: 'SHADED_HEADER', label: 'Shaded header' },
-  { value: 'BORDERLESS', label: 'Borderless' },
-];
-
-const TABLE_FONT_SIZE_OPTIONS: SelectOption<string>[] = [
-  { value: '9', label: '9 pt' },
-  { value: '10', label: '10 pt' },
-  { value: '11', label: '11 pt' },
-  { value: '12', label: '12 pt' },
-];
-
-const CAPTION_POSITION_OPTIONS: SelectOption<string>[] = [
-  { value: 'BELOW', label: 'Below figure (Addis)' },
-  { value: 'ABOVE', label: 'Above figure' },
-];
-
-const FIGURE_CAPTION_FONT_SIZE_OPTIONS: SelectOption<string>[] = [
-  { value: '8', label: '8 pt' },
-  { value: '9', label: '9 pt' },
-  { value: '10', label: '10 pt (Addis)' },
-  { value: '11', label: '11 pt' },
-  { value: '12', label: '12 pt' },
-];
-
-const FIGURE_CAPTION_GAP_OPTIONS: SelectOption<string>[] = [
-  { value: '0', label: 'None (0 pt)' },
-  { value: '3', label: 'Tight (3 pt, Addis)' },
-  { value: '6', label: 'Comfortable (6 pt)' },
-  { value: '12', label: 'Open (12 pt)' },
-];
-
-const FIGURE_CAPTION_AFTER_OPTIONS: SelectOption<string>[] = [
-  { value: '0', label: 'None (0 pt)' },
-  { value: '3', label: 'Tight (3 pt)' },
-  { value: '6', label: 'Comfortable (6 pt, Addis)' },
-  { value: '12', label: 'Open (12 pt)' },
-];
-
-const TABLE_CAPTION_POSITION_OPTIONS: SelectOption<string>[] = [
-  { value: 'ABOVE', label: 'Above table (Addis)' },
-  { value: 'BELOW', label: 'Below table' },
-];
-
-const FIGURE_PAGE_LAYOUT_OPTIONS: SelectOption<string>[] = [
-  {
-    value: 'SUPPLEMENT_ONE_PER_PAGE',
-    label: 'Main inline; supplement one per page (Addis)',
-  },
-  { value: 'ONE_PER_PAGE', label: 'Every figure on a separate page' },
-  { value: 'INLINE', label: 'All figures flow with section text' },
-];
-
-const SUPPLEMENT_START_LAYOUT_OPTIONS: SelectOption<string>[] = [
-  { value: 'NEW_PAGE', label: 'Start on a new page (Addis)' },
-  { value: 'CONTINUOUS', label: 'Continue after main paper' },
-];
-
-const SUPPLEMENT_COVER_PAGE_OPTIONS: SelectOption<string>[] = [
-  {
-    value: 'INCLUDE',
-    label: 'Include title, authors & affiliations (Addis)',
-  },
-  { value: 'OMIT', label: 'Do not include a cover page' },
-];
-
 type ManuscriptExportPanelProps = {
   bundle: ManuscriptBundle;
   journals: JournalOption[];
   selectedJournalId: string | null;
   onSelectJournal: (journalId: string) => void;
+  initialStyleOverrides: ManuscriptExportStyleOverrides;
+  onSaveStyleOverrides: (
+    overrides: ManuscriptExportStyleOverrides,
+  ) => Promise<void>;
   materials: SubmissionMaterials;
 };
 
@@ -161,34 +42,6 @@ const StyledPanel = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${themeCssVariables.spacing[3]};
-`;
-
-const StyledStats = styled.div`
-  color: ${themeCssVariables.font.color.tertiary};
-  display: flex;
-  flex-wrap: wrap;
-  font-size: ${themeCssVariables.font.size.xs};
-  gap: ${themeCssVariables.spacing[2]};
-`;
-
-const StyledProfileSummary = styled.div`
-  background: ${themeCssVariables.background.secondary};
-  border: 1px solid ${themeCssVariables.border.color.light};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.secondary};
-  font-size: ${themeCssVariables.font.size.xs};
-  line-height: 1.5;
-  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]};
-`;
-
-const StyledControlGrid = styled.div`
-  display: grid;
-  gap: ${themeCssVariables.spacing[2]};
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
 `;
 
 const StyledWarning = styled.div`
@@ -214,41 +67,11 @@ const StyledFormats = styled.span`
   font-size: ${themeCssVariables.font.size.xs};
 `;
 
-const StyledPackage = styled.div`
-  background: ${themeCssVariables.background.secondary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.md};
-  display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[2]};
-  padding: ${themeCssVariables.spacing[3]};
-`;
-
-const StyledPackageHeader = styled.div`
+const StyledSettingsActions = styled.div`
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: ${themeCssVariables.spacing[2]};
-  justify-content: space-between;
-`;
-
-const StyledPackageTitle = styled.span`
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.sm};
-  font-weight: ${themeCssVariables.font.weight.medium};
-`;
-
-const StyledCheck = styled.div`
-  color: ${themeCssVariables.font.color.secondary};
-  font-size: ${themeCssVariables.font.size.xs};
-
-  &[data-severity='ERROR'] {
-    color: ${themeCssVariables.font.color.danger};
-  }
-
-  &[data-severity='READY'] {
-    color: ${themeCssVariables.font.color.tertiary};
-  }
 `;
 
 export const ManuscriptExportPanel = ({
@@ -256,28 +79,46 @@ export const ManuscriptExportPanel = ({
   journals,
   selectedJournalId,
   onSelectJournal,
+  initialStyleOverrides,
+  onSaveStyleOverrides,
   materials,
 }: ManuscriptExportPanelProps) => {
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [isExporting, setIsExporting] = useState(false);
-  const [styleOverrides, setStyleOverrides] = useState<ExportStyleOverrides>(
-    {},
-  );
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [styleOverrides, setStyleOverrides] =
+    useState<ManuscriptExportStyleOverrides>(initialStyleOverrides);
   const effectiveStyle = { ...bundle.style, ...styleOverrides };
   const exportBundle = { ...bundle, style: effectiveStyle };
+  const updateStyleOverrides = (updates: ManuscriptExportStyleOverrides) =>
+    setStyleOverrides((current) => ({ ...current, ...updates }));
+  const saveStyleOverrides = async () => {
+    if (isSavingSettings) return;
+    setIsSavingSettings(true);
+    try {
+      await onSaveStyleOverrides(styleOverrides);
+      enqueueSuccessSnackBar({ message: 'Export settings saved' });
+    } catch {
+      enqueueErrorSnackBar({ message: 'Could not save export settings' });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+  const resetStyleOverrides = async () => {
+    if (isSavingSettings) return;
+    setIsSavingSettings(true);
+    try {
+      await onSaveStyleOverrides({});
+      setStyleOverrides({});
+      enqueueSuccessSnackBar({ message: 'Journal defaults restored' });
+    } catch {
+      enqueueErrorSnackBar({ message: 'Could not reset export settings' });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
   const exporters = getManuscriptExporters();
   const readiness = validateSubmission(exportBundle, materials);
-  const frontMatterLabel =
-    effectiveStyle.frontMatterLayout === 'SEPARATE_TITLE_PAGE'
-      ? 'Separate title page'
-      : effectiveStyle.frontMatterLayout === 'TITLE_WITH_ABSTRACT'
-        ? 'Title + abstract on page 1'
-        : 'Continuous front matter';
-  const spacingLabel =
-    effectiveStyle.lineSpacing === 2
-      ? 'double-spaced'
-      : `${effectiveStyle.lineSpacing ?? 1.5}× spacing`;
-
   const journalOptions: SelectOption<string>[] = journals.map((journal) => ({
     value: journal.id,
     label: journal.name,
@@ -334,373 +175,41 @@ export const ManuscriptExportPanel = ({
         fullWidth
         options={journalOptions}
         value={selectedJournalId ?? journalOptions[0]?.value}
-        onChange={(journalId) => {
-          setStyleOverrides({});
-          onSelectJournal(journalId);
-        }}
+        onChange={onSelectJournal}
       />
 
-      <StyledControlGrid>
-        <Select
-          dropdownId="manuscript-export-heading-color-select"
-          label="Heading color"
-          fullWidth
-          options={HEADING_COLOR_OPTIONS}
-          value={
-            effectiveStyle.headingColor === '0F4761'
-              ? 'ADDIS_BLUE'
-              : effectiveStyle.headingColor === '000000'
-                ? 'BLACK'
-                : (effectiveStyle.headingColor ?? 'BLACK')
-          }
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              headingColor: value,
-            }))
-          }
+      <ManuscriptExportStyleControls
+        style={effectiveStyle}
+        onChange={updateStyleOverrides}
+      />
+      <StyledSettingsActions>
+        <Button
+          title={isSavingSettings ? 'Saving settings…' : 'Save export settings'}
+          variant="primary"
+          accent="blue"
+          size="small"
+          disabled={isSavingSettings}
+          onClick={saveStyleOverrides}
         />
-        <Select
-          dropdownId="manuscript-export-line-spacing-select"
-          label="Body line spacing"
-          fullWidth
-          options={LINE_SPACING_OPTIONS}
-          value={String(effectiveStyle.lineSpacing ?? 1.5)}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              lineSpacing: Number(value),
-            }))
-          }
+        <Button
+          title="Reset to journal defaults"
+          variant="secondary"
+          size="small"
+          disabled={isSavingSettings}
+          onClick={resetStyleOverrides}
         />
-        <Select
-          dropdownId="manuscript-export-paragraph-spacing-select"
-          label="Paragraph spacing"
-          fullWidth
-          options={PARAGRAPH_SPACING_OPTIONS}
-          value={String(effectiveStyle.paragraphSpacingAfter ?? 0)}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              paragraphSpacingAfter: Number(value),
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-affiliation-alignment-select"
-          label="Affiliation alignment"
-          fullWidth
-          options={AFFILIATION_ALIGNMENT_OPTIONS}
-          value={effectiveStyle.affiliationAlignment ?? 'LEFT'}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              affiliationAlignment: value,
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-affiliation-spacing-select"
-          label="Affiliation line spacing"
-          fullWidth
-          options={LINE_SPACING_OPTIONS}
-          value={String(effectiveStyle.affiliationLineSpacing ?? 1)}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              affiliationLineSpacing: Number(value),
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-affiliation-number-style-select"
-          label="Affiliation numbering"
-          fullWidth
-          options={AFFILIATION_NUMBER_STYLE_OPTIONS}
-          value={effectiveStyle.affiliationNumberStyle ?? 'SUPERSCRIPT'}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              affiliationNumberStyle: value,
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-affiliation-gap-select"
-          label="Affiliation gap"
-          fullWidth
-          options={AFFILIATION_GAP_OPTIONS}
-          value={String(effectiveStyle.affiliationSpacingAfter ?? 0)}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              affiliationSpacingAfter: Number(value),
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-table-style-select"
-          label="Table style"
-          fullWidth
-          options={TABLE_STYLE_OPTIONS}
-          value={effectiveStyle.tableStyle ?? 'ACADEMIC'}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              tableStyle: value,
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-table-font-size-select"
-          label="Table text size"
-          fullWidth
-          options={TABLE_FONT_SIZE_OPTIONS}
-          value={String(
-            effectiveStyle.tableFontSize ?? effectiveStyle.bodyFontSize ?? 12,
-          )}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              tableFontSize: Number(value),
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-table-spacing-select"
-          label="Table line spacing"
-          fullWidth
-          options={LINE_SPACING_OPTIONS}
-          value={String(effectiveStyle.tableLineSpacing ?? 1)}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              tableLineSpacing: Number(value),
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-figure-caption-position-select"
-          label="Figure caption position"
-          fullWidth
-          options={CAPTION_POSITION_OPTIONS}
-          value={effectiveStyle.figureCaptionPosition ?? 'BELOW'}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              figureCaptionPosition: value,
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-figure-caption-font-size-select"
-          label="Figure caption text size"
-          fullWidth
-          options={FIGURE_CAPTION_FONT_SIZE_OPTIONS}
-          value={String(
-            effectiveStyle.figureCaptionFontSize ??
-              Math.max(8, (effectiveStyle.bodyFontSize ?? 12) - 2),
-          )}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              figureCaptionFontSize: Number(value),
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-figure-caption-spacing-select"
-          label="Figure caption line spacing"
-          fullWidth
-          options={LINE_SPACING_OPTIONS}
-          value={String(effectiveStyle.figureCaptionLineSpacing ?? 1)}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              figureCaptionLineSpacing: Number(value),
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-figure-caption-gap-select"
-          label="Image-to-caption gap"
-          fullWidth
-          options={FIGURE_CAPTION_GAP_OPTIONS}
-          value={String(effectiveStyle.figureCaptionGap ?? 3)}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              figureCaptionGap: Number(value),
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-figure-caption-after-select"
-          label="Spacing after figure caption"
-          fullWidth
-          options={FIGURE_CAPTION_AFTER_OPTIONS}
-          value={String(effectiveStyle.figureCaptionSpacingAfter ?? 6)}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              figureCaptionSpacingAfter: Number(value),
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-figure-page-layout-select"
-          label="Figure pagination"
-          fullWidth
-          options={FIGURE_PAGE_LAYOUT_OPTIONS}
-          value={effectiveStyle.figurePageLayout ?? 'INLINE'}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              figurePageLayout: value,
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-supplement-start-select"
-          label="Supplement start"
-          fullWidth
-          options={SUPPLEMENT_START_LAYOUT_OPTIONS}
-          value={
-            effectiveStyle.supplementStartLayout === 'NEW_COVER_PAGE'
-              ? 'NEW_PAGE'
-              : (effectiveStyle.supplementStartLayout ?? 'CONTINUOUS')
-          }
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              supplementStartLayout: value,
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-supplement-cover-select"
-          label="Supplement cover page"
-          fullWidth
-          options={SUPPLEMENT_COVER_PAGE_OPTIONS}
-          value={
-            (effectiveStyle.supplementCoverPage ??
-            effectiveStyle.supplementStartLayout === 'NEW_COVER_PAGE')
-              ? 'INCLUDE'
-              : 'OMIT'
-          }
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              supplementCoverPage: value === 'INCLUDE',
-            }))
-          }
-        />
-        <Select
-          dropdownId="manuscript-export-table-caption-position-select"
-          label="Table caption position"
-          fullWidth
-          options={TABLE_CAPTION_POSITION_OPTIONS}
-          value={effectiveStyle.tableCaptionPosition ?? 'ABOVE'}
-          onChange={(value) =>
-            setStyleOverrides((current) => ({
-              ...current,
-              tableCaptionPosition: value,
-            }))
-          }
-        />
-      </StyledControlGrid>
+        <StyledFormats>
+          Saved settings apply only to this manuscript; the journal profile
+          remains reusable.
+        </StyledFormats>
+      </StyledSettingsActions>
 
-      <StyledProfileSummary>
-        <strong>Export styling:</strong> {frontMatterLabel} ·{' '}
-        {effectiveStyle.fontFamily ?? 'Times New Roman'}{' '}
-        {effectiveStyle.bodyFontSize ?? 12} pt · {spacingLabel} ·{' '}
-        {effectiveStyle.bodyAlignment === 'JUSTIFIED'
-          ? 'justified text'
-          : 'left-aligned text'}
-        {effectiveStyle.abstractLineSpacing !== undefined &&
-        effectiveStyle.abstractLineSpacing !== null &&
-        effectiveStyle.abstractLineSpacing !== effectiveStyle.lineSpacing
-          ? ` · ${effectiveStyle.abstractLineSpacing}× abstract spacing`
-          : ''}
-        {` · ${['ADDIS_BLUE', '0F4761'].includes(effectiveStyle.headingColor ?? '') ? 'Addis-blue' : 'black'} headings`}
-        {` · ${(effectiveStyle.affiliationAlignment ?? 'LEFT').toLowerCase()}-aligned affiliations`}
-        {` · ${(effectiveStyle.affiliationNumberStyle ?? 'SUPERSCRIPT').toLowerCase()} affiliation numbers`}
-        {` · ${effectiveStyle.affiliationLineSpacing ?? 1}× affiliation spacing`}
-        {` · ${effectiveStyle.affiliationSpacingAfter ?? 0} pt affiliation gap`}
-        {` · ${(effectiveStyle.tableStyle ?? 'ACADEMIC').toLowerCase()} tables`}
-        {` · ${effectiveStyle.tableLineSpacing ?? 1}× table spacing`}
-        {` · figure captions ${(effectiveStyle.figureCaptionPosition ?? 'BELOW').toLowerCase()}`}
-        {` at ${effectiveStyle.figureCaptionFontSize ?? Math.max(8, (effectiveStyle.bodyFontSize ?? 12) - 2)} pt/${effectiveStyle.figureCaptionLineSpacing ?? 1}× spacing`}
-        {` · ${effectiveStyle.figureCaptionGap ?? 3} pt image-to-caption gap`}
-        {` · ${effectiveStyle.figureCaptionSpacingAfter ?? 6} pt after captions`}
-        {effectiveStyle.figurePageLayout === 'ONE_PER_PAGE'
-          ? ' · every figure on a separate page'
-          : effectiveStyle.figurePageLayout === 'SUPPLEMENT_ONE_PER_PAGE'
-            ? ' · main figures inline; supplementary figures one per page'
-            : ' · all figures flow with sections'}
-        {['NEW_PAGE', 'NEW_COVER_PAGE'].includes(
-          effectiveStyle.supplementStartLayout ?? '',
-        )
-          ? ' · supplement starts on a new page'
-          : ' · supplement continues after the main paper'}
-        {(effectiveStyle.supplementCoverPage ??
-        effectiveStyle.supplementStartLayout === 'NEW_COVER_PAGE')
-          ? ' · supplemental-information cover included'
-          : ' · no supplement cover'}
-        {' · native Word equations'}
-        {effectiveStyle.lineNumbering === true ? ' · line numbers' : ''}
-        {effectiveStyle.pageNumbering === true ? ' · page numbers' : ''}
-        {effectiveStyle.sectionNumbering === true ? ' · numbered sections' : ''}
-      </StyledProfileSummary>
-
-      <StyledStats>
-        <span>{bundle.stats.wordCount} words</span>
-        <span>{bundle.stats.sectionCount} sections</span>
-        <span>{bundle.stats.figureCount} figures</span>
-        <span>{bundle.stats.referenceCount} refs</span>
-        {bundle.stats.supplementSectionCount > 0 ||
-        bundle.stats.supplementFigureCount > 0 ? (
-          <span>
-            +{bundle.stats.supplementSectionCount} suppl. sections /{' '}
-            {bundle.stats.supplementFigureCount} suppl. figures
-          </span>
-        ) : null}
-      </StyledStats>
-
-      <StyledPackage>
-        <StyledPackageHeader>
-          <div>
-            <StyledPackageTitle>
-              {readiness.ready
-                ? 'Ready to package'
-                : 'Submission package needs attention'}
-            </StyledPackageTitle>
-            <StyledStats>
-              <span>{readiness.readyCount} ready</span>
-              <span>{readiness.warningCount} warnings</span>
-              <span>{readiness.errorCount} required items missing</span>
-            </StyledStats>
-          </div>
-          <Button
-            title={isExporting ? 'Packaging…' : 'Download package (.zip)'}
-            variant="primary"
-            accent="blue"
-            size="small"
-            disabled={isExporting}
-            onClick={runPackageExport}
-          />
-        </StyledPackageHeader>
-        {readiness.checks.map((check) => (
-          <StyledCheck key={check.id} data-severity={check.severity}>
-            {check.severity === 'READY'
-              ? '✓'
-              : check.severity === 'ERROR'
-                ? '!'
-                : '•'}{' '}
-            {check.label}: {check.detail}
-          </StyledCheck>
-        ))}
-      </StyledPackage>
+      <ManuscriptExportProfileSummary bundle={exportBundle} />
+      <ManuscriptSubmissionReadinessPanel
+        readiness={readiness}
+        isExporting={isExporting}
+        onDownloadPackage={runPackageExport}
+      />
 
       {bundle.warnings.length > 0 ? (
         <div>

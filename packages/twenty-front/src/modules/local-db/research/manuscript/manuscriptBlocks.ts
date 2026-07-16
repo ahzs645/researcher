@@ -39,6 +39,7 @@ const captionText = (figure: NumberedFigure): string =>
       : isNonEmptyString(figure.name)
         ? figure.name
         : '',
+    isNonEmptyString(figure.credit) ? `Credit: ${figure.credit}` : '',
   ]
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
@@ -64,6 +65,7 @@ const figureToBlocks = (
       type: 'image',
       props: {
         url: image.src,
+        name: figure.altText ?? figure.name ?? '',
         caption: captionPosition === 'ABOVE' ? '' : captionText(figure),
         // BlockNote otherwise exports at the image's raw pixel width. Keep
         // figures within the 624 px printable column of a Letter page.
@@ -290,6 +292,13 @@ const bundleToBlocks = (
               /^\s*Supplemental Information for\b/i.test(nextNode.text));
 
           if (includeSupplementCover && !hasPreparedSupplementCover) {
+            const supplementTitle =
+              bundle.metadata.supplementTitle || bundle.metadata.title;
+            const supplementAuthors =
+              bundle.metadata.supplementAuthors || bundle.metadata.authors;
+            const supplementAffiliations =
+              bundle.metadata.supplementAffiliations ||
+              bundle.metadata.affiliations;
             blocks.push({
               type: 'paragraph',
               props: { textAlignment: 'center' },
@@ -298,9 +307,9 @@ const bundleToBlocks = (
             blocks.push({
               type: 'heading',
               props: { level: 1, textAlignment: 'center' },
-              content: bundle.metadata.title,
+              content: supplementTitle,
             });
-            if (isNonEmptyString(bundle.metadata.authors)) {
+            if (isNonEmptyString(supplementAuthors)) {
               blocks.push({
                 type: 'paragraph',
                 props: { textAlignment: 'center', textColor: 'author-line' },
@@ -308,15 +317,15 @@ const bundleToBlocks = (
                   {
                     type: 'text',
                     text: formatManuscriptAuthorLine(
-                      bundle.metadata.authors,
-                      bundle.metadata.affiliations,
+                      supplementAuthors,
+                      supplementAffiliations,
                     ),
                     styles: { bold: true },
                   },
                 ],
               });
             }
-            if (isNonEmptyString(bundle.metadata.affiliations)) {
+            if (isNonEmptyString(supplementAffiliations)) {
               const affiliationAlignment =
                 bundle.style.affiliationAlignment === 'CENTER'
                   ? 'center'
@@ -324,7 +333,7 @@ const bundleToBlocks = (
                     ? 'right'
                     : 'left';
               blocks.push(
-                ...bundle.metadata.affiliations
+                ...supplementAffiliations
                   .split(/\r?\n|;\s*(?=\d+\s)/)
                   .map((affiliation) => affiliation.trim())
                   .filter((affiliation) => affiliation.length > 0)

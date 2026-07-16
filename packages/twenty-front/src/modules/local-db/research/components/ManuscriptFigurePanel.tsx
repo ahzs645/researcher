@@ -1,19 +1,15 @@
 import { styled } from '@linaria/react';
-import { type ChangeEvent, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { ManuscriptFigureCreateForm } from '@/local-db/research/components/ManuscriptFigureCreateForm';
+import { ManuscriptFigureListItem } from '@/local-db/research/components/ManuscriptFigureListItem';
 import {
   renderChartSvg,
   tableMarkdownToChartData,
 } from '@/local-db/research/manuscript/manuscriptChart';
 import { rasterizeSvgToPngDataUrl } from '@/local-db/research/manuscript/manuscriptChartImage';
-import { assetPlacementMarker } from '@/local-db/research/manuscript/manuscriptAssetPlacement';
-import {
-  describeImageSource,
-  resolveFigureImage,
-} from '@/local-db/research/manuscript/manuscriptImages';
 import { numberAssets } from '@/local-db/research/manuscript/manuscriptNumbering';
 import {
   type FigureLike,
@@ -23,20 +19,11 @@ import {
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { Select } from '@/ui/input/components/Select';
 
 // The figure manager: every figure/table/scheme with its live, journal-aware
 // label (Figure 1 / Table 1 / Figure S1), and an "add figure" row supporting the
 // modular image sources — paste a URL or upload a file (stored as a data-URL so
 // it works with no backend).
-
-const ASSET_KIND_OPTIONS: SelectOption<string>[] = [
-  { value: 'FIGURE', label: 'Figure' },
-  { value: 'TABLE', label: 'Table' },
-  { value: 'CHART', label: 'Chart (from table data)' },
-  { value: 'SCHEME', label: 'Scheme' },
-  { value: 'BOX', label: 'Box' },
-];
 
 const CHART_WIDTH = 640;
 const CHART_HEIGHT = 400;
@@ -56,11 +43,6 @@ const chartPngFromTable = async (
   return rasterizeSvgToPngDataUrl(svg, CHART_WIDTH, CHART_HEIGHT);
 };
 
-const PLACEMENT_OPTIONS: SelectOption<string>[] = [
-  { value: 'MAIN', label: 'Main' },
-  { value: 'SUPPLEMENT', label: 'Supplement' },
-];
-
 type ManuscriptFigurePanelProps = {
   manuscriptId: string;
   figures: FigureLike[];
@@ -74,101 +56,6 @@ const StyledPanel = styled.div`
   flex-direction: column;
   gap: ${themeCssVariables.spacing[2]};
 `;
-
-const StyledRow = styled.div`
-  align-items: center;
-  background: ${themeCssVariables.background.secondary};
-  border: 1px solid ${themeCssVariables.border.color.light};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  display: flex;
-  gap: ${themeCssVariables.spacing[2]};
-  justify-content: space-between;
-  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]};
-`;
-
-const StyledMain = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-`;
-
-const StyledLabel = styled.span`
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.sm};
-  font-weight: ${themeCssVariables.font.weight.medium};
-`;
-
-const StyledMeta = styled.span`
-  color: ${themeCssVariables.font.color.tertiary};
-  font-size: ${themeCssVariables.font.size.xs};
-`;
-
-const StyledThumb = styled.img`
-  border: 1px solid ${themeCssVariables.border.color.light};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  height: 40px;
-  object-fit: cover;
-  width: 56px;
-`;
-
-const StyledTableArea = styled.textarea`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-family: monospace;
-  font-size: ${themeCssVariables.font.size.xs};
-  margin-top: ${themeCssVariables.spacing[1]};
-  min-height: 56px;
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
-  resize: vertical;
-  width: 100%;
-`;
-
-const StyledForm = styled.div`
-  border-top: 1px solid ${themeCssVariables.border.color.light};
-  display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[2]};
-  padding-top: ${themeCssVariables.spacing[2]};
-`;
-
-const StyledInput = styled.input`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.sm};
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
-`;
-
-const StyledCaptionArea = styled.textarea`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-family: inherit;
-  font-size: ${themeCssVariables.font.size.sm};
-  min-height: 52px;
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
-  resize: vertical;
-`;
-
-const StyledActions = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: ${themeCssVariables.spacing[2]};
-`;
-
-const StyledAssetEditor = styled.div`
-  display: grid;
-  gap: ${themeCssVariables.spacing[2]};
-  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr);
-  padding: ${themeCssVariables.spacing[1]} 0 ${themeCssVariables.spacing[2]};
-`;
-
-const UNASSIGNED_SECTION = '__UNASSIGNED__';
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -196,25 +83,12 @@ export const ManuscriptFigurePanel = ({
   });
   const { updateOneRecord } = useUpdateOneRecord();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [caption, setCaption] = useState('');
   const [assetKind, setAssetKind] = useState('FIGURE');
   const [placement, setPlacement] = useState('MAIN');
   const [imageUrl, setImageUrl] = useState('');
   const [tableData, setTableData] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-
-  // Persist an edited table grid (Markdown table) for an existing figure.
-  const persistTable = (figure: FigureLike, value: string) => {
-    if ((figure.tableData ?? '') === value) return;
-    void updateOneRecord({
-      objectNameSingular: 'figure',
-      idToUpdate: figure.id,
-      updateOneRecordInput: { tableData: value },
-    });
-    onChanged();
-  };
 
   // Live numbering — the same pure function the exporter uses, so the panel
   // shows exactly the labels the paper will carry.
@@ -363,214 +237,60 @@ export const ManuscriptFigurePanel = ({
     }
   };
 
-  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!isDefined(file)) return;
-    const dataUrl = await fileToDataUrl(file);
-    await addFigure(dataUrl);
-    if (isDefined(fileInputRef.current)) fileInputRef.current.value = '';
+  const replaceFigureImage = async (figure: FigureLike, file: File) => {
+    const imageDataUrl = await fileToDataUrl(file);
+    persistFigure(figure, {
+      imageUrl: imageDataUrl,
+      imageSource: 'UPLOAD',
+    });
   };
 
   return (
     <StyledPanel>
       {numbered.map((figure) => {
-        const image = resolveFigureImage(figure);
         const peers = orderedPeers(figure);
         const peerIndex = peers.findIndex(
           (candidate) => candidate.id === figure.id,
         );
-        const sectionOptions: SelectOption<string>[] = [
-          { value: UNASSIGNED_SECTION, label: 'End of document' },
-          ...sections
-            .filter((section) =>
-              figure.placement === 'SUPPLEMENT'
-                ? section.placement === 'SUPPLEMENT'
-                : section.placement !== 'SUPPLEMENT',
-            )
-            .map((section) => ({
-              value: section.id,
-              label: section.name ?? section.sectionType ?? 'Section',
-            })),
-        ];
         return (
-          <div key={figure.id}>
-            <StyledRow>
-              <StyledMain>
-                <StyledLabel>
-                  {figure.label} — {figure.name}
-                </StyledLabel>
-                <StyledMeta>
-                  [#{figure.refKey ?? figure.id}] ·{' '}
-                  {assetPlacementMarker(figure.refKey ?? figure.id)} ·{' '}
-                  {describeImageSource(figure)}
-                </StyledMeta>
-              </StyledMain>
-              {image.kind !== 'none' ? (
-                <StyledThumb src={image.src} alt={figure.altText ?? ''} />
-              ) : null}
-            </StyledRow>
-            <StyledAssetEditor>
-              <StyledInput
-                aria-label={`${figure.label} name`}
-                defaultValue={figure.name ?? ''}
-                placeholder="Figure name"
-                onBlur={(event) =>
-                  persistFigure(figure, { name: event.target.value.trim() })
-                }
-              />
-              <StyledCaptionArea
-                aria-label={`${figure.label} caption`}
-                defaultValue={figure.caption ?? figure.name ?? ''}
-                placeholder="Full figure caption"
-                onBlur={(event) =>
-                  persistFigure(figure, { caption: event.target.value.trim() })
-                }
-              />
-              <Select
-                dropdownId={`figure-section-${figure.id}`}
-                options={sectionOptions}
-                value={figure.sectionId ?? UNASSIGNED_SECTION}
-                onChange={(value) =>
-                  persistFigure(figure, {
-                    sectionId:
-                      value === UNASSIGNED_SECTION ? null : value,
-                  })
-                }
-              />
-              <Select
-                dropdownId={`figure-placement-${figure.id}`}
-                options={PLACEMENT_OPTIONS}
-                value={figure.placement ?? 'MAIN'}
-                onChange={(value) =>
-                  persistFigure(figure, {
-                    placement: value,
-                    sectionId: null,
-                  })
-                }
-              />
-              <StyledActions>
-                <Button
-                  title="Move up"
-                  variant="secondary"
-                  size="small"
-                  disabled={peerIndex === 0}
-                  onClick={() => moveFigure(figure, -1)}
-                />
-                <Button
-                  title="Move down"
-                  variant="secondary"
-                  size="small"
-                  disabled={peerIndex === peers.length - 1}
-                  onClick={() => moveFigure(figure, 1)}
-                />
-                <Button
-                  title="Copy reference"
-                  variant="secondary"
-                  size="small"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(
-                      `[#${figure.refKey ?? figure.id}]`,
-                    );
-                    enqueueSuccessSnackBar({
-                      message: `Copied live reference for ${figure.label}`,
-                    });
-                  }}
-                />
-                <Button
-                  title="Copy placement linker"
-                  variant="secondary"
-                  size="small"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(
-                      assetPlacementMarker(figure.refKey ?? figure.id),
-                    );
-                    enqueueSuccessSnackBar({
-                      message: `Copied placement linker for ${figure.label}`,
-                    });
-                  }}
-                />
-              </StyledActions>
-            </StyledAssetEditor>
-            {figure.assetKind === 'TABLE' ? (
-              <>
-                <StyledTableArea
-                  defaultValue={figure.tableData ?? ''}
-                  placeholder={'| Col A | Col B |\n| --- | --- |\n| 1 | 2 |'}
-                  onBlur={(event) => persistTable(figure, event.target.value)}
-                />
-                <StyledActions>
-                  <Button
-                    title="Plot as chart"
-                    variant="secondary"
-                    size="small"
-                    disabled={isAdding}
-                    onClick={() => plotExistingTable(figure)}
-                  />
-                </StyledActions>
-              </>
-            ) : null}
-          </div>
+          <ManuscriptFigureListItem
+            key={figure.id}
+            figure={figure}
+            sections={sections}
+            peerIndex={peerIndex}
+            peerCount={peers.length}
+            isAdding={isAdding}
+            onPersist={(values) => persistFigure(figure, values)}
+            onMove={(direction) => moveFigure(figure, direction)}
+            onPlotTable={() => {
+              void plotExistingTable(figure);
+            }}
+            onReplaceImage={(file) => {
+              void replaceFigureImage(figure, file);
+            }}
+          />
         );
       })}
 
-      <StyledForm>
-        <StyledInput
-          placeholder="Caption / title"
-          value={caption}
-          onChange={(event) => setCaption(event.target.value)}
-        />
-        <StyledActions>
-          <Select
-            dropdownId="figure-asset-kind-select"
-            options={ASSET_KIND_OPTIONS}
-            value={assetKind}
-            onChange={setAssetKind}
-          />
-          <Select
-            dropdownId="figure-placement-select"
-            options={PLACEMENT_OPTIONS}
-            value={placement}
-            onChange={setPlacement}
-          />
-        </StyledActions>
-        {assetKind === 'TABLE' || assetKind === 'CHART' ? (
-          <StyledTableArea
-            placeholder={'| Site | PM2.5 |\n| --- | --- |\n| A | 12 |'}
-            value={tableData}
-            onChange={(event) => setTableData(event.target.value)}
-          />
-        ) : (
-          <StyledInput
-            placeholder="Image URL (optional)"
-            value={imageUrl}
-            onChange={(event) => setImageUrl(event.target.value)}
-          />
-        )}
-        <StyledActions>
-          <Button
-            title="Add"
-            variant="primary"
-            accent="blue"
-            size="small"
-            disabled={isAdding || caption.trim().length === 0}
-            onClick={() => addFigure()}
-          />
-          <Button
-            title="Upload image…"
-            variant="secondary"
-            size="small"
-            disabled={isAdding || caption.trim().length === 0}
-            onClick={() => fileInputRef.current?.click()}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={handleUpload}
-          />
-        </StyledActions>
-      </StyledForm>
+      <ManuscriptFigureCreateForm
+        caption={caption}
+        assetKind={assetKind}
+        placement={placement}
+        imageUrl={imageUrl}
+        tableData={tableData}
+        isAdding={isAdding}
+        onCaptionChange={setCaption}
+        onAssetKindChange={setAssetKind}
+        onPlacementChange={setPlacement}
+        onImageUrlChange={setImageUrl}
+        onTableDataChange={setTableData}
+        onAdd={() => {
+          void addFigure();
+        }}
+        onUpload={(file) => {
+          void fileToDataUrl(file).then(addFigure);
+        }}
+      />
     </StyledPanel>
   );
 };

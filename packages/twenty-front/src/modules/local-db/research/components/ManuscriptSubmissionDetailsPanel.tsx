@@ -19,6 +19,9 @@ export type ManuscriptSubmissionDetails = SubmissionMaterials & {
   authorLine?: string | null;
   affiliations?: string | null;
   correspondingAuthor?: string | null;
+  supplementTitle?: string | null;
+  supplementAuthorLine?: string | null;
+  supplementAffiliations?: string | null;
 };
 
 type ManuscriptSubmissionDetailsPanelProps = {
@@ -54,6 +57,16 @@ const StyledField = styled.label`
 
 const StyledWideField = styled(StyledField)`
   grid-column: 1 / -1;
+`;
+
+const StyledWideGroup = styled.div`
+  border: 1px solid ${themeCssVariables.border.color.light};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
+  grid-column: 1 / -1;
+  padding: ${themeCssVariables.spacing[3]};
 `;
 
 const StyledInput = styled.input`
@@ -476,6 +489,43 @@ export const ManuscriptSubmissionDetailsPanel = ({
             }
           />
         </StyledWideField>
+        <StyledWideGroup>
+          <StyledEditorHeading>Supplement cover overrides</StyledEditorHeading>
+          <StyledHint>
+            Leave these blank to reuse the main manuscript title, linked
+            authors, and ordered affiliations.
+          </StyledHint>
+          <StyledField>
+            Supplement title
+            <StyledInput
+              aria-label="Supplement title"
+              value={values.supplementTitle ?? ''}
+              onChange={(event) =>
+                updateValue('supplementTitle', event.target.value)
+              }
+            />
+          </StyledField>
+          <StyledField>
+            Supplement author line
+            <StyledTextarea
+              aria-label="Supplement author line"
+              value={values.supplementAuthorLine ?? ''}
+              onChange={(event) =>
+                updateValue('supplementAuthorLine', event.target.value)
+              }
+            />
+          </StyledField>
+          <StyledField>
+            Supplement affiliations
+            <StyledTextarea
+              aria-label="Supplement affiliations"
+              value={values.supplementAffiliations ?? ''}
+              onChange={(event) =>
+                updateValue('supplementAffiliations', event.target.value)
+              }
+            />
+          </StyledField>
+        </StyledWideGroup>
         <StyledField>
           Cover letter
           <StyledTextarea

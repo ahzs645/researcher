@@ -1348,6 +1348,35 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         description: 'Name and active email address',
       },
       {
+        name: 'supplementTitle',
+        label: 'Supplement cover title',
+        type: 'TEXT',
+        icon: 'IconFileDescription',
+        description: 'Blank uses the manuscript title',
+      },
+      {
+        name: 'supplementAuthorLine',
+        label: 'Supplement cover authors',
+        type: 'TEXT',
+        icon: 'IconUsers',
+        description: 'Blank uses the manuscript author line',
+      },
+      {
+        name: 'supplementAffiliations',
+        label: 'Supplement cover affiliations',
+        type: 'TEXT',
+        icon: 'IconBuilding',
+        description: 'Blank uses the manuscript affiliations',
+      },
+      {
+        name: 'exportStyleOverrides',
+        label: 'Saved export settings',
+        type: 'TEXT',
+        icon: 'IconAdjustments',
+        description:
+          'Per-manuscript JSON overrides layered on the journal profile',
+      },
+      {
         name: 'coverLetter',
         label: 'Cover letter',
         type: 'TEXT',

@@ -23,6 +23,7 @@ export type SectionLike = {
   sectionType?: string | null;
   placement?: string | null;
   content?: string | null;
+  status?: string | null;
   orderIndex?: number | null;
   wordLimit?: number | null;
   wordCount?: number | null;

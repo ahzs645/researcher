@@ -11,6 +11,7 @@ import {
   type ImportedDocument,
 } from './manuscriptDocImport';
 import { extractPdfText } from './manuscriptPdfFile';
+import { readPortableResearchPaperZip } from './manuscriptPortableZip';
 
 const td = new TextDecoder('utf-8');
 
@@ -205,6 +206,43 @@ export const readImportedDocumentFile = async (
   file: File,
 ): Promise<ImportedDocument> => {
   const extension = fileExtension(file.name);
+  if (extension === 'zip') {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const portablePackage = readPortableResearchPaperZip(bytes);
+    return {
+      title: portablePackage.metadata.title,
+      authorLine: portablePackage.metadata.authorLine,
+      affiliations: portablePackage.metadata.affiliations,
+      correspondingAuthor: portablePackage.metadata.correspondingAuthor,
+      sections: portablePackage.sections.map((section) => ({
+        name: section.name,
+        sectionType: section.sectionType,
+        placement: section.placement,
+        content: section.content,
+        orderIndex: section.orderIndex,
+        wordCount: section.wordCount,
+        includeInExport: section.includeInExport,
+        status: section.status,
+        ...(section.wordLimit !== undefined
+          ? { wordLimit: section.wordLimit }
+          : {}),
+      })),
+      stats: {
+        equationCount: portablePackage.sections.reduce(
+          (count, section) =>
+            count + (section.content.match(/\$\$[\s\S]*?\$\$/g) ?? []).length,
+          0,
+        ),
+        embeddedImageCount: portablePackage.figures.filter(
+          (figure) => figure.imageUrl !== undefined,
+        ).length,
+        tableCount: portablePackage.figures.filter(
+          (figure) => figure.assetKind === 'TABLE',
+        ).length,
+      },
+      portablePackage,
+    };
+  }
   if (extension === 'docx') {
     return readImportedWordDocument(await file.arrayBuffer());
   }
@@ -218,3 +256,4 @@ export const readImportedDocumentFile = async (
 };
 
 export const ACCEPTED_IMPORT_EXTENSIONS = '.docx,.pdf,.md,.markdown,.txt';
+export const ACCEPTED_MANUSCRIPT_IMPORT_EXTENSIONS = `${ACCEPTED_IMPORT_EXTENSIONS},.zip`;

@@ -359,4 +359,38 @@ describe('buildBlockNoteDocument', () => {
       wrapManuscriptScript('1', 'SUPERSCRIPT'),
     );
   });
+
+  it('numbers imported nested headings beneath their parent section', () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: { id: 'paper', name: 'Modular paper' },
+      style: { sectionNumbering: true },
+      sections: [
+        {
+          id: 'background',
+          name: 'Background and related tools',
+          placement: 'MAIN',
+          includeInExport: true,
+          content:
+            'Overview.\n\n### Existing software\nDetails.\n\n[[asset:architecture]]\n\n### Design gap\nRationale.',
+        },
+      ],
+      figures: [
+        {
+          id: 'architecture',
+          refKey: 'architecture',
+          name: 'Architecture',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+        },
+      ],
+      references: [],
+    });
+
+    const { blocks } = buildBlockNoteDocument(bundle);
+    const serialized = JSON.stringify(blocks);
+
+    expect(serialized).toContain('1. Background and related tools');
+    expect(serialized).toContain('### 1.1 Existing software');
+    expect(serialized).toContain('### 1.2 Design gap');
+  });
 });

@@ -93,15 +93,22 @@ const parseEntryToDraft = (
   takenKeys: Set<string>,
 ): ReferenceDraft => {
   const doi = DOI_RE.exec(raw)?.[0] ?? '';
-  const year = Number(YEAR_RE.exec(raw)?.[0] ?? '');
+  const yearText = YEAR_RE.exec(raw)?.[0];
+  const year = yearText === undefined ? undefined : Number(yearText);
   const family = firstAuthorFamily(raw);
   const cslItem: Record<string, unknown> = {
     id: 'tmp',
     type: 'article-journal',
     title: guessTitle(raw),
     ...(family.length > 0 ? { author: [{ family }] } : {}),
-    ...(Number.isFinite(year) ? { issued: { 'date-parts': [[year]] } } : {}),
+    ...(year !== undefined && Number.isFinite(year)
+      ? { issued: { 'date-parts': [[year]] } }
+      : {}),
     ...(doi.length > 0 ? { DOI: doi } : {}),
+    // Keep the exact source entry inside the portable CSL record. The fallback
+    // bibliography formatter can then reproduce imported references verbatim
+    // instead of duplicating best-effort parsed fields and DOI text.
+    'researcher:rawReference': raw,
   };
   const draft = cslItemToReferenceDraft(cslItem);
   const citationKey = generateCitationKey(
@@ -117,9 +124,7 @@ export const parseReferenceList = (text: string): ParsedReferenceEntry[] => {
   const taken = new Set<string>();
   return splitReferenceEntries(text)
     .filter(
-      ({ raw }) =>
-        !/^(?:table|fig(?:ure)?|\[#)/i.test(raw) &&
-        (YEAR_RE.test(raw) || DOI_RE.test(raw)),
+      ({ raw }) => raw.length > 0 && !/^(?:table|fig(?:ure)?|\[#)/i.test(raw),
     )
     .map(({ index, raw }) => ({
       index,

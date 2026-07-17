@@ -10,6 +10,8 @@ import { countWords } from './manuscriptAssembly';
 import { assetPlacementMarker } from './manuscriptAssetPlacement';
 import { gridToMarkdownTable } from './manuscriptTables';
 import { wrapManuscriptScript } from './manuscriptScripts';
+import { type PortableResearchPaperManifest } from './manuscriptPortableManifest';
+import { type AssetKind } from './manuscriptTypes';
 
 export type ImportedSectionDraft = {
   name: string;
@@ -19,6 +21,8 @@ export type ImportedSectionDraft = {
   orderIndex: number;
   wordCount: number;
   includeInExport: boolean;
+  status?: string;
+  wordLimit?: number;
 };
 
 export type ImportedDocument = {
@@ -33,11 +37,12 @@ export type ImportedDocument = {
     embeddedImageCount: number;
     tableCount: number;
   };
+  portablePackage?: PortableResearchPaperManifest;
 };
 
 export type ImportedFigureDraft = {
   name: string;
-  assetKind: 'FIGURE' | 'TABLE';
+  assetKind: AssetKind;
   placement: 'MAIN' | 'SUPPLEMENT';
   refKey: string;
   caption: string;
@@ -47,6 +52,8 @@ export type ImportedFigureDraft = {
   imageSource: 'NONE' | 'UPLOAD';
   imageUrl?: string;
   altText?: string;
+  credit?: string;
+  widthPercent?: number;
   orderIndex: number;
 };
 
@@ -162,13 +169,21 @@ const SECTION_RULES: SectionRule[] = [
   },
 ];
 
-// Strip leading section numbering ("1.", "1.2", "IV.", "A)") and trailing
-// punctuation so "2. Materials and Methods" classifies like "Methods".
-const normalizeHeading = (heading: string): string =>
+// Numeric headings in manuscripts commonly omit punctuation ("1 Introduction",
+// "2.1 Sampling"). Keep stored names independent from source numbering so the
+// export profile can renumber sections after reordering. Roman/letter markers
+// still require punctuation so a real heading such as "A modular workflow" is
+// never mistaken for an outline label.
+const stripHeadingNumbering = (heading: string): string =>
   heading
-    .replace(/^\s*(\d+(\.\d+)*|[ivxlcdm]+|[a-z])[.):]\s+/i, '')
-    .trim()
-    .toLowerCase();
+    .replace(
+      /^\s*(?:(?:\d+(?:\.\d+)*)(?:[.):]\s*|\s+)|(?:[ivxlcdm]+|[a-z])[.):]\s*)/i,
+      '',
+    )
+    .trim();
+
+const normalizeHeading = (heading: string): string =>
+  stripHeadingNumbering(heading).toLowerCase();
 
 export const classifyHeading = (
   heading: string,
@@ -226,7 +241,7 @@ const appendSubheadingToSection = (
   section: ImportedSectionDraft,
   block: Block,
 ): ImportedSectionDraft => {
-  const heading = block.heading ?? 'Details';
+  const heading = stripHeadingNumbering(block.heading ?? 'Details');
   const content = [section.content, `### ${heading}`, block.body]
     .filter((part) => part.trim().length > 0)
     .join('\n\n');
@@ -245,7 +260,7 @@ const draftFromBlock = (
 ): ImportedSectionDraft => {
   const { sectionType, placement } = classifyHeading(heading);
   return {
-    name: heading,
+    name: stripHeadingNumbering(heading),
     sectionType,
     placement,
     content: body,
@@ -304,23 +319,32 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
   }
 
   const sections: ImportedSectionDraft[] = [];
+  let currentSectionLevel = 0;
   for (let index = startIndex; index < blocks.length; index += 1) {
     const block = blocks[index];
     const heading = block.heading ?? 'Body';
     if (block.body.length === 0 && block.heading === null) continue;
 
-    // Word documents commonly use Heading 3+ for method/result subsections.
-    // Keep those headings inside their owning semantic section instead of
-    // creating a misleading top-level manuscript section for each one.
-    if (block.level >= 3 && sections.length > 0) {
+    const blockPlacement = classifyHeading(heading).placement;
+    const currentSection = sections[sections.length - 1];
+    // Preserve the source heading hierarchy inside the owning manuscript
+    // section. This handles both Markdown (## / ###) and Word documents that
+    // correctly use Heading 1 for sections and Heading 2 for subsections.
+    if (
+      sections.length > 0 &&
+      block.level > currentSectionLevel &&
+      currentSection.placement === blockPlacement &&
+      (blockPlacement === 'MAIN' || blockPlacement === 'SUPPLEMENT')
+    ) {
       sections[sections.length - 1] = appendSubheadingToSection(
-        sections[sections.length - 1],
+        currentSection,
         block,
       );
       continue;
     }
 
     sections.push(draftFromBlock(heading, block.body, sections.length));
+    currentSectionLevel = block.level;
   }
 
   return { title, sections };
@@ -531,10 +555,10 @@ const wordParagraphToMarkdown = (
   const finalLevel =
     math.length > 0 || isProseLike(text)
       ? 0
-      : detectedLevel > 0
-        ? detectedLevel
-        : level > 0
-          ? Math.min(level, 3)
+      : level > 0
+        ? Math.min(level, 3)
+        : detectedLevel > 0
+          ? detectedLevel
           : isDirectlyBold(paragraphXml) && text.length <= 100
             ? 3
             : 0;
@@ -620,6 +644,9 @@ const tokenizeWordBody = (body: string): string[] => {
 };
 
 const injectAbstractHeading = (blocks: string[]): string[] => {
+  if (blocks.some((block) => /^\s*#{1,6}\s+Abstract\b/i.test(block))) {
+    return blocks;
+  }
   const keywordsIndex = blocks.findIndex((block) =>
     /^\s*## Keywords\b/.test(block),
   );
@@ -719,7 +746,7 @@ export const parseWordDocument = (
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
   const correspondingIndex = titlePageLines.findIndex((line) =>
-    /^\*?corresponding author\s*:/i.test(line),
+    /^\*?(?:corresponding author|correspondence)\s*:/i.test(line),
   );
   const authorLine = titlePageLines[0]?.replace(/^#{1,6}\s+/, '').trim();
   const affiliationLines = titlePageLines.slice(
@@ -755,6 +782,7 @@ const isTableLine = (line: string): boolean => line.trim().includes('|');
 type ImportedAssetCaption = {
   caption: string;
   sourceLabel?: string;
+  explicitLabel: boolean;
 };
 
 const parseImportedAssetCaption = (
@@ -763,22 +791,25 @@ const parseImportedAssetCaption = (
 ): ImportedAssetCaption | null => {
   const prefix = kind === 'FIGURE' ? '(?:fig(?:ure)?)' : '(?:table|tbl)';
   const match = new RegExp(
-    `^\\s*${prefix}\\s*\\.?\\s*(?:([sS]?\\d+(?:\\.\\d+)*(?:[a-z])?)\\s*[.:)]?\\s*)?(.*)$`,
+    `^\\s*${prefix}\\s*\\.?\\s*(?:([sS]?\\d+(?:\\.\\d+)*(?:[a-z])?)\\s*([.:)])?\\s*)?(.*)$`,
     'i',
   ).exec(line);
   if (match === null) return null;
   let sourceLabel = match[1]?.replace(/^s/i, 'S');
-  let caption = match[2].trim();
+  let explicitLabel = match[2] !== undefined;
+  let caption = match[3].trim();
   const embeddedSourceLabel =
-    /^(?:fig(?:ure)?|table|tbl)?\s*\.?\s*(S?\d+(?:\.\d+)+)(?:[.:)]\s*|\s+)(.*)$/i.exec(
+    /^(?:fig(?:ure)?|table|tbl)?\s*\.?\s*(S?\d+(?:\.\d+)+)(?:([.:)])\s*|\s+)(.*)$/i.exec(
       caption,
     );
   if (embeddedSourceLabel !== null) {
     sourceLabel = embeddedSourceLabel[1].replace(/^s/i, 'S');
-    caption = embeddedSourceLabel[2].trim();
+    explicitLabel = embeddedSourceLabel[2] !== undefined;
+    caption = embeddedSourceLabel[3].trim();
   }
   return {
     caption,
+    explicitLabel,
     ...(sourceLabel !== undefined ? { sourceLabel } : {}),
   };
 };
@@ -828,28 +859,27 @@ export const extractTablesToFigures = (
           }
           const previous = out[previousIndex]?.trim() ?? '';
           const captionMatch = parseImportedAssetCaption(previous, 'TABLE');
-          if (captionMatch !== null) {
+          let captionIndex = end;
+          while (
+            captionIndex < lines.length &&
+            lines[captionIndex].trim().length === 0
+          ) {
+            captionIndex += 1;
+          }
+          const following = lines[captionIndex]?.trim() ?? '';
+          const followingMatch = parseImportedAssetCaption(following, 'TABLE');
+          const preferFollowing =
+            followingMatch !== null &&
+            followingMatch.explicitLabel &&
+            captionMatch?.explicitLabel !== true;
+          if (captionMatch !== null && !preferFollowing) {
             captionInfo = captionMatch;
             caption = captionMatch.caption;
             out.splice(previousIndex);
-          } else {
-            let captionIndex = end;
-            while (
-              captionIndex < lines.length &&
-              lines[captionIndex].trim().length === 0
-            ) {
-              captionIndex += 1;
-            }
-            const following = lines[captionIndex]?.trim() ?? '';
-            const followingMatch = parseImportedAssetCaption(
-              following,
-              'TABLE',
-            );
-            if (followingMatch !== null) {
-              captionInfo = followingMatch;
-              caption = followingMatch.caption;
-              end = captionIndex + 1;
-            }
+          } else if (followingMatch !== null) {
+            captionInfo = followingMatch;
+            caption = followingMatch.caption;
+            end = captionIndex + 1;
           }
           order += 1;
           const sourceLabel = captionInfo?.sourceLabel;
@@ -936,7 +966,11 @@ export const extractImagesToFigures = (
       }
       const nextLine = lines[nextCaptionIndex]?.trim() ?? '';
       const nextCaption = parseImportedAssetCaption(nextLine, 'FIGURE');
-      if (previousCaption !== null) {
+      const preferNext =
+        nextCaption !== null &&
+        nextCaption.explicitLabel &&
+        previousCaption?.explicitLabel !== true;
+      if (previousCaption !== null && !preferNext) {
         captionInfo = previousCaption;
         caption = previousCaption.caption;
         out.splice(previousCaptionIndex);
@@ -975,6 +1009,68 @@ export const extractImagesToFigures = (
       out.push(assetPlacementMarker(refKey));
     }
 
+    const content = out
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return { ...section, content, wordCount: countWords(content) };
+  });
+
+  return { sections: nextSections, figures };
+};
+
+// A scientific draft can intentionally carry caption placeholders before the
+// artwork exists. Promote explicit labels ("Figure 3. …") to real linked asset
+// records so later image replacement and renumbering work without re-importing.
+export const extractCaptionOnlyFigures = (
+  sections: ImportedSectionDraft[],
+  startOrderIndex = 0,
+): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
+  const figures: ImportedFigureDraft[] = [];
+  const usedRefKeys = new Set<string>();
+  let order = startOrderIndex;
+
+  const nextSections = sections.map((section) => {
+    const out = section.content.split('\n').map((line) => {
+      const captionInfo = parseImportedAssetCaption(line.trim(), 'FIGURE');
+      if (
+        captionInfo === null ||
+        !captionInfo.explicitLabel ||
+        captionInfo.caption.length === 0
+      ) {
+        return line;
+      }
+      order += 1;
+      const refKeyBase = importedAssetRefKey(
+        'FIGURE',
+        captionInfo.sourceLabel,
+        order,
+      );
+      let refKey = refKeyBase;
+      let duplicateIndex = 2;
+      while (usedRefKeys.has(refKey)) {
+        refKey = `${refKeyBase}-${duplicateIndex}`;
+        duplicateIndex += 1;
+      }
+      usedRefKeys.add(refKey);
+      const supplement =
+        section.placement === 'SUPPLEMENT' ||
+        /^S/i.test(captionInfo.sourceLabel ?? '');
+      figures.push({
+        name: captionInfo.caption,
+        assetKind: 'FIGURE',
+        placement: supplement ? 'SUPPLEMENT' : 'MAIN',
+        refKey,
+        caption: captionInfo.caption,
+        ...(captionInfo.sourceLabel !== undefined
+          ? { sourceLabel: captionInfo.sourceLabel }
+          : {}),
+        sectionOrderIndex: section.orderIndex,
+        imageSource: 'NONE',
+        orderIndex: order - 1,
+      });
+      return assetPlacementMarker(refKey);
+    });
     const content = out
       .join('\n')
       .replace(/\n{3,}/g, '\n\n')

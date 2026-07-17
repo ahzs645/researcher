@@ -5,6 +5,7 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { type ManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
 import { type ManuscriptExportStyleOverrides } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
+import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import {
   downloadExportFile,
   getManuscriptExporters,
@@ -36,6 +37,7 @@ type ManuscriptExportPanelProps = {
     overrides: ManuscriptExportStyleOverrides,
   ) => Promise<void>;
   materials: SubmissionMaterials;
+  portableSource: PortableManuscriptSource;
 };
 
 const StyledPanel = styled.div`
@@ -82,6 +84,7 @@ export const ManuscriptExportPanel = ({
   initialStyleOverrides,
   onSaveStyleOverrides,
   materials,
+  portableSource,
 }: ManuscriptExportPanelProps) => {
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [isExporting, setIsExporting] = useState(false);
@@ -149,6 +152,7 @@ export const ManuscriptExportPanel = ({
       const submissionPackage = await createSubmissionPackage(
         exportBundle,
         materials,
+        portableSource,
       );
       downloadExportFile({
         filename: submissionPackage.filename,

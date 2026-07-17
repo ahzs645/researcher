@@ -20,6 +20,7 @@ import {
   parseManuscriptExportStyleOverrides,
   serializeManuscriptExportStyleOverrides,
 } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
+import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import {
   buildSectionSkeleton,
   wordLimitStatus,
@@ -52,6 +53,7 @@ type ManuscriptRecord = {
   status?: string | null;
   manuscriptType?: string | null;
   targetVenue?: string | null;
+  doi?: string | null;
   authorLine?: string | null;
   affiliations?: string | null;
   correspondingAuthor?: string | null;
@@ -258,6 +260,7 @@ export const ManuscriptComposerPage = () => {
         status: true,
         manuscriptType: true,
         targetVenue: true,
+        doi: true,
         authorLine: true,
         affiliations: true,
         correspondingAuthor: true,
@@ -440,6 +443,44 @@ export const ManuscriptComposerPage = () => {
       style: effectiveStyle,
     });
   }, [manuscript, sections, figures, references, effectiveStyle]);
+
+  const portableSource = useMemo<PortableManuscriptSource | undefined>(() => {
+    if (!isDefined(manuscript)) return undefined;
+    return {
+      manuscript: {
+        title: manuscript.name ?? 'Untitled manuscript',
+        ...(isDefined(manuscript.manuscriptType)
+          ? { manuscriptType: manuscript.manuscriptType }
+          : {}),
+        ...(isDefined(manuscript.status) ? { status: manuscript.status } : {}),
+        ...(isDefined(manuscript.targetVenue)
+          ? { targetVenue: manuscript.targetVenue }
+          : {}),
+        ...(isDefined(manuscript.doi) ? { doi: manuscript.doi } : {}),
+        ...(isDefined(manuscript.authorLine)
+          ? { authorLine: manuscript.authorLine }
+          : {}),
+        ...(isDefined(manuscript.affiliations)
+          ? { affiliations: manuscript.affiliations }
+          : {}),
+        ...(isDefined(manuscript.correspondingAuthor)
+          ? { correspondingAuthor: manuscript.correspondingAuthor }
+          : {}),
+        ...(isDefined(manuscript.supplementTitle)
+          ? { supplementTitle: manuscript.supplementTitle }
+          : {}),
+        ...(isDefined(manuscript.supplementAuthorLine)
+          ? { supplementAuthorLine: manuscript.supplementAuthorLine }
+          : {}),
+        ...(isDefined(manuscript.supplementAffiliations)
+          ? { supplementAffiliations: manuscript.supplementAffiliations }
+          : {}),
+      },
+      sections,
+      figures,
+      references,
+    };
+  }, [manuscript, sections, figures, references]);
 
   const selectedSection = sections.find((section) => section.id === sectionId);
 
@@ -695,7 +736,7 @@ export const ManuscriptComposerPage = () => {
 
         <StyledPanel>
           <H2Title title="Export" />
-          {isDefined(bundle) ? (
+          {isDefined(bundle) && isDefined(portableSource) ? (
             <>
               <ManuscriptExportPanel
                 key={`manuscript-export-${manuscript.id}`}
@@ -724,6 +765,7 @@ export const ManuscriptComposerPage = () => {
                   competingInterests: manuscript.competingInterests,
                   suggestedReviewers: manuscript.suggestedReviewers,
                 }}
+                portableSource={portableSource}
               />
               <ManuscriptCslBibliography
                 cslItems={bundle.cslJson}

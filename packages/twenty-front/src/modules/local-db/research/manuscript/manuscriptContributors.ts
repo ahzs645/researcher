@@ -42,7 +42,7 @@ export const parseManuscriptAffiliations = (
   value: string | null | undefined,
 ): ManuscriptAffiliation[] =>
   (value ?? '')
-    .split(/\r?\n|;\s*(?=\d+\s)/)
+    .split(/\r?\n|[;,]\s*(?=\d+\s)/)
     .map((line) => line.trim().replace(/;$/, '').trim())
     .filter((line) => line.length > 0)
     .map((line, index) => ({
@@ -54,7 +54,7 @@ const authorParts = (value: string): string[] => {
   if (value.includes(';')) return value.split(';');
   const matches = [
     ...regularizeSuperscripts(value).matchAll(
-      /(?:^|,\s*)(.*?)(\d+(?:,\d+)*\*?)(?=,\s*[\p{Lu}]|$)/gu,
+      /(?:^|,\s*)(.*?)(\d+(?:,\d+)*\*?)(?=,\s*\[?\p{Lu}|$)/gu,
     ),
   ];
   return matches.length > 0

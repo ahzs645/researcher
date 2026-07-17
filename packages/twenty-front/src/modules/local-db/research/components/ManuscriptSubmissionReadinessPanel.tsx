@@ -75,7 +75,11 @@ export const ManuscriptSubmissionReadinessPanel = ({
         </StyledStats>
       </div>
       <Button
-        title={isExporting ? 'Packaging…' : 'Download package (.zip)'}
+        title={
+          isExporting
+            ? 'Packaging…'
+            : 'Download portable submission package (.zip)'
+        }
         variant="primary"
         accent="blue"
         size="small"
@@ -83,6 +87,11 @@ export const ManuscriptSubmissionReadinessPanel = ({
         onClick={onDownloadPackage}
       />
     </StyledHeader>
+    <StyledStats>
+      Includes a versioned research-paper manifest so this ZIP can be imported
+      into the composer with its sections, links, figures, references, and
+      export settings intact.
+    </StyledStats>
     {readiness.checks.map((check) => (
       <StyledCheck key={check.id} data-severity={check.severity}>
         {check.severity === 'READY'

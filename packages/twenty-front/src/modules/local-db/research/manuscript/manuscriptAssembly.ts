@@ -302,8 +302,21 @@ export const buildManuscriptBundle = (
     }
   }
 
+  // References belong to this manuscript, not a global library. Preserve
+  // imported bibliography entries even when the source draft does not contain
+  // machine-readable citation markers; cited items remain first in document
+  // order and uncited items follow in their stored order.
+  const bibliographyKeys = [...citedKeys];
+  for (const reference of input.references) {
+    const key = keyOf(reference);
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      bibliographyKeys.push(key);
+    }
+  }
+
   const { context, orderedKeys, missingKeys } = buildCitationContext(
-    citedKeys,
+    bibliographyKeys,
     referencesByKey,
     style.citationMode,
   );

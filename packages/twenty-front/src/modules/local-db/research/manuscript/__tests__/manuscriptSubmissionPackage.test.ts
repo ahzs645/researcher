@@ -53,9 +53,31 @@ describe('createSubmissionPackage', () => {
       },
     });
 
-    const result = await createSubmissionPackage(bundle, {
-      coverLetter: 'Please consider this manuscript.',
-    });
+    const result = await createSubmissionPackage(
+      bundle,
+      {
+        coverLetter: 'Please consider this manuscript.',
+      },
+      {
+        manuscript: {
+          title: 'Reusable air-quality paper',
+          authorLine: 'A. Researcher; B. Scientist',
+          affiliations: '1 Example University',
+        },
+        sections: [
+          {
+            id: 'methods',
+            name: 'Methods',
+            sectionType: 'METHODS',
+            placement: 'MAIN',
+            content: 'We used a reproducible method.',
+            includeInExport: true,
+          },
+        ],
+        figures: [],
+        references: [],
+      },
+    );
     const packageBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(reader.error);
@@ -69,6 +91,7 @@ describe('createSubmissionPackage', () => {
         'cover-letter.docx',
         'metadata.json',
         'references.json',
+        'research-paper.json',
         'submission-readiness.txt',
       ]),
     );

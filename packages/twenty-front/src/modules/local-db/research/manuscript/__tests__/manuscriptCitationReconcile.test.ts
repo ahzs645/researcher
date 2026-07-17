@@ -1,9 +1,10 @@
-import { parseMarkdownDocument } from '../manuscriptDocImport';
+import { parseMarkdownDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
 import {
   detectCitationStyle,
   parseReferenceList,
   reconcileImportedCitations,
-} from '../manuscriptCitationReconcile';
+} from '@/local-db/research/manuscript/manuscriptCitationReconcile';
+import { formatReferenceEntry } from '@/local-db/research/manuscript/manuscriptCitations';
 
 describe('detectCitationStyle', () => {
   it('distinguishes numeric from author-date bodies', () => {
@@ -28,8 +29,28 @@ describe('parseReferenceList', () => {
     ]);
     expect(entries[0].draft.doi).toBe('10.1111/ina.12042');
     expect(entries[0].draft.year).toBe(2013);
+    expect(entries[0].draft.cslJson).toContain('researcher:rawReference');
+    expect(
+      formatReferenceEntry(
+        { id: 'imported-reference', ...entries[0].draft },
+        undefined,
+        'AUTHOR_DATE',
+      ),
+    ).toBe(
+      'Mendell, M. J.; et al. Classroom ventilation. Indoor Air 2013, 23, 515-528. doi:10.1111/ina.12042',
+    );
     // The raw entry is preserved so an imperfect parse is never lossy.
     expect(entries[0].draft.notes).toContain('Indoor Air');
+  });
+
+  it('preserves institutional and web references that do not state a year', () => {
+    const entries = parseReferenceList(
+      'U.S. Environmental Protection Agency. Positive Matrix Factorization model. https://www.epa.gov/air-research',
+    );
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].draft.year).toBeNull();
+    expect(entries[0].draft.notes).toContain('Environmental Protection Agency');
   });
 });
 

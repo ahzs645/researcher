@@ -7,6 +7,29 @@ import {
 } from '@/local-db/research/manuscript/manuscriptContributors';
 
 describe('manuscript contributors', () => {
+  it('maps digit-bearing placeholder authors to comma-separated affiliations', () => {
+    const affiliations = parseManuscriptAffiliations(
+      '1 [Affiliation 1], 2 [Affiliation 2]',
+    );
+    const authors = parseManuscriptAuthors(
+      '[Author 1]1, [Author 2]2, [Author 3]1',
+      affiliations,
+    );
+
+    expect(affiliations).toHaveLength(2);
+    expect(authors.map((author) => author.name)).toEqual([
+      '[Author 1]',
+      '[Author 2]',
+      '[Author 3]',
+    ]);
+    expect(
+      formatManuscriptAuthorLine(
+        '[Author 1]1, [Author 2]2, [Author 3]1',
+        '1 [Affiliation 1], 2 [Affiliation 2]',
+      ),
+    ).toBe('[Author 1]¹, [Author 2]², [Author 3]¹');
+  });
+
   const affiliations = parseManuscriptAffiliations(
     '1 Northern Analytical Lab\n2 Natural Resources\n3 Chemistry',
   );

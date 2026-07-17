@@ -170,6 +170,27 @@ const proseToBlocks = (
 
 const pageBreakBlock = (): ExportPartialBlock => ({ type: 'pageBreak' });
 
+const numberNestedHeadings = (
+  markdown: string,
+  sectionNumber: number | null,
+  initialNestedNumber: number,
+): { markdown: string; nestedNumber: number } => {
+  if (sectionNumber === null) {
+    return { markdown, nestedNumber: initialNestedNumber };
+  }
+  let nestedNumber = initialNestedNumber;
+  return {
+    markdown: markdown.replace(
+      /^(#{3,6})\s+(?!\d+(?:\.\d+)+\.?\s)(.+)$/gm,
+      (_heading, hashes: string, title: string) => {
+        nestedNumber += 1;
+        return `${hashes} ${sectionNumber}.${nestedNumber} ${title}`;
+      },
+    ),
+    nestedNumber,
+  };
+};
+
 const affiliationParagraph = (
   content: string,
   textAlignment: 'left' | 'center' | 'right',
@@ -226,7 +247,7 @@ const bundleToBlocks = (
           : 'left';
     blocks.push(
       ...bundle.metadata.affiliations
-        .split(/\r?\n|;\s*(?=\d+\s)/)
+        .split(/\r?\n|[;,]\s*(?=\d+\s)/)
         .map((affiliation) => affiliation.trim())
         .filter((affiliation) => affiliation.length > 0)
         .map((affiliation) =>
@@ -252,6 +273,8 @@ const bundleToBlocks = (
   }
 
   let sectionNumber = 0;
+  let currentNumberedSection: number | null = null;
+  let currentNestedNumber = 0;
   let abstractSeen = false;
   let currentSectionIsAbstract = false;
   let bodyPageStarted = frontMatterLayout !== 'TITLE_WITH_ABSTRACT';
@@ -334,7 +357,7 @@ const bundleToBlocks = (
                     : 'left';
               blocks.push(
                 ...supplementAffiliations
-                  .split(/\r?\n|;\s*(?=\d+\s)/)
+                  .split(/\r?\n|[;,]\s*(?=\d+\s)/)
                   .map((affiliation) => affiliation.trim())
                   .filter((affiliation) => affiliation.length > 0)
                   .map((affiliation) =>
@@ -369,6 +392,11 @@ const bundleToBlocks = (
           !unnumberedHeading.test(node.text.trim())
         ) {
           sectionNumber += 1;
+          currentNumberedSection = sectionNumber;
+          currentNestedNumber = 0;
+        } else if (node.level <= 2) {
+          currentNumberedSection = null;
+          currentNestedNumber = 0;
         }
         blocks.push({
           type: 'heading',
@@ -382,10 +410,16 @@ const bundleToBlocks = (
         });
         break;
       case 'prose':
+        const numberedProse = numberNestedHeadings(
+          node.markdown,
+          currentNumberedSection,
+          currentNestedNumber,
+        );
+        currentNestedNumber = numberedProse.nestedNumber;
         blocks.push(
           ...proseToBlocks(
             editor,
-            node.markdown,
+            numberedProse.markdown,
             bodyAlignment,
             currentSectionIsAbstract,
           ),

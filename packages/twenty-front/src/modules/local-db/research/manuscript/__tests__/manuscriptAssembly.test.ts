@@ -217,6 +217,21 @@ describe('buildManuscriptBundle', () => {
     expect(bundle.cslJson[0].type).toBe('article-journal');
   });
 
+  it('preserves manuscript references when the imported draft has no citation markers', () => {
+    const imported = buildManuscriptBundle({
+      ...input,
+      sections: input.sections.map((section) => ({
+        ...section,
+        content: section.content?.replace('[@smith2020]', ''),
+      })),
+    });
+
+    expect(imported.citedKeys).toEqual([]);
+    expect(imported.bibliography).toHaveLength(1);
+    expect(imported.mainMarkdown).toContain('## References');
+    expect(imported.mainMarkdown).toContain('Smith');
+  });
+
   it('collects warnings for the imageless supplementary figure', () => {
     expect(bundle.warnings.some((w) => /Figure S1 has no image/.test(w))).toBe(
       true,

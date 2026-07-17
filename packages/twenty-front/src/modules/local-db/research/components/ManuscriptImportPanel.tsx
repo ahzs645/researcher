@@ -5,6 +5,7 @@ import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
+  extractCaptionOnlyFigures,
   extractImagesToFigures,
   extractTablesToFigures,
   linkImportedAssetReferences,
@@ -13,10 +14,14 @@ import {
   type ImportedSectionDraft,
 } from '@/local-db/research/manuscript/manuscriptDocImport';
 import {
-  ACCEPTED_IMPORT_EXTENSIONS,
+  ACCEPTED_MANUSCRIPT_IMPORT_EXTENSIONS,
   readImportedDocumentFile,
 } from '@/local-db/research/manuscript/manuscriptDocxFile';
 import { reconcileImportedCitations } from '@/local-db/research/manuscript/manuscriptCitationReconcile';
+import {
+  portableManuscriptRecordUpdate,
+  preparePortableResearchPaperImport,
+} from '@/local-db/research/manuscript/manuscriptPortableImport';
 import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
@@ -227,14 +232,26 @@ export const ManuscriptImportPanel = ({
   const preparedImport = useMemo(() => {
     if (pendingDocument === null) return null;
 
+    if (pendingDocument.portablePackage !== undefined) {
+      return preparePortableResearchPaperImport(
+        pendingDocument.portablePackage,
+        pendingDocument.sections,
+      );
+    }
+
     const images = extractImagesToFigures(pendingDocument.sections);
     const tables = extractTablesToFigures(
       images.sections,
       images.figures.length,
     );
-    const linkedAssets = linkImportedAssetReferences(tables.sections, [
+    const captionFigures = extractCaptionOnlyFigures(
+      tables.sections,
+      images.figures.length + tables.figures.length,
+    );
+    const linkedAssets = linkImportedAssetReferences(captionFigures.sections, [
       ...images.figures,
       ...tables.figures,
+      ...captionFigures.figures,
     ]);
     let sections = linkedAssets.sections;
     const reconciled = reconcile
@@ -262,7 +279,8 @@ export const ManuscriptImportPanel = ({
       figures: linkedAssets.figures,
       linkedAssetCount: linkedAssets.linkedCount,
       tableCount: tables.figures.length,
-      imageCount: images.figures.length,
+      imageCount: images.figures.length + captionFigures.figures.length,
+      portable: false,
     };
   }, [pendingDocument, reconcile]);
 
@@ -295,7 +313,10 @@ export const ManuscriptImportPanel = ({
           section.sectionType === 'REFERENCES' && added.length > 0
             ? false
             : section.includeInExport,
-        status: 'DRAFTING',
+        status: section.status ?? 'DRAFTING',
+        ...(section.wordLimit !== undefined
+          ? { wordLimit: section.wordLimit }
+          : {}),
       });
       const createdId = (created as { id?: string } | undefined)?.id;
       if (isDefined(createdId)) {
@@ -303,7 +324,11 @@ export const ManuscriptImportPanel = ({
       }
     }
     for (const figure of preparedImport.figures) {
-      const { sectionOrderIndex, sourceLabel: _sourceLabel, ...record } = figure;
+      const {
+        sectionOrderIndex,
+        sourceLabel: _sourceLabel,
+        ...record
+      } = figure;
       await createFigure({
         ...record,
         manuscriptId,
@@ -318,6 +343,18 @@ export const ManuscriptImportPanel = ({
       authorLine?: string;
       affiliations?: string;
       correspondingAuthor?: string;
+      manuscriptType?: string;
+      status?: string;
+      targetVenue?: string;
+      doi?: string;
+      supplementTitle?: string;
+      supplementAuthorLine?: string;
+      supplementAffiliations?: string;
+      exportStyleOverrides?: string;
+      coverLetter?: string;
+      highlights?: string;
+      competingInterests?: string;
+      suggestedReviewers?: string;
     } = {};
     if (
       isDefined(pendingDocument.title) &&
@@ -335,6 +372,10 @@ export const ManuscriptImportPanel = ({
       manuscriptUpdate.correspondingAuthor =
         pendingDocument.correspondingAuthor;
     }
+    const portable = pendingDocument.portablePackage;
+    if (portable !== undefined) {
+      Object.assign(manuscriptUpdate, portableManuscriptRecordUpdate(portable));
+    }
     if (Object.keys(manuscriptUpdate).length > 0) {
       await updateOneRecord({
         objectNameSingular: 'manuscript',
@@ -343,7 +384,7 @@ export const ManuscriptImportPanel = ({
       });
     }
     enqueueSuccessSnackBar({
-      message: `Imported ${preparedImport.sections.length} sections · ${added.length} references · ${preparedImport.linkedCount} citations · ${preparedImport.linkedAssetCount} figure/table links · ${preparedImport.figures.length} figures/tables`,
+      message: `${preparedImport.portable ? 'Reconstructed' : 'Imported'} ${preparedImport.sections.length} sections · ${added.length} references · ${preparedImport.linkedCount} citations · ${preparedImport.linkedAssetCount} figure/table links · ${preparedImport.figures.length} figures/tables`,
     });
     setPendingDocument(null);
     setPendingSourceName(null);
@@ -386,7 +427,7 @@ export const ManuscriptImportPanel = ({
     } catch {
       enqueueErrorSnackBar({
         message:
-          'Could not read that file — is it a valid .docx / .pdf / .md / .txt?',
+          'Could not read that file — is it a valid .docx / .pdf / .md / .txt or portable .zip?',
       });
     } finally {
       setIsBusy(false);
@@ -418,8 +459,8 @@ export const ManuscriptImportPanel = ({
   return (
     <StyledPanel>
       <StyledHint>
-        Choose a paper, review the detected structure, then confirm. Nothing is
-        saved until you approve the preview.
+        Choose a Word/PDF paper or a portable research ZIP, review the detected
+        structure, then confirm. Nothing is saved until you approve the preview.
       </StyledHint>
       <StyledCheckboxLabel>
         <input
@@ -441,7 +482,7 @@ export const ManuscriptImportPanel = ({
         <input
           ref={fileInputRef}
           type="file"
-          accept={ACCEPTED_IMPORT_EXTENSIONS}
+          accept={ACCEPTED_MANUSCRIPT_IMPORT_EXTENSIONS}
           hidden
           onChange={handleFile}
         />
@@ -473,6 +514,13 @@ export const ManuscriptImportPanel = ({
               figures · {pendingDocument.stats?.equationCount ?? 0} equations ·{' '}
               {preparedImport.references.length} references
             </StyledHint>
+            {preparedImport.portable ? (
+              <StyledHint>
+                Portable package detected — sections, citations, figure/table
+                links, contributors, styles, and submission materials will be
+                reconstructed.
+              </StyledHint>
+            ) : null}
             {isDefined(pendingDocument.title) ? (
               <StyledHint>Detected title: {pendingDocument.title}</StyledHint>
             ) : null}

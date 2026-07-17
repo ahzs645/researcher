@@ -1,5 +1,6 @@
 import {
   classifyHeading,
+  extractCaptionOnlyFigures,
   extractImagesToFigures,
   extractTablesToFigures,
   linkImportedAssetReferences,
@@ -179,6 +180,57 @@ describe('extractTablesToFigures', () => {
     const { figures } = extractTablesToFigures(doc.sections);
     expect(figures).toHaveLength(0);
   });
+
+  it('prefers an explicit caption over an earlier narrative table mention', () => {
+    const doc = parseMarkdownDocument(
+      [
+        '## Background',
+        'Table 1 summarizes representative tools.',
+        '| Tool | Scope |',
+        '| --- | --- |',
+        '| A | Analysis |',
+        'Table 1. Representative related tools and scope',
+      ].join('\n'),
+    );
+    const extracted = extractTablesToFigures(doc.sections);
+
+    expect(extracted.figures[0].caption).toBe(
+      'Representative related tools and scope',
+    );
+    expect(extracted.sections[0].content).toContain(
+      'Table 1 summarizes representative tools.',
+    );
+  });
+});
+
+describe('extractCaptionOnlyFigures', () => {
+  it('creates a linked placeholder while keeping narrative references live', () => {
+    const sections = parseMarkdownDocument(
+      [
+        '## Software overview',
+        'Figure 1 outlines the modular architecture.',
+        'Figure 1. Modular architecture of the proposed framework.',
+      ].join('\n'),
+    ).sections;
+    const extracted = extractCaptionOnlyFigures(sections);
+    const linked = linkImportedAssetReferences(
+      extracted.sections,
+      extracted.figures,
+    );
+
+    expect(extracted.figures).toHaveLength(1);
+    expect(extracted.figures[0]).toMatchObject({
+      assetKind: 'FIGURE',
+      refKey: 'imported-figure-1',
+      caption: 'Modular architecture of the proposed framework.',
+      imageSource: 'NONE',
+      sectionOrderIndex: 0,
+    });
+    expect(linked.sections[0].content).toContain(
+      '[#imported-figure-1] outlines the modular architecture.',
+    );
+    expect(linked.sections[0].content).toContain('[[asset:imported-figure-1]]');
+  });
 });
 
 describe('extractImagesToFigures', () => {
@@ -299,6 +351,46 @@ describe('parseWordMlToMarkdown', () => {
     expect(doc.sections).toHaveLength(1);
     expect(doc.sections[0].sectionType).toBe('INTRODUCTION');
     expect(doc.sections[0].content).toContain('Indoor air quality matters.');
+  });
+
+  it('preserves numbered Word heading hierarchy without duplicating the abstract', () => {
+    const xml = `<w:body>${para('Paper title')}${para(
+      '[Author 1]1, [Author 2]2',
+    )}${para('1 Institute A')}${para('2 Institute B')}${para(
+      'Correspondence: Author 1 (author@example.org)',
+    )}${para('Abstract', 'Heading1')}${para(
+      'This abstract is intentionally long enough to trigger the fallback abstract detector when a Keywords heading follows it. It must still appear only once in the reconstructed manuscript and retain all of its source prose without an empty duplicate section.',
+    )}${para('Keywords', 'Heading2')}${para(
+      'aerosol; software',
+    )}${para('1 Introduction', 'Heading1')}${para(
+      'Introduction prose.',
+    )}${para('2 Background', 'Heading1')}${para(
+      '2.1 Prior tools',
+      'Heading2',
+    )}${para('Background prose.')}${para(
+      '3 References',
+      'Heading1',
+    )}${para('Example reference.')}</w:body>`;
+    const doc = parseWordDocument(xml);
+
+    expect(
+      doc.sections.filter((section) => section.sectionType === 'ABSTRACT'),
+    ).toHaveLength(1);
+    expect(doc.sections.map((section) => section.name)).toEqual([
+      'Title page',
+      'Abstract',
+      'Keywords',
+      'Introduction',
+      'Background',
+      'References',
+    ]);
+    expect(doc.sections[4].content).toContain('### Prior tools');
+    expect(doc.sections[4].content).not.toContain('2.1 Prior tools');
+    expect(doc.sections[5].sectionType).toBe('REFERENCES');
+    expect(doc.affiliations).toBe('1 Institute A\n2 Institute B');
+    expect(doc.correspondingAuthor).toBe(
+      'Correspondence: Author 1 (author@example.org)',
+    );
   });
 
   it('uses styles.xml definitions and semantic text for custom Word headings', () => {

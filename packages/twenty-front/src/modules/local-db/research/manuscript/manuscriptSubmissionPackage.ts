@@ -10,6 +10,8 @@ import {
   isImageDataUrl,
   resolveFigureImage,
 } from './manuscriptImages';
+import { type PortableManuscriptSource } from './manuscriptPortableManifest';
+import { addPortableResearchPaperFiles } from './manuscriptPortableZip';
 import {
   buildSubmissionManifest,
   type SubmissionMaterials,
@@ -116,6 +118,7 @@ const addFigures = (files: Zippable, bundle: ManuscriptBundle) => {
 export const createSubmissionPackage = async (
   bundle: ManuscriptBundle,
   materials: SubmissionMaterials,
+  portableSource?: PortableManuscriptSource,
 ): Promise<SubmissionPackage> => {
   const files: Zippable = {};
   const readiness = validateSubmission(bundle, materials);
@@ -172,6 +175,14 @@ export const createSubmissionPackage = async (
     materials.suggestedReviewers,
   );
   addFigures(files, bundle);
+  if (portableSource !== undefined) {
+    addPortableResearchPaperFiles(
+      files,
+      portableSource,
+      bundle.style,
+      materials,
+    );
+  }
 
   const zipped = await zipFiles(files);
   return {

@@ -136,6 +136,28 @@ export const formatReferenceEntry = (
   number: number | undefined,
   mode: CitationMode,
 ): string => {
+  if (isNonEmptyString(reference.cslJson)) {
+    try {
+      const parsed: unknown = JSON.parse(reference.cslJson);
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        'researcher:rawReference' in parsed &&
+        isNonEmptyString(parsed['researcher:rawReference'])
+      ) {
+        const prefix =
+          (mode === 'NUMERIC' ||
+            mode === 'AUTHOR_NUMBER' ||
+            mode === 'NUMERIC_SUPERSCRIPT') &&
+          number !== undefined
+            ? `${number}. `
+            : '';
+        return `${prefix}${parsed['researcher:rawReference'].trim()}`;
+      }
+    } catch {
+      // Fall through to the structured generic formatter.
+    }
+  }
   const parts: string[] = [];
   const authors = isNonEmptyString(reference.authors)
     ? reference.authors

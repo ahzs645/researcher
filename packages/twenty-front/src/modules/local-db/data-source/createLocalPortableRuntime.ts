@@ -51,19 +51,32 @@ export const createDexiePortableRowStore = (
         }
         return table;
       });
-      await dataSource.db.transaction('rw', touchedTables, async () => {
-        for (const operation of operations) {
-          const table = tableFor(operation.table);
-          if (!table) {
-            continue;
+      // Dexie's array overload fits runtime-selected tables. Keep its large
+      // variadic generic surface behind a narrow boundary so tsgo does not
+      // recursively instantiate every table shape in the workspace schema.
+      const runTransaction = dataSource.db.transaction as unknown as (
+        mode: 'rw',
+        tables: Table<PortableRecord, string>[],
+        scope: () => Promise<void>,
+      ) => Promise<void>;
+      await runTransaction.call(
+        dataSource.db,
+        'rw',
+        touchedTables,
+        async () => {
+          for (const operation of operations) {
+            const table = tableFor(operation.table);
+            if (!table) {
+              continue;
+            }
+            if (operation.kind === 'delete') {
+              await table.delete(operation.recordId);
+            } else {
+              await table.put(operation.row);
+            }
           }
-          if (operation.kind === 'delete') {
-            await table.delete(operation.recordId);
-          } else {
-            await table.put(operation.row);
-          }
-        }
-      });
+        },
+      );
     },
   };
 };

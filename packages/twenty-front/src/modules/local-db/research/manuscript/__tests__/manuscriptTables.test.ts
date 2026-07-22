@@ -42,4 +42,22 @@ describe('gridToMarkdownTable', () => {
       ['1', '', ''],
     ]);
   });
+
+  it('round-trips pipes, backslashes, and newlines inside cells', () => {
+    const grid = [
+      ['Header', 'Notes'],
+      ['A | B', String.raw`C \| D`],
+      ['Line one\nline two', String.raw`path\to\file`],
+    ];
+
+    const markdown = gridToMarkdownTable(grid);
+
+    expect(markdown).toContain(String.raw`A \| B`);
+    expect(markdown).toContain(String.raw`C \\\| D`);
+    expect(parseMarkdownTable(markdown)).toEqual([
+      ['Header', 'Notes'],
+      ['A | B', String.raw`C \| D`],
+      ['Line one line two', String.raw`path\to\file`],
+    ]);
+  });
 });

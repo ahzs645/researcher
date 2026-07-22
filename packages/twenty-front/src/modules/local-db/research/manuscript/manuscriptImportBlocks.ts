@@ -4,6 +4,7 @@ import {
   type ImportedDocument,
   type WordMarkdownBlock,
 } from './manuscriptDocImport';
+import { parseMarkdownTable } from './manuscriptTables';
 
 export type ImportedSourceInfo = Pick<
   ImportedDocument,
@@ -53,6 +54,7 @@ export type ImportBlockOverrides = Record<string, ImportBlockOverride>;
 const HEADING_LINE = /^(#{1,6})\s+(.*\S)\s*$/;
 const IMAGE_LINE = /^!\[([^\]]*)\]\((data:image\/[^)]+)\)$/i;
 const EQUATION_BLOCK = /^\$\$([\s\S]*?)\$\$$/;
+const EQUATION_SEGMENT = /\$\$[\s\S]*?\$\$/g;
 const TABLE_SEPARATOR = /^\|?[\s:|-]+\|?$/;
 const BOILERPLATE_CAPTION =
   /^Figure 1\. Type your caption here\. Obtain permission and include the acknowledgement required by the copyright holder if a figure is being reproduced from another source\.?$/i;

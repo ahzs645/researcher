@@ -5,13 +5,53 @@
 
 const SEPARATOR_ROW = /^\|?[\s:|-]+\|?$/;
 
-const splitRow = (line: string): string[] =>
-  line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((cell) => cell.trim());
+const isEscaped = (value: string, index: number): boolean => {
+  let backslashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+    backslashCount += 1;
+  }
+  return backslashCount % 2 === 1;
+};
+
+const splitRow = (line: string): string[] => {
+  const trimmed = line.trim();
+  const withoutLeadingPipe = trimmed.startsWith('|')
+    ? trimmed.slice(1)
+    : trimmed;
+  const value =
+    withoutLeadingPipe.endsWith('|') &&
+    !isEscaped(withoutLeadingPipe, withoutLeadingPipe.length - 1)
+      ? withoutLeadingPipe.slice(0, -1)
+      : withoutLeadingPipe;
+  const cells: string[] = [];
+  let cell = '';
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === '\\' && index + 1 < value.length) {
+      const nextCharacter = value[index + 1];
+      if (nextCharacter === '\\' || nextCharacter === '|') {
+        cell += nextCharacter;
+        index += 1;
+        continue;
+      }
+    }
+    if (character === '|') {
+      cells.push(cell.trim());
+      cell = '';
+      continue;
+    }
+    cell += character;
+  }
+  cells.push(cell.trim());
+  return cells;
+};
+
+const escapeCell = (cell: string): string =>
+  cell
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n|\r/g, ' ');
 
 // Parse a GFM Markdown table into rows of cells (the header row is just the
 // first row). Lines that aren't table rows, and the |---|---| separator, are
@@ -35,7 +75,7 @@ export const gridToMarkdownTable = (rows: string[][]): string => {
   if (rows.length === 0) return '';
   const columnCount = Math.max(...rows.map((row) => row.length));
   const pad = (row: string[]): string =>
-    `| ${Array.from({ length: columnCount }, (_, index) => row[index] ?? '').join(' | ')} |`;
+    `| ${Array.from({ length: columnCount }, (_, index) => escapeCell(row[index] ?? '')).join(' | ')} |`;
   const [header, ...body] = rows;
   const separator = `| ${Array.from({ length: columnCount }, () => '---').join(' | ')} |`;
   return [pad(header), separator, ...body.map(pad)].join('\n');

@@ -12,10 +12,7 @@ import { MANUSCRIPT_IMPORT_WIZARD_STEPS } from '@/local-db/research/import-wizar
 import { type ManuscriptImportWizardOptions } from '@/local-db/research/import-wizard/states/manuscriptImportWizardState';
 import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
 import { type ImportedDocumentSource } from '@/local-db/research/manuscript/manuscriptDocxFile';
-import {
-  prepareManuscriptImport,
-  type PreparedManuscriptImport,
-} from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import { type PreparedManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
 import { ModalStatefulWrapper } from '@/ui/layout/modal/components/ModalStatefulWrapper';
 import { StepBar } from '@/ui/navigation/step-bar/components/StepBar';
@@ -29,7 +26,6 @@ type BlocksDocumentSource = Extract<ImportedDocumentSource, { kind: 'blocks' }>;
 
 type ReviewPayload = {
   document: ImportedDocument;
-  preparedImport: PreparedManuscriptImport;
   sourceName: string;
 };
 
@@ -80,16 +76,27 @@ export const ManuscriptImportWizard = ({
     null,
   );
   const [enterHandler, setEnterHandler] = useState<(() => void) | null>(null);
+  const [closeInterception, setCloseInterception] = useState<
+    (() => boolean) | null
+  >(null);
 
   const registerEnterHandler = useCallback((handler: (() => void) | null) => {
     setEnterHandler(() => handler);
   }, []);
+
+  const registerCloseInterception = useCallback(
+    (handler: (() => boolean) | null) => {
+      setCloseInterception(() => handler);
+    },
+    [],
+  );
 
   const handleEnter = () => {
     if (!isFormElementFocused()) enterHandler?.();
   };
 
   const confirmOnClose = () => {
+    if (closeInterception?.() === true) return;
     if (activeStep === 0) {
       onClose();
       return;
@@ -127,7 +134,6 @@ export const ManuscriptImportWizard = ({
       setReconcile(shouldReconcile);
       setReviewPayload({
         document,
-        preparedImport: prepareManuscriptImport(document, shouldReconcile),
         sourceName,
       });
       setActiveStep(2);
@@ -138,10 +144,10 @@ export const ManuscriptImportWizard = ({
   const handleMapContinue = useCallback(
     (
       document: ImportedDocument,
-      preparedImport: PreparedManuscriptImport,
+      _preparedImport: PreparedManuscriptImport,
       sourceName: string,
     ) => {
-      setReviewPayload({ document, preparedImport, sourceName });
+      setReviewPayload({ document, sourceName });
       setActiveStep(2);
     },
     [],
@@ -156,6 +162,7 @@ export const ManuscriptImportWizard = ({
       onClose={confirmOnClose}
       onEnter={handleEnter}
       shouldCloseModalOnClickOutsideOrEscape={false}
+      renderInDocumentBody
     >
       <StyledModalContent>
         <ModalHeader
@@ -197,12 +204,15 @@ export const ManuscriptImportWizard = ({
               tableStyle={options.exportTableStyle ?? 'ACADEMIC'}
               onContinue={handleMapContinue}
               registerEnterHandler={registerEnterHandler}
+              registerCloseInterception={registerCloseInterception}
             />
           ) : activeStep === 2 && reviewPayload !== null ? (
             <ManuscriptImportReviewStep
-              document={reviewPayload.document}
-              preparedImport={reviewPayload.preparedImport}
+              initialDocument={reviewPayload.document}
               sourceName={reviewPayload.sourceName}
+              reconcile={reconcile}
+              options={options}
+              onClose={onClose}
             />
           ) : null}
         </StyledStepContent>

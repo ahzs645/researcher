@@ -95,6 +95,7 @@ export const ManuscriptFigurePanel = ({
   const [placement, setPlacement] = useState('MAIN');
   const [imageUrl, setImageUrl] = useState('');
   const [tableData, setTableData] = useState('');
+  const [tableEditorVersion, setTableEditorVersion] = useState(0);
   const [isAdding, setIsAdding] = useState(false);
   const tableStyle =
     MANUSCRIPT_TABLE_STYLES.find(
@@ -222,6 +223,7 @@ export const ManuscriptFigurePanel = ({
       setCaption('');
       setImageUrl('');
       setTableData('');
+      setTableEditorVersion((version) => version + 1);
       onChanged();
     } finally {
       setIsAdding(false);
@@ -291,6 +293,7 @@ export const ManuscriptFigurePanel = ({
         imageUrl={imageUrl}
         tableData={tableData}
         tableStyle={tableStyle}
+        tableEditorVersion={tableEditorVersion}
         isAdding={isAdding}
         onCaptionChange={setCaption}
         onAssetKindChange={setAssetKind}

@@ -9,6 +9,7 @@ const SHORTCUTS = [
   ['b', 'Body'],
   ['c', 'Caption'],
   ['x', 'Exclude'],
+  ['e', 'Equation'],
   ['l', 'Link asset'],
   ['Enter', 'Next review'],
   ['⌘/Ctrl + Enter', 'Continue'],

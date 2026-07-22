@@ -257,6 +257,7 @@ export const ManuscriptImportMapSidebar = ({
           review
         </StyledReviewCount>
         <Button
+          id="manuscript-import-continue-button"
           title={isPreparing ? 'Preparing review…' : 'Continue'}
           variant="primary"
           accent="blue"

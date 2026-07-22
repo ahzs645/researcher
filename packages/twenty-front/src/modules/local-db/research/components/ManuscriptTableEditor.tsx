@@ -116,11 +116,14 @@ export const ManuscriptTableEditor = ({
 }: ManuscriptTableEditorProps) => {
   const [isSourceVisible, setIsSourceVisible] = useState(false);
   const [previewStyle, setPreviewStyle] = useState(tableStyle);
-  const rows = editableGrid(markdown);
+  const [rows, setRows] = useState(() => editableGrid(markdown));
   const columnCount = Math.max(1, ...rows.map((row) => row.length));
 
-  const updateGrid = (nextRows: string[][]) =>
-    onChange(gridToMarkdownTable(nextRows));
+  const updateGrid = (nextRows: string[][]) => {
+    const nextMarkdown = gridToMarkdownTable(nextRows);
+    setRows(nextRows);
+    onChange(nextMarkdown);
+  };
 
   const updateCell = (rowIndex: number, columnIndex: number, value: string) => {
     updateGrid(
@@ -187,7 +190,10 @@ export const ManuscriptTableEditor = ({
           aria-label="Markdown table source"
           placeholder={'| Column A | Column B |\n| --- | --- |\n| 1 | 2 |'}
           value={markdown}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            setRows(editableGrid(event.target.value));
+            onChange(event.target.value);
+          }}
         />
       ) : (
         <StyledGrid>

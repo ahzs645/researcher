@@ -1,12 +1,12 @@
 import { styled } from '@linaria/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptImportBlockRow } from '@/local-db/research/import-wizard/components/ManuscriptImportBlockRow';
 import { ManuscriptImportMapSidebar } from '@/local-db/research/import-wizard/components/ManuscriptImportMapSidebar';
 import { ManuscriptImportShortcutBar } from '@/local-db/research/import-wizard/components/ManuscriptImportShortcutBar';
+import { useManuscriptImportMapHotkeys } from '@/local-db/research/import-wizard/hooks/useManuscriptImportMapHotkeys';
+import { useManuscriptImportMapState } from '@/local-db/research/import-wizard/hooks/useManuscriptImportMapState';
 import {
-  assembleImportedDocument,
   type ImportBlock,
   type ImportBlockOverrides,
   type ImportBlockRole,
@@ -14,10 +14,7 @@ import {
 } from '@/local-db/research/manuscript/manuscriptImportBlocks';
 import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
-import {
-  prepareManuscriptImport,
-  type PreparedManuscriptImport,
-} from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import { type PreparedManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 
 type ManuscriptImportMapStepProps = {
   blocks: ImportBlock[];
@@ -31,6 +28,7 @@ type ManuscriptImportMapStepProps = {
     sourceName: string,
   ) => void;
   registerEnterHandler: (handler: (() => void) | null) => void;
+  registerCloseInterception: (handler: (() => boolean) | null) => void;
 };
 
 const StyledContainer = styled.div`
@@ -77,106 +75,40 @@ export const ManuscriptImportMapStep = ({
   tableStyle,
   onContinue,
   registerEnterHandler,
+  registerCloseInterception,
 }: ManuscriptImportMapStepProps) => {
-  const firstBlockId = blocks[0]?.id ?? null;
-  const [overrides, setOverrides] = useState<ImportBlockOverrides>({});
-  const [activeBlockId, setActiveBlockId] = useState<string | null>(
-    firstBlockId,
-  );
-  const [anchorBlockId, setAnchorBlockId] = useState<string | null>(
-    firstBlockId,
-  );
-  const [linkSourceBlockId, setLinkSourceBlockId] = useState<string | null>(
-    null,
-  );
-  const [isPreparing, setIsPreparing] = useState(false);
-
-  const selectedBlockIds = useMemo(() => {
-    if (activeBlockId === null || anchorBlockId === null)
-      return new Set<string>();
-    const activeIndex = blocks.findIndex((block) => block.id === activeBlockId);
-    const anchorIndex = blocks.findIndex((block) => block.id === anchorBlockId);
-    if (activeIndex < 0 || anchorIndex < 0) return new Set<string>();
-    const start = Math.min(activeIndex, anchorIndex);
-    const end = Math.max(activeIndex, anchorIndex);
-    return new Set(blocks.slice(start, end + 1).map((block) => block.id));
-  }, [activeBlockId, anchorBlockId, blocks]);
-
-  const updateOverride = (
-    blockId: string,
-    update: ImportBlockOverrides[string],
-  ) => {
-    setOverrides((currentOverrides) => ({
-      ...currentOverrides,
-      [blockId]: { ...currentOverrides[blockId], ...update },
-    }));
-  };
-
-  const handleSelect = (block: ImportBlock, shiftKey: boolean) => {
-    if (linkSourceBlockId !== null) {
-      const role = effectiveRole(block, overrides);
-      if (role === 'image' || role === 'table') {
-        updateOverride(linkSourceBlockId, {
-          linkedAssetBlockId: block.id,
-          assetKind: role === 'table' ? 'TABLE' : 'FIGURE',
-        });
-        setLinkSourceBlockId(null);
-      }
-    }
-    setActiveBlockId(block.id);
-    if (!shiftKey) setAnchorBlockId(block.id);
-  };
-
-  const handleRoleChange = (block: ImportBlock, role: ImportBlockRole) => {
-    updateOverride(block.id, {
-      role,
-      ...(role === 'heading'
-        ? {
-            headingLevel:
-              overrides[block.id]?.headingLevel ?? block.headingLevel ?? 2,
-          }
-        : {}),
-    });
-  };
-
-  const handleContinue = useCallback(() => {
-    if (isPreparing) return;
-    setIsPreparing(true);
-    try {
-      const document = assembleImportedDocument(blocks, overrides, sourceInfo);
-      const preparedImport = prepareManuscriptImport(document, reconcile);
-      onContinue(document, preparedImport, sourceName);
-    } finally {
-      setIsPreparing(false);
-    }
-  }, [
+  const mapState = useManuscriptImportMapState({
     blocks,
-    isPreparing,
-    onContinue,
-    overrides,
-    reconcile,
     sourceInfo,
     sourceName,
-  ]);
-
-  useEffect(() => {
-    registerEnterHandler(handleContinue);
-    return () => registerEnterHandler(null);
-  }, [handleContinue, registerEnterHandler]);
+    reconcile,
+    onContinue,
+    registerEnterHandler,
+    registerCloseInterception,
+  });
+  useManuscriptImportMapHotkeys({
+    moveActiveBlock: mapState.moveActiveBlock,
+    setHeadingLevel: mapState.setHeadingLevel,
+    setRole: mapState.setRole,
+    toggleExcluded: mapState.toggleExcluded,
+    handleLink: mapState.handleLink,
+    onContinue: mapState.handleContinue,
+  });
 
   return (
     <StyledContainer>
       <StyledGrid>
         <StyledBlockList>
-          {linkSourceBlockId !== null ? (
+          {mapState.linkSourceBlockId !== null ? (
             <StyledLinkMode>
-              Link mode: click an image or table to connect it to the selected
-              caption.
+              Link mode: use ↑/↓ to choose an image or table, then press Enter
+              or L to link it. Escape cancels.
             </StyledLinkMode>
           ) : null}
           {blocks.map((block) => {
-            const role = effectiveRole(block, overrides);
-            const linkedAssetBlockId = overrides[block.id]?.linkedAssetBlockId;
+            const role = effectiveRole(block, mapState.overrides);
+            const linkedAssetBlockId =
+              mapState.overrides[block.id]?.linkedAssetBlockId;
             const linkedAsset = blocks.find(
               (candidate) => candidate.id === linkedAssetBlockId,
             );
@@ -184,26 +116,27 @@ export const ManuscriptImportMapStep = ({
               <ManuscriptImportBlockRow
                 key={block.id}
                 block={block}
-                override={overrides[block.id]}
+                override={mapState.overrides[block.id]}
                 effectiveRole={role}
-                isActive={activeBlockId === block.id}
-                isSelected={selectedBlockIds.has(block.id)}
-                isLinkSource={linkSourceBlockId === block.id}
+                isActive={mapState.activeBlockId === block.id}
+                isSelected={mapState.selectedBlockIds.has(block.id)}
+                isLinkSource={mapState.linkSourceBlockId === block.id}
                 linkedTargetLabel={
                   linkedAsset === undefined
                     ? undefined
                     : `block ${linkedAsset.index + 1} (${effectiveRole(
                         linkedAsset,
-                        overrides,
+                        mapState.overrides,
                       )})`
                 }
                 tableStyle={tableStyle}
-                onSelect={(shiftKey) => handleSelect(block, shiftKey)}
-                onRoleChange={(nextRole) => handleRoleChange(block, nextRole)}
-                onBeginLink={() =>
-                  setLinkSourceBlockId((currentBlockId) =>
-                    currentBlockId === block.id ? null : block.id,
-                  )
+                onSelect={(shiftKey) => mapState.handleSelect(block, shiftKey)}
+                onRoleChange={(nextRole) =>
+                  mapState.handleRoleChange(block, nextRole)
+                }
+                onBeginLink={() => mapState.beginLink(block.id)}
+                onMarkdownChange={(markdown) =>
+                  mapState.updateOverride(block.id, { markdown })
                 }
               />
             );
@@ -211,10 +144,10 @@ export const ManuscriptImportMapStep = ({
         </StyledBlockList>
         <ManuscriptImportMapSidebar
           blocks={blocks}
-          overrides={overrides}
+          overrides={mapState.overrides}
           sourceName={sourceName}
-          isPreparing={isPreparing}
-          onContinue={handleContinue}
+          isPreparing={mapState.isPreparing}
+          onContinue={mapState.handleContinue}
         />
       </StyledGrid>
       <ManuscriptImportShortcutBar />

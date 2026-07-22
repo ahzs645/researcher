@@ -14,6 +14,7 @@ type ManuscriptFigureCreateFormProps = {
   imageUrl: string;
   tableData: string;
   tableStyle: ManuscriptTableStyle;
+  tableEditorVersion: number;
   isAdding: boolean;
   onCaptionChange: (value: string) => void;
   onAssetKindChange: (value: string) => void;
@@ -67,6 +68,7 @@ export const ManuscriptFigureCreateForm = ({
   imageUrl,
   tableData,
   tableStyle,
+  tableEditorVersion,
   isAdding,
   onCaptionChange,
   onAssetKindChange,
@@ -106,6 +108,7 @@ export const ManuscriptFigureCreateForm = ({
       </StyledActions>
       {assetKind === 'TABLE' || assetKind === 'CHART' ? (
         <ManuscriptTableEditor
+          key={tableEditorVersion}
           markdown={tableData}
           tableStyle={tableStyle}
           onChange={onTableDataChange}

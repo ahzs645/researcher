@@ -238,14 +238,14 @@ export const ManuscriptImportUploadStep = ({
           DOCX, PDF, Markdown, text, or portable research ZIP
         </StyledHint>
         <StyledChooseFile>Choose file…</StyledChooseFile>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPTED_MANUSCRIPT_IMPORT_EXTENSIONS}
-          hidden
-          onChange={handleFileChange}
-        />
       </StyledDropZone>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_MANUSCRIPT_IMPORT_EXTENSIONS}
+        hidden
+        onChange={handleFileChange}
+      />
       <StyledDivider>or paste text</StyledDivider>
       <StyledTextarea
         aria-label="Manuscript Markdown or text"

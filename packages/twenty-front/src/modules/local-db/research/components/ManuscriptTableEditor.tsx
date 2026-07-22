@@ -37,6 +37,16 @@ const StyledToolbar = styled.div`
   gap: ${themeCssVariables.spacing[2]};
 `;
 
+const StyledModeToggle = styled.div`
+  align-items: center;
+  background: ${themeCssVariables.background.secondary};
+  border: 1px solid ${themeCssVariables.border.color.light};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  display: inline-flex;
+  padding: 2px;
+  width: fit-content;
+`;
+
 const StyledGrid = styled.div`
   display: grid;
   gap: ${themeCssVariables.spacing[1]};
@@ -114,6 +124,7 @@ export const ManuscriptTableEditor = ({
   tableStyle,
   onChange,
 }: ManuscriptTableEditorProps) => {
+  const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [isSourceVisible, setIsSourceVisible] = useState(false);
   const [previewStyle, setPreviewStyle] = useState(tableStyle);
   const [rows, setRows] = useState(() => editableGrid(markdown));
@@ -139,100 +150,120 @@ export const ManuscriptTableEditor = ({
 
   return (
     <StyledEditor>
-      <StyledToolbar>
+      <StyledModeToggle aria-label="Table view mode">
         <Button
-          title={isSourceVisible ? 'Grid editor' : 'Source'}
-          variant="secondary"
+          title="Edit"
+          variant={mode === 'edit' ? 'secondary' : 'tertiary'}
           size="small"
-          onClick={() => setIsSourceVisible((visible) => !visible)}
+          onClick={() => setMode('edit')}
         />
-        {!isSourceVisible ? (
-          <>
-            <Button
-              title="Add row"
-              variant="tertiary"
-              size="small"
-              onClick={() =>
-                updateGrid([
-                  ...rows,
-                  Array.from({ length: columnCount }, () => ''),
-                ])
-              }
-            />
-            <Button
-              title="Remove row"
-              variant="tertiary"
-              size="small"
-              disabled={rows.length <= 1}
-              onClick={() => updateGrid(rows.slice(0, -1))}
-            />
-            <Button
-              title="Add column"
-              variant="tertiary"
-              size="small"
-              onClick={() => updateGrid(rows.map((row) => [...row, '']))}
-            />
-            <Button
-              title="Remove column"
-              variant="tertiary"
-              size="small"
-              disabled={columnCount <= 1}
-              onClick={() =>
-                updateGrid(rows.map((row) => row.slice(0, columnCount - 1)))
-              }
-            />
-          </>
-        ) : null}
-      </StyledToolbar>
+        <Button
+          title="Preview"
+          variant={mode === 'preview' ? 'secondary' : 'tertiary'}
+          size="small"
+          onClick={() => setMode('preview')}
+        />
+      </StyledModeToggle>
 
-      {isSourceVisible ? (
-        <StyledSource
-          aria-label="Markdown table source"
-          placeholder={'| Column A | Column B |\n| --- | --- |\n| 1 | 2 |'}
-          value={markdown}
-          onChange={(event) => {
-            setRows(editableGrid(event.target.value));
-            onChange(event.target.value);
-          }}
-        />
-      ) : (
-        <StyledGrid>
-          {rows.map((row, rowIndex) => (
-            <StyledRow key={`row-${rowIndex}`} columnCount={columnCount}>
-              {Array.from({ length: columnCount }, (_, columnIndex) => (
-                <StyledCellInput
-                  key={`cell-${rowIndex}-${columnIndex}`}
-                  aria-label={`${rowIndex === 0 ? 'Header' : `Row ${rowIndex}`} column ${columnIndex + 1}`}
-                  isHeader={rowIndex === 0}
-                  value={row[columnIndex] ?? ''}
-                  onChange={(event) =>
-                    updateCell(rowIndex, columnIndex, event.target.value)
+      {mode === 'edit' ? (
+        <>
+          <StyledToolbar>
+            <Button
+              title={isSourceVisible ? 'Grid editor' : 'Source'}
+              variant="secondary"
+              size="small"
+              onClick={() => setIsSourceVisible((visible) => !visible)}
+            />
+            {!isSourceVisible ? (
+              <>
+                <Button
+                  title="Add row"
+                  variant="tertiary"
+                  size="small"
+                  onClick={() =>
+                    updateGrid([
+                      ...rows,
+                      Array.from({ length: columnCount }, () => ''),
+                    ])
                   }
                 />
+                <Button
+                  title="Remove row"
+                  variant="tertiary"
+                  size="small"
+                  disabled={rows.length <= 1}
+                  onClick={() => updateGrid(rows.slice(0, -1))}
+                />
+                <Button
+                  title="Add column"
+                  variant="tertiary"
+                  size="small"
+                  onClick={() => updateGrid(rows.map((row) => [...row, '']))}
+                />
+                <Button
+                  title="Remove column"
+                  variant="tertiary"
+                  size="small"
+                  disabled={columnCount <= 1}
+                  onClick={() =>
+                    updateGrid(rows.map((row) => row.slice(0, columnCount - 1)))
+                  }
+                />
+              </>
+            ) : null}
+          </StyledToolbar>
+          {isSourceVisible ? (
+            <StyledSource
+              aria-label="Markdown table source"
+              placeholder={'| Column A | Column B |\n| --- | --- |\n| 1 | 2 |'}
+              value={markdown}
+              onChange={(event) => {
+                setRows(editableGrid(event.target.value));
+                onChange(event.target.value);
+              }}
+            />
+          ) : (
+            <StyledGrid>
+              {rows.map((row, rowIndex) => (
+                <StyledRow key={`row-${rowIndex}`} columnCount={columnCount}>
+                  {Array.from({ length: columnCount }, (_, columnIndex) => (
+                    <StyledCellInput
+                      key={`cell-${rowIndex}-${columnIndex}`}
+                      aria-label={`${rowIndex === 0 ? 'Header' : `Row ${rowIndex}`} column ${columnIndex + 1}`}
+                      isHeader={rowIndex === 0}
+                      value={row[columnIndex] ?? ''}
+                      onChange={(event) =>
+                        updateCell(rowIndex, columnIndex, event.target.value)
+                      }
+                    />
+                  ))}
+                </StyledRow>
               ))}
-            </StyledRow>
-          ))}
-        </StyledGrid>
+            </StyledGrid>
+          )}
+        </>
+      ) : (
+        <>
+          <StyledToolbar>
+            <StyledPreviewLabel>Preview style</StyledPreviewLabel>
+            <StyledSelect
+              aria-label="Table preview style"
+              value={previewStyle}
+              onChange={(event) =>
+                setPreviewStyle(event.target.value as ManuscriptTableStyle)
+              }
+            >
+              {TABLE_STYLES.map((styleOption) => (
+                <option key={styleOption} value={styleOption}>
+                  {displayStyleName(styleOption)}
+                  {styleOption === tableStyle ? ' (export)' : ''}
+                </option>
+              ))}
+            </StyledSelect>
+          </StyledToolbar>
+          <ManuscriptTableView markdown={markdown} tableStyle={previewStyle} />
+        </>
       )}
-
-      <StyledToolbar>
-        <StyledPreviewLabel>Preview style</StyledPreviewLabel>
-        <StyledSelect
-          aria-label="Table preview style"
-          value={previewStyle}
-          onChange={(event) =>
-            setPreviewStyle(event.target.value as ManuscriptTableStyle)
-          }
-        >
-          {TABLE_STYLES.map((styleOption) => (
-            <option key={styleOption} value={styleOption}>
-              {displayStyleName(styleOption)}
-              {styleOption === tableStyle ? ' (export)' : ''}
-            </option>
-          ))}
-        </StyledSelect>
-      </StyledToolbar>
-      <ManuscriptTableView markdown={markdown} tableStyle={previewStyle} />
     </StyledEditor>
   );
 };

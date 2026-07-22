@@ -8,6 +8,7 @@ import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manusc
 import { type ExistingImportReference } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 
 type ManuscriptImportPanelProps = {
+  compact?: boolean;
   manuscriptId: string;
   manuscriptName?: string | null;
   existingSectionCount: number;
@@ -29,6 +30,7 @@ const StyledHint = styled.span`
 `;
 
 export const ManuscriptImportPanel = ({
+  compact = false,
   manuscriptId,
   manuscriptName,
   existingSectionCount,
@@ -41,10 +43,12 @@ export const ManuscriptImportPanel = ({
 
   return (
     <StyledPanel>
-      <StyledHint>
-        Import a Word/PDF manuscript, Markdown or text, or a portable research
-        ZIP. Nothing is saved until you review and confirm the result.
-      </StyledHint>
+      {!compact ? (
+        <StyledHint>
+          Import a Word/PDF manuscript, Markdown or text, or a portable research
+          ZIP. Nothing is saved until you review and confirm the result.
+        </StyledHint>
+      ) : null}
       <Button
         title="Import document…"
         variant="primary"

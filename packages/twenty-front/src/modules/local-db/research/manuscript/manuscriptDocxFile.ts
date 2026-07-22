@@ -328,14 +328,16 @@ export const readImportedDocumentSource = async (
       source.documentXml,
       source.options,
     );
-    const document = addTiffWarning(
-      parseWordDocumentFromBlocks(source.documentXml, wordBlocks),
-      source.hasTiff,
+    const sourceInfo = sourceInfoFromDocument(
+      addTiffWarning(
+        parseWordDocumentFromBlocks(source.documentXml, wordBlocks),
+        source.hasTiff,
+      ),
     );
     return {
       kind: 'blocks',
       blocks: deriveImportBlocks(wordBlocks),
-      sourceInfo: sourceInfoFromDocument(document),
+      sourceInfo,
       sourceName: file.name,
     };
   }

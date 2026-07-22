@@ -6,13 +6,30 @@ import {
   ManuscriptSubmissionDetailsPanel,
   type ManuscriptSubmissionDetails,
 } from '@/local-db/research/components/ManuscriptSubmissionDetailsPanel';
-import { type ManuscriptRecord } from '@/local-db/research/components/composer/manuscriptComposerData';
+import {
+  type JournalRecord,
+  type ManuscriptRecord,
+} from '@/local-db/research/components/composer/manuscriptComposerData';
+import { ManuscriptSubmissionRequirementsPanel } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementsPanel';
+import { type SectionLike } from '@/local-db/research/manuscript/manuscriptTypes';
+import {
+  type JournalSubmissionRequirement,
+  type SubmissionRequirementValues,
+} from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 
 type ManuscriptSubmissionTabProps = {
   manuscript: ManuscriptRecord;
-  journalName: string;
-  requiredArtifacts: string[];
+  template?: JournalRecord;
+  sections: SectionLike[];
   onSave: (values: ManuscriptSubmissionDetails) => Promise<void>;
+  onPickTargetJournal: () => void;
+  onSaveRequirementValues: (
+    values: SubmissionRequirementValues,
+  ) => Promise<void>;
+  onSaveRequirements: (
+    requirements: JournalSubmissionRequirement[],
+  ) => Promise<void>;
+  onKeepJournalValue: (key: string, value: string) => Promise<void>;
 };
 
 const StyledTab = styled.div`
@@ -27,11 +44,24 @@ const StyledTab = styled.div`
 
 export const ManuscriptSubmissionTab = ({
   manuscript,
-  journalName,
-  requiredArtifacts,
+  template,
+  sections,
   onSave,
+  onPickTargetJournal,
+  onSaveRequirementValues,
+  onSaveRequirements,
+  onKeepJournalValue,
 }: ManuscriptSubmissionTabProps) => (
   <StyledTab>
+    <ManuscriptSubmissionRequirementsPanel
+      key={`${manuscript.id}-${template?.id ?? 'no-journal'}`}
+      manuscript={{ ...manuscript, sections }}
+      template={template}
+      onPickTargetJournal={onPickTargetJournal}
+      onSaveValues={onSaveRequirementValues}
+      onSaveRequirements={onSaveRequirements}
+      onKeepJournalValue={onKeepJournalValue}
+    />
     <H2Title title="Submission details" />
     <ManuscriptSubmissionDetailsPanel
       key={manuscript.id}
@@ -42,13 +72,7 @@ export const ManuscriptSubmissionTab = ({
         supplementTitle: manuscript.supplementTitle,
         supplementAuthorLine: manuscript.supplementAuthorLine,
         supplementAffiliations: manuscript.supplementAffiliations,
-        coverLetter: manuscript.coverLetter,
-        highlights: manuscript.highlights,
-        competingInterests: manuscript.competingInterests,
-        suggestedReviewers: manuscript.suggestedReviewers,
       }}
-      journalName={journalName}
-      requiredArtifacts={requiredArtifacts}
       onSave={onSave}
     />
   </StyledTab>

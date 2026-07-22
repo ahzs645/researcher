@@ -29,6 +29,15 @@ import {
 import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import { buildSectionSkeleton } from '@/local-db/research/manuscript/manuscriptScaffold';
 import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
+import {
+  CANONICAL_REQUIREMENT_FIELDS,
+  parseManuscriptSubmissionExtras,
+  serializeJournalSubmissionRequirements,
+  serializeManuscriptSubmissionExtras,
+  submissionJournalKey,
+  type JournalSubmissionRequirement,
+  type SubmissionRequirementValues,
+} from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
@@ -39,10 +48,11 @@ export const useManuscriptComposer = () => {
       objectNameSingular: 'manuscript',
       recordGqlFields: MANUSCRIPT_GQL,
     });
-  const { records: journalRecords } = useFindManyRecords({
-    objectNameSingular: 'journalTemplate',
-    recordGqlFields: JOURNAL_GQL,
-  });
+  const { records: journalRecords, refetch: refetchJournals } =
+    useFindManyRecords({
+      objectNameSingular: 'journalTemplate',
+      recordGqlFields: JOURNAL_GQL,
+    });
   const { records: sectionRecords, refetch: refetchSections } =
     useFindManyRecords({
       objectNameSingular: 'manuscriptSection',
@@ -296,6 +306,78 @@ export const useManuscriptComposer = () => {
     await refetchManuscripts();
   };
 
+  const linkedJournal = journals.find(
+    (journal) => journal.id === manuscript?.targetJournal?.id,
+  );
+
+  const saveSubmissionRequirementValues = async (
+    values: SubmissionRequirementValues,
+  ) => {
+    if (!isDefined(manuscript) || !isDefined(linkedJournal)) return;
+    const update: Record<string, string> = {};
+    const extras = parseManuscriptSubmissionExtras(manuscript.submissionExtras);
+    const journalKey = submissionJournalKey(linkedJournal);
+    const journalValues = { ...(extras[journalKey] ?? {}) };
+    for (const [key, value] of Object.entries(values)) {
+      const canonicalField = CANONICAL_REQUIREMENT_FIELDS[key];
+      if (canonicalField === undefined) journalValues[key] = value;
+      else update[canonicalField] = value;
+    }
+    extras[journalKey] = journalValues;
+    update.submissionExtras = serializeManuscriptSubmissionExtras(extras);
+    await updateOneRecord({
+      objectNameSingular: 'manuscript',
+      idToUpdate: manuscript.id,
+      updateOneRecordInput: update,
+    });
+    await refetchManuscripts();
+  };
+
+  const saveJournalSubmissionRequirements = async (
+    requirements: JournalSubmissionRequirement[],
+  ) => {
+    if (!isDefined(linkedJournal)) return;
+    await updateOneRecord({
+      objectNameSingular: 'journalTemplate',
+      idToUpdate: linkedJournal.id,
+      updateOneRecordInput: {
+        submissionRequirements:
+          serializeJournalSubmissionRequirements(requirements),
+      },
+    });
+    await refetchJournals();
+  };
+
+  const keepJournalSubmissionValue = async (key: string, value: string) => {
+    if (!isDefined(manuscript)) return;
+    if (key === 'KEYWORDS') {
+      const keywordsSection = sections.find(
+        (section) => section.sectionType?.toLocaleUpperCase() === 'KEYWORDS',
+      );
+      if (!isDefined(keywordsSection)) return;
+      await updateOneRecord({
+        objectNameSingular: 'manuscriptSection',
+        idToUpdate: keywordsSection.id,
+        updateOneRecordInput: { content: value, wordCount: countWords(value) },
+      });
+      await refetchSections();
+      return;
+    }
+    const field =
+      key === 'AUTHOR_ORDER'
+        ? 'authorLine'
+        : key === 'CORRESPONDING_AUTHOR'
+          ? 'correspondingAuthor'
+          : undefined;
+    if (field === undefined) return;
+    await updateOneRecord({
+      objectNameSingular: 'manuscript',
+      idToUpdate: manuscript.id,
+      updateOneRecordInput: { [field]: value },
+    });
+    await refetchManuscripts();
+  };
+
   const selectJournal = (nextJournalId: string) => {
     if (!isDefined(manuscript)) return;
     setJournalId(nextJournalId);
@@ -357,6 +439,9 @@ export const useManuscriptComposer = () => {
     addSection,
     scaffoldSections,
     saveSubmissionDetails,
+    saveSubmissionRequirementValues,
+    saveJournalSubmissionRequirements,
+    keepJournalSubmissionValue,
     selectJournal,
     saveStyleOverrides,
     refetchImportedRecords,

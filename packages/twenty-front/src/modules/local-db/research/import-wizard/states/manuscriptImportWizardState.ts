@@ -1,5 +1,6 @@
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { type ExistingImportReference } from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
 
 export type ManuscriptImportWizardOptions = {
@@ -10,6 +11,9 @@ export type ManuscriptImportWizardOptions = {
   existingFigureRefKeys: string[];
   onChanged: () => void;
   exportTableStyle?: ManuscriptTableStyle;
+  targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
+  submissionExtras?: string | null;
+  competingInterests?: string | null;
 };
 
 export type ManuscriptImportWizardState = {

@@ -7,6 +7,7 @@ import {
   type PreparedManuscriptImport,
 } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 import { portableManuscriptRecordUpdate } from '@/local-db/research/manuscript/manuscriptPortableImport';
+import { type SubmissionTransposeUpdate } from '@/local-db/research/manuscript/manuscriptSubmissionTranspose';
 import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
@@ -48,6 +49,7 @@ type ManuscriptMetadataUpdate = {
   highlights?: string;
   competingInterests?: string;
   suggestedReviewers?: string;
+  submissionExtras?: string;
 };
 
 const UNTITLED = /^untitled/i;
@@ -81,6 +83,7 @@ export const useManuscriptImportCommit = ({
     async (
       document: ImportedDocument,
       preparedImport: PreparedManuscriptImport,
+      submissionTransposeUpdate?: SubmissionTransposeUpdate,
     ): Promise<boolean> => {
       if (commitMutexRef.current || failed) return false;
       const totalSectionCount = preparedImport.sections.length;
@@ -177,6 +180,9 @@ export const useManuscriptImportCommit = ({
         }
         if (isDefined(document.correspondingAuthor)) {
           manuscriptUpdate.correspondingAuthor = document.correspondingAuthor;
+        }
+        if (submissionTransposeUpdate !== undefined) {
+          Object.assign(manuscriptUpdate, submissionTransposeUpdate);
         }
         if (document.portablePackage !== undefined) {
           Object.assign(

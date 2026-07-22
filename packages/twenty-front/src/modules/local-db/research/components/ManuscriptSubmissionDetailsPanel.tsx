@@ -12,10 +12,9 @@ import {
   type ManuscriptAffiliation,
   type ManuscriptAuthor,
 } from '@/local-db/research/manuscript/manuscriptContributors';
-import { type SubmissionMaterials } from '@/local-db/research/manuscript/manuscriptSubmission';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
-export type ManuscriptSubmissionDetails = SubmissionMaterials & {
+export type ManuscriptSubmissionDetails = {
   authorLine?: string | null;
   affiliations?: string | null;
   correspondingAuthor?: string | null;
@@ -26,8 +25,6 @@ export type ManuscriptSubmissionDetails = SubmissionMaterials & {
 
 type ManuscriptSubmissionDetailsPanelProps = {
   initialValues: ManuscriptSubmissionDetails;
-  journalName: string;
-  requiredArtifacts: string[];
   onSave: (values: ManuscriptSubmissionDetails) => Promise<void>;
 };
 
@@ -176,14 +173,6 @@ const StyledPreview = styled.div`
   text-align: center;
 `;
 
-const ARTIFACT_LABELS: Record<string, string> = {
-  COVER_LETTER: 'cover letter',
-  HIGHLIGHTS: 'highlights',
-  COMPETING_INTERESTS: 'competing-interests declaration',
-  SUGGESTED_REVIEWERS: 'suggested reviewers',
-  SEPARATE_FIGURES: 'separate figure files',
-};
-
 const nextEntityId = (
   prefix: 'author' | 'affiliation',
   entities: Array<{ id: string }>,
@@ -199,8 +188,6 @@ const nextEntityId = (
 
 export const ManuscriptSubmissionDetailsPanel = ({
   initialValues,
-  journalName,
-  requiredArtifacts,
   onSave,
 }: ManuscriptSubmissionDetailsPanelProps) => {
   const [values, setValues] = useState(initialValues);
@@ -241,10 +228,6 @@ export const ManuscriptSubmissionDetailsPanel = ({
     }
   };
 
-  const required = requiredArtifacts
-    .map((artifact) => ARTIFACT_LABELS[artifact] ?? artifact.toLowerCase())
-    .join(', ');
-
   const moveAffiliation = (index: number, direction: -1 | 1) => {
     setAffiliations((current) => {
       const target = index + direction;
@@ -272,11 +255,6 @@ export const ManuscriptSubmissionDetailsPanel = ({
 
   return (
     <StyledPanel>
-      <StyledHint>
-        These values connect the reusable manuscript to{' '}
-        {journalName || 'the selected journal'}.
-        {required.length > 0 ? ` Required package items: ${required}.` : ''}
-      </StyledHint>
       <StyledGrid>
         <StyledWideField>
           Authors and affiliation links
@@ -526,42 +504,6 @@ export const ManuscriptSubmissionDetailsPanel = ({
             />
           </StyledField>
         </StyledWideGroup>
-        <StyledField>
-          Cover letter
-          <StyledTextarea
-            aria-label="Cover letter"
-            value={values.coverLetter ?? ''}
-            onChange={(event) => updateValue('coverLetter', event.target.value)}
-          />
-        </StyledField>
-        <StyledField>
-          Highlights (one per line)
-          <StyledTextarea
-            aria-label="Highlights"
-            value={values.highlights ?? ''}
-            onChange={(event) => updateValue('highlights', event.target.value)}
-          />
-        </StyledField>
-        <StyledField>
-          Competing-interests declaration
-          <StyledTextarea
-            aria-label="Competing-interests declaration"
-            value={values.competingInterests ?? ''}
-            onChange={(event) =>
-              updateValue('competingInterests', event.target.value)
-            }
-          />
-        </StyledField>
-        <StyledField>
-          Suggested reviewers (one per line)
-          <StyledTextarea
-            aria-label="Suggested reviewers"
-            value={values.suggestedReviewers ?? ''}
-            onChange={(event) =>
-              updateValue('suggestedReviewers', event.target.value)
-            }
-          />
-        </StyledField>
       </StyledGrid>
       <div>
         <Button

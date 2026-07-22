@@ -29,6 +29,7 @@ export type ManuscriptRecord = {
   supplementAuthorLine?: string | null;
   supplementAffiliations?: string | null;
   exportStyleOverrides?: string | null;
+  submissionExtras?: string | null;
   coverLetter?: string | null;
   highlights?: string | null;
   competingInterests?: string | null;
@@ -52,6 +53,7 @@ export const MANUSCRIPT_GQL = {
   supplementAuthorLine: true,
   supplementAffiliations: true,
   exportStyleOverrides: true,
+  submissionExtras: true,
   coverLetter: true,
   highlights: true,
   competingInterests: true,
@@ -133,6 +135,7 @@ export const JOURNAL_GQL = {
   keywordMinimum: true,
   keywordMaximum: true,
   requiredArtifacts: true,
+  submissionRequirements: true,
   profileKey: true,
   lineNumbering: true,
   pageNumbering: true,

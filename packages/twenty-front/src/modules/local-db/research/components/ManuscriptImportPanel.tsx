@@ -6,6 +6,7 @@ import { ManuscriptImportWizardRoot } from '@/local-db/research/import-wizard/co
 import { useOpenManuscriptImportWizard } from '@/local-db/research/import-wizard/hooks/useOpenManuscriptImportWizard';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { type ExistingImportReference } from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 
 type ManuscriptImportPanelProps = {
   compact?: boolean;
@@ -16,6 +17,9 @@ type ManuscriptImportPanelProps = {
   existingFigureRefKeys: string[];
   onChanged: () => void;
   exportTableStyle?: ManuscriptTableStyle;
+  targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
+  submissionExtras?: string | null;
+  competingInterests?: string | null;
 };
 
 const StyledPanel = styled.div`
@@ -38,6 +42,9 @@ export const ManuscriptImportPanel = ({
   existingFigureRefKeys,
   onChanged,
   exportTableStyle,
+  targetJournal,
+  submissionExtras,
+  competingInterests,
 }: ManuscriptImportPanelProps) => {
   const { openManuscriptImportWizard } = useOpenManuscriptImportWizard();
 
@@ -63,6 +70,9 @@ export const ManuscriptImportPanel = ({
             existingFigureRefKeys,
             onChanged,
             exportTableStyle,
+            targetJournal,
+            submissionExtras,
+            competingInterests,
           })
         }
       />

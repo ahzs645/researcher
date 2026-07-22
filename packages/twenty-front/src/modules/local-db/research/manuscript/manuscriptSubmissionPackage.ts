@@ -18,6 +18,11 @@ import {
   type SubmissionReadiness,
   validateSubmission,
 } from './manuscriptSubmission';
+import {
+  CANONICAL_REQUIREMENT_FIELDS,
+  parseManuscriptSubmissionExtras,
+  submissionJournalKey,
+} from './manuscriptSubmissionRequirements';
 
 type Zippable = Record<string, Uint8Array>;
 
@@ -115,6 +120,41 @@ const addFigures = (files: Zippable, bundle: ManuscriptBundle) => {
   addText(files, 'figures/linked-figures.txt', linkedFigures.join('\n'));
 };
 
+const addSubmissionExtras = (
+  files: Zippable,
+  bundle: ManuscriptBundle,
+  materials: SubmissionMaterials,
+): string[] => {
+  const template = {
+    id:
+      bundle.style.id?.trim() ||
+      bundle.style.profileKey?.trim() ||
+      bundle.metadata.journal ||
+      'journal',
+    profileKey: bundle.style.profileKey,
+  };
+  const values =
+    parseManuscriptSubmissionExtras(materials.submissionExtras)[
+      submissionJournalKey(template)
+    ] ?? {};
+  const filenames: string[] = [];
+
+  for (const [key, value] of Object.entries(values)) {
+    if (
+      CANONICAL_REQUIREMENT_FIELDS[key] !== undefined ||
+      value.trim().length === 0
+    ) {
+      continue;
+    }
+    const safeKey = key.replace(/[^A-Za-z0-9_-]+/g, '-');
+    const filename = `submission-extras/${safeKey}.txt`;
+    addText(files, filename, value);
+    filenames.push(filename);
+  }
+
+  return filenames.sort();
+};
+
 export const createSubmissionPackage = async (
   bundle: ManuscriptBundle,
   materials: SubmissionMaterials,
@@ -128,10 +168,11 @@ export const createSubmissionPackage = async (
     await exportManuscriptToDocxBlob(bundle),
   );
   addText(files, 'references.json', JSON.stringify(bundle.cslJson, null, 2));
+  const submissionExtraFiles = addSubmissionExtras(files, bundle, materials);
   addText(
     files,
     'submission-readiness.txt',
-    buildSubmissionManifest(bundle, readiness),
+    buildSubmissionManifest(bundle, readiness, submissionExtraFiles),
   );
   addText(
     files,

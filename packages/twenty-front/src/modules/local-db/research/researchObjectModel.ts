@@ -1377,6 +1377,13 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
           'Per-manuscript JSON overrides layered on the journal profile',
       },
       {
+        name: 'submissionExtras',
+        label: 'Submission extras',
+        type: 'TEXT',
+        icon: 'IconBraces',
+        description: 'Per-journal JSON snapshots of requirement values',
+      },
+      {
         name: 'coverLetter',
         label: 'Cover letter',
         type: 'TEXT',
@@ -2124,6 +2131,13 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         type: 'MULTI_SELECT',
         icon: 'IconFiles',
         options: SUBMISSION_ARTIFACT_OPTIONS,
+      },
+      {
+        name: 'submissionRequirements',
+        label: 'Submission requirements',
+        type: 'TEXT',
+        icon: 'IconBraces',
+        description: 'JSON list of { key, required, label?, notes? }',
       },
       {
         name: 'lineNumbering',

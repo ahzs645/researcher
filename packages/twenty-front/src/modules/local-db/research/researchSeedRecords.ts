@@ -1,5 +1,6 @@
 import { researchDeterministicUuid } from './researchMetadataBuilder';
 import { RESEARCH_GRANT_SOURCE_SEEDS } from './researchGrantSourceData';
+import { serializeJournalSubmissionRequirements } from './manuscript/manuscriptSubmissionRequirements';
 
 // Demo seed records for the research objects. Mirrors how the bridge seeds the
 // standard CRM (company/person/…) so a fresh local workspace opens with a
@@ -1068,6 +1069,123 @@ const reusableAnswerRecords = (): SeedRecord[] => [
   }),
 ];
 
+const UNKNOWN_REQUIRED_STATUS_NOTES =
+  'The historical submission package did not establish this as required.';
+
+const journalSubmissionRequirements = (
+  requirements: Array<readonly [key: string, required: boolean]>,
+): string =>
+  serializeJournalSubmissionRequirements(
+    requirements.map(([key, required]) => ({
+      key,
+      required,
+      ...(required ? {} : { notes: UNKNOWN_REQUIRED_STATUS_NOTES }),
+    })),
+  );
+
+const AIR_QUALITY_ATMOSPHERE_HEALTH_SUBMISSION_REQUIREMENTS =
+  journalSubmissionRequirements([
+    ['FULL_TITLE', true],
+    ['ARTICLE_TYPE', true],
+    ['ABSTRACT', true],
+    ['KEYWORDS', true],
+    ['AUTHOR_ORDER', true],
+    ['FIRST_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR_INSTITUTION', true],
+    ['CORRESPONDING_AUTHOR_COUNTRY', true],
+    ['AFFILIATIONS', true],
+    ['AUTHOR_SECONDARY_INFORMATION', false],
+    ['FUNDING_INFORMATION', false],
+    ['MANUSCRIPT_FILE', true],
+    ['SEPARATE_FIGURES', true],
+    ['ACKNOWLEDGMENTS', true],
+    ['FUNDING_DECLARATION', true],
+    ['COMPETING_INTERESTS', true],
+    ['DATA_AVAILABILITY', true],
+  ]);
+
+const ENVIRONMENTAL_SCIENCE_POLLUTION_RESEARCH_SUBMISSION_REQUIREMENTS =
+  journalSubmissionRequirements([
+    ['FULL_TITLE', true],
+    ['ARTICLE_TYPE', true],
+    ['ABSTRACT', true],
+    ['KEYWORDS', true],
+    ['AUTHOR_ORDER', true],
+    ['FIRST_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR_INSTITUTION', true],
+    ['CORRESPONDING_AUTHOR_COUNTRY', true],
+    ['AFFILIATIONS', true],
+    ['AUTHOR_SECONDARY_INFORMATION', false],
+    ['FUNDING_INFORMATION', false],
+    ['SUGGESTED_REVIEWERS', false],
+    ['OPPOSED_REVIEWERS', false],
+    ['SPECIAL_ISSUE_RESPONSE', true],
+    ['MANUSCRIPT_FILE', true],
+    ['SEPARATE_FIGURES', true],
+    ['COVER_LETTER', true],
+    ['ACKNOWLEDGMENTS', true],
+    ['FUNDING_DECLARATION', true],
+    ['COMPETING_INTERESTS', true],
+    ['AUTHOR_CONTRIBUTIONS', true],
+    ['DATA_AVAILABILITY', true],
+    ['ETHICS_APPROVAL', true],
+    ['CONSENT_TO_PARTICIPATE', true],
+    ['CONSENT_FOR_PUBLICATION', true],
+    ['ORIGINALITY_STATEMENT', true],
+    ['PREPRINT_DISCLOSURE', true],
+  ]);
+
+const ARCHIVES_ENVIRONMENTAL_CONTAMINATION_SUBMISSION_REQUIREMENTS =
+  journalSubmissionRequirements([
+    ['FULL_TITLE', true],
+    ['ARTICLE_TYPE', true],
+    ['ABSTRACT', true],
+    ['KEYWORDS', true],
+    ['AUTHOR_ORDER', true],
+    ['FIRST_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR_INSTITUTION', true],
+    ['CORRESPONDING_AUTHOR_COUNTRY', true],
+    ['AFFILIATIONS', true],
+    ['AUTHOR_SECONDARY_INFORMATION', false],
+    ['FUNDING_INFORMATION', false],
+    ['SUGGESTED_REVIEWERS', false],
+    ['MANUSCRIPT_FILE', true],
+    ['SEPARATE_FIGURES', true],
+    ['ACKNOWLEDGMENTS', true],
+    ['FUNDING_DECLARATION', true],
+    ['COMPETING_INTERESTS', true],
+    ['AUTHOR_CONTRIBUTIONS', true],
+    ['DATA_AVAILABILITY', true],
+    ['ETHICS_APPROVAL', true],
+    ['CONSENT_TO_PARTICIPATE', true],
+    ['CONSENT_FOR_PUBLICATION', true],
+  ]);
+
+const ATMOSPHERIC_ENVIRONMENT_SUBMISSION_REQUIREMENTS =
+  journalSubmissionRequirements([
+    ['FULL_TITLE', true],
+    ['ARTICLE_TYPE', true],
+    ['ABSTRACT', true],
+    ['KEYWORDS', true],
+    ['AUTHOR_ORDER', true],
+    ['FIRST_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR_INSTITUTION', true],
+    ['CORRESPONDING_AUTHOR_COUNTRY', true],
+    ['AFFILIATIONS', true],
+    ['SUGGESTED_REVIEWERS', false],
+    ['MANUSCRIPT_FILE', true],
+    ['COVER_LETTER', true],
+    ['HIGHLIGHTS', true],
+    ['DECLARATION_OF_INTERESTS_FILE', true],
+    ['ACKNOWLEDGMENTS', true],
+    ['COMPETING_INTERESTS', true],
+    ['ORIGINALITY_STATEMENT', true],
+  ]);
+
 // The starter format library. Ships in BOTH blank and demo workspaces (a format
 // is scaffolding, not demo content), so a fresh workspace can format a paper
 // without hand-building a template first. Every `citationStyleId` is one of the
@@ -1261,6 +1379,8 @@ const journalTemplateRecords = (): SeedRecord[] => [
     keywordMinimum: 4,
     keywordMaximum: 6,
     requiredArtifacts: ['COVER_LETTER', 'SUGGESTED_REVIEWERS'],
+    submissionRequirements:
+      AIR_QUALITY_ATMOSPHERE_HEALTH_SUBMISSION_REQUIREMENTS,
     lineNumbering: true,
     pageNumbering: true,
     sectionNumbering: false,
@@ -1302,6 +1422,8 @@ const journalTemplateRecords = (): SeedRecord[] => [
         'SUGGESTED_REVIEWERS',
         'SEPARATE_FIGURES',
       ],
+      submissionRequirements:
+        ENVIRONMENTAL_SCIENCE_POLLUTION_RESEARCH_SUBMISSION_REQUIREMENTS,
       lineNumbering: true,
       pageNumbering: true,
       sectionNumbering: false,
@@ -1336,6 +1458,8 @@ const journalTemplateRecords = (): SeedRecord[] => [
     keywordMinimum: 4,
     keywordMaximum: 6,
     requiredArtifacts: ['SUGGESTED_REVIEWERS', 'SEPARATE_FIGURES'],
+    submissionRequirements:
+      ARCHIVES_ENVIRONMENTAL_CONTAMINATION_SUBMISSION_REQUIREMENTS,
     lineNumbering: true,
     pageNumbering: true,
     sectionNumbering: false,
@@ -1368,6 +1492,7 @@ const journalTemplateRecords = (): SeedRecord[] => [
     keywordMinimum: 1,
     keywordMaximum: 7,
     requiredArtifacts: ['COVER_LETTER', 'HIGHLIGHTS', 'COMPETING_INTERESTS'],
+    submissionRequirements: ATMOSPHERIC_ENVIRONMENT_SUBMISSION_REQUIREMENTS,
     lineNumbering: false,
     pageNumbering: true,
     sectionNumbering: false,

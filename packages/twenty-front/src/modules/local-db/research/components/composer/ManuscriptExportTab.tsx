@@ -66,6 +66,7 @@ export const ManuscriptExportTab = ({
         highlights: manuscript.highlights,
         competingInterests: manuscript.competingInterests,
         suggestedReviewers: manuscript.suggestedReviewers,
+        submissionExtras: manuscript.submissionExtras,
       }}
       portableSource={portableSource}
     />

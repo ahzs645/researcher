@@ -8,6 +8,7 @@ import { ManuscriptImportPanel } from '@/local-db/research/components/Manuscript
 import { ManuscriptSectionEditor } from '@/local-db/research/components/ManuscriptSectionEditor';
 import { ManuscriptSectionMetadataPanel } from '@/local-db/research/components/ManuscriptSectionMetadataPanel';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
+import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 import { wordLimitStatus } from '@/local-db/research/manuscript/manuscriptScaffold';
 import {
   type FigureLike,
@@ -23,6 +24,9 @@ type ManuscriptWriteTabProps = {
   references: ReferenceLike[];
   selectedSection?: SectionLike;
   exportTableStyle: ManuscriptTableStyle;
+  targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
+  submissionExtras?: string | null;
+  competingInterests?: string | null;
   onSelectSection: (sectionId: string) => void;
   onPersistSection: (markdown: string) => void;
   onAddSection: () => void;
@@ -185,6 +189,9 @@ export const ManuscriptWriteTab = ({
   references,
   selectedSection,
   exportTableStyle,
+  targetJournal,
+  submissionExtras,
+  competingInterests,
   onSelectSection,
   onPersistSection,
   onAddSection,
@@ -214,6 +221,9 @@ export const ManuscriptWriteTab = ({
                   typeof refKey === 'string' && refKey.length > 0,
               )}
             exportTableStyle={exportTableStyle}
+            targetJournal={targetJournal}
+            submissionExtras={submissionExtras}
+            competingInterests={competingInterests}
             onChanged={onImported}
           />
           <Button

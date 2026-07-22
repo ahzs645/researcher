@@ -10,6 +10,10 @@ import {
   type ImportedSectionDraft,
 } from '@/local-db/research/manuscript/manuscriptDocImport';
 import { prepareManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import {
+  buildSubmissionTransposeUpdate,
+  hasTransposableSubmissionDeclarations,
+} from '@/local-db/research/manuscript/manuscriptSubmissionTranspose';
 
 type ManuscriptImportReviewStepProps = {
   initialDocument: ImportedDocument;
@@ -92,6 +96,17 @@ const StyledWarnings = styled.div`
   font-size: ${themeCssVariables.font.size.xs};
 `;
 
+const StyledTranspose = styled.label`
+  align-items: center;
+  background: ${themeCssVariables.background.secondary};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.secondary};
+  display: flex;
+  font-size: ${themeCssVariables.font.size.sm};
+  gap: ${themeCssVariables.spacing[2]};
+  padding: ${themeCssVariables.spacing[2]};
+`;
+
 const StyledSectionList = styled.div`
   display: flex;
   flex: 1;
@@ -169,6 +184,7 @@ export const ManuscriptImportReviewStep = ({
   registerCommitState,
 }: ManuscriptImportReviewStepProps) => {
   const [document, setDocument] = useState(initialDocument);
+  const [transposeDeclarations, setTransposeDeclarations] = useState(true);
   const preparedImport = useMemo(
     () =>
       prepareManuscriptImport(document, reconcile, {
@@ -208,7 +224,22 @@ export const ManuscriptImportReviewStep = ({
   };
 
   const handleConfirm = async () => {
-    const succeeded = await commitImport(document, preparedImport);
+    const submissionTransposeUpdate =
+      transposeDeclarations && options.targetJournal !== undefined
+        ? buildSubmissionTransposeUpdate({
+            sections: preparedImport.sections,
+            template: options.targetJournal,
+            manuscript: {
+              competingInterests: options.competingInterests,
+              submissionExtras: options.submissionExtras,
+            },
+          })
+        : undefined;
+    const succeeded = await commitImport(
+      document,
+      preparedImport,
+      submissionTransposeUpdate,
+    );
     if (!succeeded) {
       options.onChanged();
       return;
@@ -238,6 +269,20 @@ export const ManuscriptImportReviewStep = ({
       </StyledHeader>
 
       <StyledSectionList>
+        {options.targetJournal !== undefined &&
+        hasTransposableSubmissionDeclarations(preparedImport.sections) ? (
+          <StyledTranspose>
+            <input
+              type="checkbox"
+              checked={transposeDeclarations}
+              onChange={(event) =>
+                setTransposeDeclarations(event.target.checked)
+              }
+            />
+            Transpose declarations into{' '}
+            {options.targetJournal.name ?? 'the journal'} checklist
+          </StyledTranspose>
+        ) : null}
         {document.sections.map((section, sectionIndex) => (
           <StyledSectionRow key={`${section.orderIndex}-${sectionIndex}`}>
             <StyledInput

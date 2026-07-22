@@ -106,6 +106,9 @@ export const ManuscriptComposerPage = () => {
   }
 
   const manuscript = composer.manuscript;
+  const linkedJournal = composer.journals.find(
+    (journal) => journal.id === manuscript.targetJournal?.id,
+  );
   const exportTableStyle =
     MANUSCRIPT_TABLE_STYLES.find(
       (tableStyle) => tableStyle === composer.effectiveStyle.tableStyle,
@@ -149,6 +152,9 @@ export const ManuscriptComposerPage = () => {
             references={composer.references}
             selectedSection={composer.selectedSection}
             exportTableStyle={exportTableStyle}
+            targetJournal={linkedJournal}
+            submissionExtras={manuscript.submissionExtras}
+            competingInterests={manuscript.competingInterests}
             onSelectSection={composer.selectSection}
             onPersistSection={composer.persistSection}
             onAddSection={() => void composer.addSection()}
@@ -182,9 +188,13 @@ export const ManuscriptComposerPage = () => {
         {manuscriptComposerTab === 'submission' ? (
           <ManuscriptSubmissionTab
             manuscript={manuscript}
-            journalName={composer.style.name ?? manuscript.targetVenue ?? ''}
-            requiredArtifacts={composer.style.requiredArtifacts ?? []}
+            template={linkedJournal}
+            sections={composer.sections}
             onSave={composer.saveSubmissionDetails}
+            onPickTargetJournal={() => setManuscriptComposerTab('export')}
+            onSaveRequirementValues={composer.saveSubmissionRequirementValues}
+            onSaveRequirements={composer.saveJournalSubmissionRequirements}
+            onKeepJournalValue={composer.keepJournalSubmissionValue}
           />
         ) : null}
 

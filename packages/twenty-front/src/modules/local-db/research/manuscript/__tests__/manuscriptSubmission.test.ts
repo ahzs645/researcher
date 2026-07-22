@@ -113,4 +113,40 @@ describe('validateSubmission', () => {
         ?.severity,
     ).toBe('ERROR');
   });
+
+  it('warns without blocking when a dynamic journal requirement is empty', () => {
+    const bundle = buildManuscriptBundle({
+      ...baseInput,
+      style: {
+        ...baseInput.style,
+        id: 'journal-id',
+        name: 'Test Journal',
+        profileKey: 'test-journal',
+        submissionRequirements: JSON.stringify([
+          { key: 'DATA_AVAILABILITY', required: true },
+          { key: 'FUNDING', required: true },
+        ]),
+      },
+    });
+    const readiness = validateSubmission(bundle, {
+      coverLetter: 'Dear Editor.',
+      competingInterests: 'Nothing to declare.',
+      highlights: ['One result', 'Second result', 'Third result'].join('\n'),
+      submissionExtras: JSON.stringify({
+        'test-journal': { DATA_AVAILABILITY: 'Available on request.' },
+      }),
+    });
+
+    expect(
+      readiness.checks.find(
+        (check) => check.id === 'journal-requirement-FUNDING',
+      ),
+    ).toEqual({
+      id: 'journal-requirement-FUNDING',
+      label: 'Funding',
+      detail: 'Required by Test Journal: Funding',
+      severity: 'WARNING',
+    });
+    expect(readiness.ready).toBe(true);
+  });
 });

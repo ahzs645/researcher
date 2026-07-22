@@ -68,6 +68,7 @@ export type ReferenceLike = {
 // The journal format's knobs — everything the numbering/citation/layout logic
 // reads. Every field is optional; sensible defaults fill the gaps.
 export type JournalStyle = {
+  id?: string | null;
   name?: string | null;
   profileKey?: string | null;
   citationMode?: string | null;
@@ -91,6 +92,7 @@ export type JournalStyle = {
   keywordMinimum?: number | null;
   keywordMaximum?: number | null;
   requiredArtifacts?: string[] | null;
+  submissionRequirements?: string | null;
   lineNumbering?: boolean | null;
   pageNumbering?: boolean | null;
   sectionNumbering?: boolean | null;

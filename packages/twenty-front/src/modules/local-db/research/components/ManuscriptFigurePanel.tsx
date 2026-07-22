@@ -9,6 +9,7 @@ import { ManuscriptFigureCreateForm } from '@/local-db/research/components/Manus
 import { ManuscriptFigureListItem } from '@/local-db/research/components/ManuscriptFigureListItem';
 import {
   chartPngFromTable,
+  deriveFigureNameFromCaption,
   fileToDataUrl,
   slugifyFigureKey,
 } from '@/local-db/research/components/composer/manuscriptFigurePanelUtils';
@@ -137,7 +138,7 @@ export const ManuscriptFigurePanel = ({
       return false;
     }
     await createOneRecord({
-      name: captionText || 'Chart',
+      name: deriveFigureNameFromCaption(captionText) || 'Chart',
       manuscriptId,
       assetKind: 'FIGURE',
       placement,
@@ -172,7 +173,8 @@ export const ManuscriptFigurePanel = ({
           slugifyFigureKey(trimmedCaption).slice(0, 24) ||
           `asset-${Date.now()}`;
         await createOneRecord({
-          name: trimmedCaption || 'Untitled figure',
+          name:
+            deriveFigureNameFromCaption(trimmedCaption) || 'Untitled figure',
           manuscriptId,
           assetKind,
           placement,

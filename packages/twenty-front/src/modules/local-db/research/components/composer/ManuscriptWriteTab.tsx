@@ -86,7 +86,10 @@ const StyledOutline = styled.nav`
   }
 `;
 
-const StyledOutlineRow = styled.button<{ active: boolean }>`
+const StyledOutlineRow = styled.button<{
+  active: boolean;
+  excludedFromExport: boolean;
+}>`
   background: ${({ active }) =>
     active ? themeCssVariables.background.transparent.blue : 'transparent'};
   border: 0;
@@ -96,12 +99,15 @@ const StyledOutlineRow = styled.button<{ active: boolean }>`
   display: flex;
   flex-direction: column;
   gap: ${themeCssVariables.spacing[1]};
+  opacity: ${({ excludedFromExport }) => (excludedFromExport ? 0.55 : 1)};
   padding: ${themeCssVariables.spacing[2]};
   text-align: left;
+  transition: opacity 100ms ease;
   width: 100%;
 
   &:hover {
     background: ${themeCssVariables.background.transparent.light};
+    opacity: ${({ excludedFromExport }) => (excludedFromExport ? 0.75 : 1)};
   }
 `;
 
@@ -237,6 +243,7 @@ export const ManuscriptWriteTab = ({
                 key={section.id}
                 type="button"
                 active={section.id === selectedSection?.id}
+                excludedFromExport={section.includeInExport === false}
                 onClick={() => onSelectSection(section.id)}
               >
                 <StyledOutlineTitle>

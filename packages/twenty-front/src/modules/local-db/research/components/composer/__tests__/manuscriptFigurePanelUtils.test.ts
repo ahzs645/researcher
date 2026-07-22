@@ -44,6 +44,19 @@ describe('manuscriptFigurePanelUtils', () => {
       ).toBe('Updated caption with more context');
     });
 
+    it('recognizes a legacy full-caption name as auto-derived', () => {
+      const previousCaption =
+        'Indoor air quality measurements across participating study sites during winter';
+
+      expect(
+        syncFigureNameFromCaption({
+          currentName: previousCaption,
+          previousCaption,
+          nextCaption: 'Updated caption',
+        }),
+      ).toBe('Updated caption');
+    });
+
     it('preserves a manually edited name when the caption changes', () => {
       expect(
         syncFigureNameFromCaption({

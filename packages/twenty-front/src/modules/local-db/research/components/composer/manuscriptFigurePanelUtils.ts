@@ -39,9 +39,11 @@ export const syncFigureNameFromCaption = ({
 }: SyncFigureNameFromCaptionArgs): string => {
   const normalizedCurrentName = normalizeFigureNameSource(currentName);
   const previousDerivedName = deriveFigureNameFromCaption(previousCaption);
+  const normalizedPreviousCaption = normalizeFigureNameSource(previousCaption);
   const wasAutoDerived =
     normalizedCurrentName.length === 0 ||
-    normalizedCurrentName === previousDerivedName;
+    normalizedCurrentName === previousDerivedName ||
+    normalizedCurrentName === normalizedPreviousCaption;
 
   return wasAutoDerived
     ? deriveFigureNameFromCaption(nextCaption)

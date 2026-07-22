@@ -1,10 +1,13 @@
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
+import { type ExistingImportReference } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
 
 export type ManuscriptImportWizardOptions = {
   manuscriptId: string;
   manuscriptName?: string | null;
   existingSectionCount: number;
+  existingReferences: ExistingImportReference[];
+  existingFigureRefKeys: string[];
   onChanged: () => void;
   exportTableStyle?: ManuscriptTableStyle;
 };

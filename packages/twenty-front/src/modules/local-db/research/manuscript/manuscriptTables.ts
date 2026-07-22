@@ -7,7 +7,11 @@ const SEPARATOR_ROW = /^\|?[\s:|-]+\|?$/;
 
 const isEscaped = (value: string, index: number): boolean => {
   let backslashCount = 0;
-  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+  for (
+    let cursor = index - 1;
+    cursor >= 0 && value[cursor] === '\\';
+    cursor -= 1
+  ) {
     backslashCount += 1;
   }
   return backslashCount % 2 === 1;

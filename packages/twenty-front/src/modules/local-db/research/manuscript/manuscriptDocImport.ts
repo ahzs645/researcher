@@ -37,6 +37,9 @@ export type ImportedDocument = {
     embeddedImageCount: number;
     tableCount: number;
   };
+  // Exact body lines that the import map deliberately demoted from captions.
+  // Asset extraction must preserve them as prose instead of reclassifying them.
+  suppressedAssetLineSignatures?: string[];
   portablePackage?: PortableResearchPaperManifest;
 };
 
@@ -777,11 +780,11 @@ export const parseWordMlToMarkdown = (
     parseWordMlToMarkdownBlocks(documentXml, options),
   );
 
-export const parseWordDocument = (
+export const parseWordDocumentFromBlocks = (
   documentXml: string,
-  options: WordImportOptions = {},
+  blocks: WordMarkdownBlock[],
 ): ImportedDocument => {
-  const markdown = parseWordMlToMarkdown(documentXml, options);
+  const markdown = serializeWordMarkdownBlocks(blocks);
   const document = parseMarkdownDocument(markdown);
   const equationCount = (documentXml.match(/<m:oMath\b/g) ?? []).length;
   const embeddedImageCount = (
@@ -832,6 +835,15 @@ export const parseWordDocument = (
     stats: { equationCount, embeddedImageCount, tableCount },
   };
 };
+
+export const parseWordDocument = (
+  documentXml: string,
+  options: WordImportOptions = {},
+): ImportedDocument =>
+  parseWordDocumentFromBlocks(
+    documentXml,
+    parseWordMlToMarkdownBlocks(documentXml, options),
+  );
 
 // ── Lift standalone tables into numbered figure records ─────────────────────
 // An imported GFM table sitting in a section body is data, not prose. This pulls
@@ -892,6 +904,7 @@ export const extractTablesToFigures = (
   sections: ImportedSectionDraft[],
   startOrderIndex = 0,
   usedRefKeys: Set<string> = new Set<string>(),
+  suppressedAssetLineSignatures: ReadonlySet<string> = new Set<string>(),
 ): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
   const figures: ImportedFigureDraft[] = [];
   let order = startOrderIndex;
@@ -921,7 +934,9 @@ export const extractTablesToFigures = (
             previousIndex -= 1;
           }
           const previous = out[previousIndex]?.trim() ?? '';
-          const captionMatch = parseImportedAssetCaption(previous, 'TABLE');
+          const captionMatch = suppressedAssetLineSignatures.has(previous)
+            ? null
+            : parseImportedAssetCaption(previous, 'TABLE');
           let captionIndex = end;
           while (
             captionIndex < lines.length &&
@@ -930,7 +945,9 @@ export const extractTablesToFigures = (
             captionIndex += 1;
           }
           const following = lines[captionIndex]?.trim() ?? '';
-          const followingMatch = parseImportedAssetCaption(following, 'TABLE');
+          const followingMatch = suppressedAssetLineSignatures.has(following)
+            ? null
+            : parseImportedAssetCaption(following, 'TABLE');
           const preferFollowing =
             followingMatch !== null &&
             followingMatch.explicitLabel &&
@@ -994,6 +1011,7 @@ export const extractImagesToFigures = (
   sections: ImportedSectionDraft[],
   startOrderIndex = 0,
   usedRefKeys: Set<string> = new Set<string>(),
+  suppressedAssetLineSignatures: ReadonlySet<string> = new Set<string>(),
 ): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
   const figures: ImportedFigureDraft[] = [];
   let order = startOrderIndex;
@@ -1019,7 +1037,9 @@ export const extractImagesToFigures = (
         previousCaptionIndex -= 1;
       }
       const previousLine = out[previousCaptionIndex]?.trim() ?? '';
-      const previousCaption = parseImportedAssetCaption(previousLine, 'FIGURE');
+      const previousCaption = suppressedAssetLineSignatures.has(previousLine)
+        ? null
+        : parseImportedAssetCaption(previousLine, 'FIGURE');
       let nextCaptionIndex = index + 1;
       while (
         nextCaptionIndex < lines.length &&
@@ -1028,7 +1048,9 @@ export const extractImagesToFigures = (
         nextCaptionIndex += 1;
       }
       const nextLine = lines[nextCaptionIndex]?.trim() ?? '';
-      const nextCaption = parseImportedAssetCaption(nextLine, 'FIGURE');
+      const nextCaption = suppressedAssetLineSignatures.has(nextLine)
+        ? null
+        : parseImportedAssetCaption(nextLine, 'FIGURE');
       const preferNext =
         nextCaption !== null &&
         nextCaption.explicitLabel &&
@@ -1089,12 +1111,14 @@ export const extractCaptionOnlyFigures = (
   sections: ImportedSectionDraft[],
   startOrderIndex = 0,
   usedRefKeys: Set<string> = new Set<string>(),
+  suppressedAssetLineSignatures: ReadonlySet<string> = new Set<string>(),
 ): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
   const figures: ImportedFigureDraft[] = [];
   let order = startOrderIndex;
 
   const nextSections = sections.map((section) => {
     const out = section.content.split('\n').map((line) => {
+      if (suppressedAssetLineSignatures.has(line.trim())) return line;
       const captionInfo = parseImportedAssetCaption(line.trim(), 'FIGURE');
       if (
         captionInfo === null ||

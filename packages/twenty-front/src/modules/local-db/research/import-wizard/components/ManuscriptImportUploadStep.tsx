@@ -49,7 +49,7 @@ const StyledIntro = styled.div`
   line-height: 1.5;
 `;
 
-const StyledDropZone = styled.div<{ isDragging: boolean }>`
+const StyledDropZone = styled.button<{ isDragging: boolean }>`
   align-items: center;
   background: ${({ isDragging }) =>
     isDragging
@@ -68,6 +68,11 @@ const StyledDropZone = styled.div<{ isDragging: boolean }>`
   justify-content: center;
   min-height: 180px;
   padding: ${themeCssVariables.spacing[5]};
+  width: 100%;
+
+  &:disabled {
+    cursor: wait;
+  }
 `;
 
 const StyledDropTitle = styled.span`
@@ -79,6 +84,15 @@ const StyledDropTitle = styled.span`
 const StyledHint = styled.span`
   color: ${themeCssVariables.font.color.tertiary};
   font-size: ${themeCssVariables.font.size.xs};
+`;
+
+const StyledChooseFile = styled.span`
+  background: ${themeCssVariables.background.primary};
+  border: 1px solid ${themeCssVariables.border.color.medium};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.sm};
+  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
 `;
 
 const StyledDivider = styled.div`
@@ -191,7 +205,7 @@ export const ManuscriptImportUploadStep = ({
     if (isDefined(file)) void readFile(file);
   };
 
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+  const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
     setIsDragging(false);
     const file = event.dataTransfer.files[0];
@@ -205,16 +219,10 @@ export const ManuscriptImportUploadStep = ({
         your browser and nothing is saved until the final confirmation.
       </StyledIntro>
       <StyledDropZone
+        type="button"
         isDragging={isDragging}
-        role="button"
-        tabIndex={0}
+        disabled={isBusy}
         onClick={() => fileInputRef.current?.click()}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            fileInputRef.current?.click();
-          }
-        }}
         onDragEnter={(event) => {
           event.preventDefault();
           setIsDragging(true);
@@ -229,12 +237,7 @@ export const ManuscriptImportUploadStep = ({
         <StyledHint>
           DOCX, PDF, Markdown, text, or portable research ZIP
         </StyledHint>
-        <Button
-          title="Choose file…"
-          variant="secondary"
-          size="small"
-          disabled={isBusy}
-        />
+        <StyledChooseFile>Choose file…</StyledChooseFile>
         <input
           ref={fileInputRef}
           type="file"

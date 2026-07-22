@@ -1,5 +1,5 @@
 import { styled } from '@linaria/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
@@ -17,6 +17,7 @@ type ManuscriptImportReviewStepProps = {
   reconcile: boolean;
   options: ManuscriptImportWizardOptions;
   onClose: () => void;
+  registerCommitState: (isCommitting: boolean) => void;
 };
 
 const SECTION_TYPES = [
@@ -165,17 +166,34 @@ export const ManuscriptImportReviewStep = ({
   reconcile,
   options,
   onClose,
+  registerCommitState,
 }: ManuscriptImportReviewStepProps) => {
   const [document, setDocument] = useState(initialDocument);
   const preparedImport = useMemo(
-    () => prepareManuscriptImport(document, reconcile),
-    [document, reconcile],
+    () =>
+      prepareManuscriptImport(document, reconcile, {
+        existingReferences: options.existingReferences,
+        existingFigureRefKeys: options.existingFigureRefKeys,
+      }),
+    [
+      document,
+      options.existingFigureRefKeys,
+      options.existingReferences,
+      reconcile,
+    ],
   );
-  const { commitImport, isCommitting, failed } = useManuscriptImportCommit({
-    manuscriptId: options.manuscriptId,
-    manuscriptName: options.manuscriptName,
-    existingSectionCount: options.existingSectionCount,
-  });
+  const { commitImport, isCommitting, failed, createdCounts } =
+    useManuscriptImportCommit({
+      manuscriptId: options.manuscriptId,
+      manuscriptName: options.manuscriptName,
+      existingSectionCount: options.existingSectionCount,
+      existingReferences: options.existingReferences,
+    });
+
+  useEffect(() => {
+    registerCommitState(isCommitting);
+    return () => registerCommitState(false);
+  }, [isCommitting, registerCommitState]);
 
   const updateSection = (
     sectionIndex: number,
@@ -191,7 +209,10 @@ export const ManuscriptImportReviewStep = ({
 
   const handleConfirm = async () => {
     const succeeded = await commitImport(document, preparedImport);
-    if (!succeeded) return;
+    if (!succeeded) {
+      options.onChanged();
+      return;
+    }
     options.onChanged();
     onClose();
   };
@@ -280,8 +301,9 @@ export const ManuscriptImportReviewStep = ({
       <StyledFooter>
         {failed ? (
           <StyledFailure>
-            Import stopped after a partial failure. Close this wizard before
-            trying again to avoid duplicate records.
+            Import stopped after creating {createdCounts.references} references,{' '}
+            {createdCounts.sections} sections, and {createdCounts.figures}{' '}
+            figures/tables. Close this wizard before trying again.
           </StyledFailure>
         ) : (
           <StyledSummary>

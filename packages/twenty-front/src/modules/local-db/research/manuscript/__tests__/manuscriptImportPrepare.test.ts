@@ -4,6 +4,7 @@ import {
   type PortableResearchPaperManifest,
 } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import {
+  parseMarkdownDocument,
   type ImportedDocument,
   type ImportedSectionDraft,
 } from '@/local-db/research/manuscript/manuscriptDocImport';
@@ -73,6 +74,56 @@ describe('prepareManuscriptImport', () => {
       sectionType: 'REFERENCES',
       includeInExport: false,
     });
+  });
+
+  it('deduplicates existing references and rewrites imported citation keys', () => {
+    const document = parseMarkdownDocument(
+      [
+        '## Introduction',
+        'Ventilation helps [1].',
+        '## References',
+        '1. Mendell, M. J. Classroom ventilation. Indoor Air 2013, 23, 515-528. doi:10.1111/ina.12042',
+      ].join('\n'),
+    );
+
+    const prepared = prepareManuscriptImport(document, true, {
+      existingReferences: [
+        {
+          id: 'existing-reference',
+          name: 'Classroom ventilation',
+          citationKey: 'saved-mendell',
+          doi: '10.1111/ina.12042',
+          year: 2013,
+        },
+      ],
+    });
+
+    expect(prepared.references).toHaveLength(0);
+    expect(prepared.sections[0].content).toContain('[@saved-mendell]');
+    expect(prepared.sections[0].content).not.toContain('[@mendell2013]');
+  });
+
+  it('reserves existing figure keys before linking imported asset references', () => {
+    const document = parseMarkdownDocument(
+      [
+        '## Results',
+        'See Figure 1 for the result.',
+        '![Plot](data:image/png;base64,AAAA)',
+        'Figure 1. Imported result.',
+      ].join('\n'),
+    );
+
+    const prepared = prepareManuscriptImport(document, false, {
+      existingFigureRefKeys: ['imported-figure-1'],
+    });
+
+    expect(prepared.figures).toMatchObject([
+      { refKey: 'imported-figure-1-2', sourceLabel: '1' },
+    ]);
+    expect(prepared.sections[0].content).toContain(
+      '[[asset:imported-figure-1-2]]',
+    );
+    expect(prepared.sections[0].content).toContain('[#imported-figure-1-2]');
   });
 
   it('passes portable sections and records through the portable preparation path', () => {

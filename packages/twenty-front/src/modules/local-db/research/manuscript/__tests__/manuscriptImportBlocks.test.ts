@@ -4,6 +4,7 @@ import {
   countImportBlocksNeedingReview,
   deriveImportBlocks,
   deriveImportBlocksFromMarkdown,
+  linkImportCaptionOverride,
 } from '@/local-db/research/manuscript/manuscriptImportBlocks';
 import {
   parseMarkdownDocument,
@@ -158,6 +159,144 @@ describe('manuscript import blocks', () => {
       markdown: String.raw`$$\frac{a}{b}$$`,
       text: String.raw`\frac{a}{b}`,
     });
+  });
+
+  it('keeps demoted tables and explicit captions as body through preparation', () => {
+    const blocks = deriveImportBlocksFromMarkdown(
+      [
+        '# Paper',
+        '',
+        '## Results',
+        '',
+        'Figure 1. Keep this sentence as prose.',
+        '',
+        '![Map](data:image/png;base64,AAAA)',
+        '',
+        '| Site | Value |',
+        '| --- | --- |',
+        '| A | 12 |',
+      ].join('\n'),
+    );
+    const caption = blocks.find((block) => block.role === 'caption');
+    const table = blocks.find((block) => block.role === 'table');
+
+    const document = assembleImportedDocument(blocks, {
+      [caption?.id ?? '']: { role: 'body' },
+      [table?.id ?? '']: { role: 'body' },
+    });
+    const prepared = prepareManuscriptImport(document, false);
+
+    expect(prepared.figures).toHaveLength(1);
+    expect(prepared.figures[0]).toMatchObject({
+      assetKind: 'FIGURE',
+      caption: '',
+    });
+    expect(prepared.sections[0].content).toContain(
+      'Figure 1. Keep this sentence as prose.',
+    );
+    expect(prepared.sections[0].content).toContain('Site Value\nA 12');
+    expect(prepared.sections[0].content).not.toContain('| --- |');
+  });
+
+  it.each([
+    {
+      captionText: 'Figure 7. Cross-kind table caption.',
+      assetMarkdown: '| A | B |\n| --- | --- |\n| 1 | 2 |',
+      assetRole: 'table' as const,
+      assetKind: 'TABLE' as const,
+    },
+    {
+      captionText: 'Table 4. Cross-kind image caption.',
+      assetMarkdown: '![Plot](data:image/png;base64,AAAA)',
+      assetRole: 'image' as const,
+      assetKind: 'FIGURE' as const,
+    },
+  ])(
+    'rewrites an explicit caption prefix when linking it to $assetKind',
+    ({ captionText, assetMarkdown, assetRole, assetKind }) => {
+      const blocks = deriveImportBlocksFromMarkdown(
+        ['# Paper', '', '## Results', '', captionText, '', assetMarkdown].join(
+          '\n',
+        ),
+      );
+      const caption = blocks.find((block) => block.role === 'caption');
+      const asset = blocks.find((block) => block.role === assetRole);
+      const document = assembleImportedDocument(blocks, {
+        [caption?.id ?? '']: {
+          linkedAssetBlockId: asset?.id,
+          assetKind,
+        },
+      });
+      const prepared = prepareManuscriptImport(document, false);
+
+      expect(prepared.figures).toHaveLength(1);
+      expect(prepared.figures[0]).toMatchObject({
+        assetKind,
+        caption: expect.stringContaining('Cross-kind'),
+      });
+    },
+  );
+
+  it('keeps only one caption link per asset and warns on unsafe duplicate input', () => {
+    const blocks = deriveImportBlocksFromMarkdown(
+      [
+        'Figure 1. First caption.',
+        '',
+        'Figure 2. Second caption.',
+        '',
+        '![Plot](data:image/png;base64,AAAA)',
+      ].join('\n'),
+    );
+    const captions = blocks.filter((block) => block.role === 'caption');
+    const image = blocks.find((block) => block.role === 'image');
+    expect(image).toBeDefined();
+
+    const firstLink = linkImportCaptionOverride(
+      {},
+      captions[0].id,
+      image?.id ?? '',
+      'FIGURE',
+    );
+    const secondLink = linkImportCaptionOverride(
+      firstLink,
+      captions[1].id,
+      image?.id ?? '',
+      'FIGURE',
+    );
+    expect(secondLink[captions[0].id]?.linkedAssetBlockId).toBeUndefined();
+    expect(secondLink[captions[1].id]?.linkedAssetBlockId).toBe(image?.id);
+
+    const unsafeOverrides = {
+      [captions[0].id]: {
+        linkedAssetBlockId: image?.id,
+        assetKind: 'FIGURE' as const,
+      },
+      [captions[1].id]: {
+        linkedAssetBlockId: image?.id,
+        assetKind: 'FIGURE' as const,
+      },
+    };
+    expect(collectImportBlockWarnings(blocks, unsafeOverrides)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('2 captions are linked to image block'),
+      ]),
+    );
+  });
+
+  it('splits complete equations from surrounding prose and each other', () => {
+    const blocks = deriveImportBlocksFromMarkdown(
+      ['Leading prose', '$$x=1$$', 'Trailing prose', '$$y=2$$', '$$z=3$$'].join(
+        '\n',
+      ),
+    );
+
+    expect(blocks.map((block) => [block.role, block.text])).toEqual([
+      ['body', 'Leading prose'],
+      ['equation', 'x=1'],
+      ['body', 'Trailing prose'],
+      ['equation', 'y=2'],
+      ['equation', 'z=3'],
+    ]);
   });
 
   it('keeps cross-extractor duplicate labels unique after assembly', () => {

@@ -79,6 +79,7 @@ export const ManuscriptImportWizard = ({
   const [closeInterception, setCloseInterception] = useState<
     (() => boolean) | null
   >(null);
+  const [isCommitting, setIsCommitting] = useState(false);
 
   const registerEnterHandler = useCallback((handler: (() => void) | null) => {
     setEnterHandler(() => handler);
@@ -96,6 +97,7 @@ export const ManuscriptImportWizard = ({
   };
 
   const confirmOnClose = () => {
+    if (isCommitting) return;
     if (closeInterception?.() === true) return;
     if (activeStep === 0) {
       onClose();
@@ -184,6 +186,7 @@ export const ManuscriptImportWizard = ({
               title="Close"
               variant="tertiary"
               size="small"
+              disabled={isCommitting}
               onClick={confirmOnClose}
             />
           </StyledHeaderContent>
@@ -201,6 +204,8 @@ export const ManuscriptImportWizard = ({
               sourceInfo={blocksSource.sourceInfo}
               sourceName={blocksSource.sourceName}
               reconcile={reconcile}
+              existingReferences={options.existingReferences}
+              existingFigureRefKeys={options.existingFigureRefKeys}
               tableStyle={options.exportTableStyle ?? 'ACADEMIC'}
               onContinue={handleMapContinue}
               registerEnterHandler={registerEnterHandler}
@@ -213,6 +218,7 @@ export const ManuscriptImportWizard = ({
               reconcile={reconcile}
               options={options}
               onClose={onClose}
+              registerCommitState={setIsCommitting}
             />
           ) : null}
         </StyledStepContent>

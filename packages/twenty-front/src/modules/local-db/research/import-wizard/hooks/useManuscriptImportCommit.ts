@@ -1,8 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 
 import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
-import { type PreparedManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import {
+  type ExistingImportReference,
+  type PreparedManuscriptImport,
+} from '@/local-db/research/manuscript/manuscriptImportPrepare';
 import { portableManuscriptRecordUpdate } from '@/local-db/research/manuscript/manuscriptPortableImport';
 import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
@@ -13,7 +16,20 @@ type UseManuscriptImportCommitOptions = {
   manuscriptId: string;
   manuscriptName?: string | null;
   existingSectionCount: number;
+  existingReferences: ExistingImportReference[];
 };
+
+export type ManuscriptImportCreatedCounts = {
+  references: number;
+  sections: number;
+  figures: number;
+};
+
+const emptyCreatedCounts = (): ManuscriptImportCreatedCounts => ({
+  references: 0,
+  sections: 0,
+  figures: 0,
+});
 
 type ManuscriptMetadataUpdate = {
   name?: string;
@@ -40,6 +56,7 @@ export const useManuscriptImportCommit = ({
   manuscriptId,
   manuscriptName,
   existingSectionCount,
+  existingReferences,
 }: UseManuscriptImportCommitOptions) => {
   const { createOneRecord: createSection } = useCreateOneRecord({
     objectNameSingular: 'manuscriptSection',
@@ -54,13 +71,18 @@ export const useManuscriptImportCommit = ({
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [isCommitting, setIsCommitting] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [createdCounts, setCreatedCounts] =
+    useState<ManuscriptImportCreatedCounts>(emptyCreatedCounts);
+  // The mutex must update synchronously before React can publish state.
+  // oxlint-disable-next-line twenty/no-state-useref
+  const commitMutexRef = useRef(false);
 
   const commitImport = useCallback(
     async (
       document: ImportedDocument,
       preparedImport: PreparedManuscriptImport,
     ): Promise<boolean> => {
-      if (isCommitting || failed) return false;
+      if (commitMutexRef.current || failed) return false;
       const totalSectionCount = preparedImport.sections.length;
       if (totalSectionCount === 0) {
         enqueueErrorSnackBar({
@@ -69,13 +91,23 @@ export const useManuscriptImportCommit = ({
         });
         return false;
       }
+      const { added: referencesToCreate } = dedupeReferenceDrafts(
+        existingReferences,
+        preparedImport.references,
+      );
 
+      commitMutexRef.current = true;
       setIsCommitting(true);
-      let importedSectionCount = 0;
+      let currentCreatedCounts = emptyCreatedCounts();
+      setCreatedCounts(currentCreatedCounts);
       try {
-        const { added } = dedupeReferenceDrafts([], preparedImport.references);
-        for (const reference of added) {
+        for (const reference of referencesToCreate) {
           await createReference({ ...reference, manuscriptId });
+          currentCreatedCounts = {
+            ...currentCreatedCounts,
+            references: currentCreatedCounts.references + 1,
+          };
+          setCreatedCounts(currentCreatedCounts);
         }
 
         const sectionIdsByOrder = new Map<number, string>();
@@ -89,7 +121,8 @@ export const useManuscriptImportCommit = ({
             orderIndex: existingSectionCount + section.orderIndex,
             wordCount: section.wordCount,
             includeInExport:
-              section.sectionType === 'REFERENCES' && added.length > 0
+              section.sectionType === 'REFERENCES' &&
+              referencesToCreate.length > 0
                 ? false
                 : section.includeInExport,
             status: section.status ?? 'DRAFTING',
@@ -97,7 +130,11 @@ export const useManuscriptImportCommit = ({
               ? { wordLimit: section.wordLimit }
               : {}),
           });
-          importedSectionCount += 1;
+          currentCreatedCounts = {
+            ...currentCreatedCounts,
+            sections: currentCreatedCounts.sections + 1,
+          };
+          setCreatedCounts(currentCreatedCounts);
           const createdId = (created as { id?: string } | undefined)?.id;
           if (isDefined(createdId)) {
             sectionIdsByOrder.set(section.orderIndex, createdId);
@@ -118,6 +155,11 @@ export const useManuscriptImportCommit = ({
               ? { sectionId: sectionIdsByOrder.get(sectionOrderIndex) }
               : {}),
           });
+          currentCreatedCounts = {
+            ...currentCreatedCounts,
+            figures: currentCreatedCounts.figures + 1,
+          };
+          setCreatedCounts(currentCreatedCounts);
         }
 
         const manuscriptUpdate: ManuscriptMetadataUpdate = {};
@@ -151,7 +193,7 @@ export const useManuscriptImportCommit = ({
         }
 
         enqueueSuccessSnackBar({
-          message: `${preparedImport.portable ? 'Reconstructed' : 'Imported'} ${totalSectionCount} sections · ${added.length} references · ${preparedImport.linkedCount} citations · ${preparedImport.linkedAssetCount} figure/table links · ${preparedImport.figures.length} figures/tables`,
+          message: `${preparedImport.portable ? 'Reconstructed' : 'Imported'} ${totalSectionCount} sections · ${referencesToCreate.length} references · ${preparedImport.linkedCount} citations · ${preparedImport.linkedAssetCount} figure/table links · ${preparedImport.figures.length} figures/tables`,
         });
         return true;
       } catch (error) {
@@ -161,10 +203,11 @@ export const useManuscriptImportCommit = ({
         // eslint-disable-next-line no-console
         console.error('Manuscript import commit failed:', error);
         enqueueErrorSnackBar({
-          message: `Import failed — imported ${importedSectionCount} of ${totalSectionCount} sections before failing. ${error instanceof Error ? error.message : ''}`,
+          message: `Import failed after creating ${currentCreatedCounts.references} of ${referencesToCreate.length} references, ${currentCreatedCounts.sections} of ${totalSectionCount} sections, and ${currentCreatedCounts.figures} of ${preparedImport.figures.length} figures/tables. ${error instanceof Error ? error.message : ''}`,
         });
         return false;
       } finally {
+        commitMutexRef.current = false;
         setIsCommitting(false);
       }
     },
@@ -175,13 +218,13 @@ export const useManuscriptImportCommit = ({
       enqueueErrorSnackBar,
       enqueueSuccessSnackBar,
       existingSectionCount,
+      existingReferences,
       failed,
-      isCommitting,
       manuscriptId,
       manuscriptName,
       updateOneRecord,
     ],
   );
 
-  return { commitImport, isCommitting, failed };
+  return { commitImport, isCommitting, failed, createdCounts };
 };

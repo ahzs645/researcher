@@ -5,11 +5,14 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { ManuscriptImportWizardRoot } from '@/local-db/research/import-wizard/components/ManuscriptImportWizardRoot';
 import { useOpenManuscriptImportWizard } from '@/local-db/research/import-wizard/hooks/useOpenManuscriptImportWizard';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
+import { type ExistingImportReference } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 
 type ManuscriptImportPanelProps = {
   manuscriptId: string;
   manuscriptName?: string | null;
   existingSectionCount: number;
+  existingReferences: ExistingImportReference[];
+  existingFigureRefKeys: string[];
   onChanged: () => void;
   exportTableStyle?: ManuscriptTableStyle;
 };
@@ -29,6 +32,8 @@ export const ManuscriptImportPanel = ({
   manuscriptId,
   manuscriptName,
   existingSectionCount,
+  existingReferences,
+  existingFigureRefKeys,
   onChanged,
   exportTableStyle,
 }: ManuscriptImportPanelProps) => {
@@ -50,6 +55,8 @@ export const ManuscriptImportPanel = ({
             manuscriptId,
             manuscriptName,
             existingSectionCount,
+            existingReferences,
+            existingFigureRefKeys,
             onChanged,
             exportTableStyle,
           })

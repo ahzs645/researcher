@@ -14,13 +14,18 @@ import {
 } from '@/local-db/research/manuscript/manuscriptImportBlocks';
 import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
-import { type PreparedManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import {
+  type PrepareManuscriptImportOptions,
+  type PreparedManuscriptImport,
+} from '@/local-db/research/manuscript/manuscriptImportPrepare';
 
 type ManuscriptImportMapStepProps = {
   blocks: ImportBlock[];
   sourceInfo: ImportedSourceInfo;
   sourceName: string;
   reconcile: boolean;
+  existingReferences: PrepareManuscriptImportOptions['existingReferences'];
+  existingFigureRefKeys: string[];
   tableStyle: ManuscriptTableStyle;
   onContinue: (
     document: ImportedDocument,
@@ -72,6 +77,8 @@ export const ManuscriptImportMapStep = ({
   sourceInfo,
   sourceName,
   reconcile,
+  existingReferences,
+  existingFigureRefKeys,
   tableStyle,
   onContinue,
   registerEnterHandler,
@@ -82,6 +89,8 @@ export const ManuscriptImportMapStep = ({
     sourceInfo,
     sourceName,
     reconcile,
+    existingReferences,
+    existingFigureRefKeys,
     onContinue,
     registerEnterHandler,
     registerCloseInterception,

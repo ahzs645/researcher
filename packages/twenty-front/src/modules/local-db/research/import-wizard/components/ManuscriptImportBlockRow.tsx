@@ -168,6 +168,27 @@ const StyledLinkIndicator = styled.div`
 const equationSource = (markdown: string): string =>
   markdown.trim().replace(/^\$\$/, '').replace(/\$\$$/, '').trim();
 
+const MAX_PREVIEW_LENGTH = 320;
+
+const textualPreview = (
+  block: ImportBlock,
+  markdown: string,
+  effectiveRole: ImportBlockRole,
+): string => {
+  const value =
+    block.imageDataUrl !== undefined
+      ? block.text || `Imported image ${block.index + 1}`
+      : effectiveRole === block.role
+        ? block.text
+        : markdown
+            .replace(/^#{1,6}\s+/, '')
+            .replace(/[*_~`]/g, '')
+            .trim();
+  return value.length > MAX_PREVIEW_LENGTH
+    ? `${value.slice(0, MAX_PREVIEW_LENGTH)}…`
+    : value;
+};
+
 export const ManuscriptImportBlockRow = ({
   block,
   override,
@@ -208,7 +229,7 @@ export const ManuscriptImportBlockRow = ({
     effectiveRole === 'heading'
       ? (override?.headingLevel ?? block.headingLevel ?? 2)
       : 1;
-  const displayText = effectiveRole === block.role ? block.text : markdown;
+  const displayText = textualPreview(block, markdown, effectiveRole);
 
   return (
     <StyledRow
@@ -271,7 +292,13 @@ export const ManuscriptImportBlockRow = ({
           }
         >
           {ROLE_OPTIONS.map((role) => (
-            <option key={role} value={role}>
+            <option
+              key={role}
+              value={role}
+              disabled={
+                (role === 'image' || role === 'table') && block.role !== role
+              }
+            >
               {role === 'heading' ? 'Heading' : role}
             </option>
           ))}

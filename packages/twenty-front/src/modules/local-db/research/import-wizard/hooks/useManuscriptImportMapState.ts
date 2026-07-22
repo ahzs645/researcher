@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   assembleImportedDocument,
   getImportBlockIdsNeedingReview,
+  linkImportCaptionOverride,
   type ImportBlock,
   type ImportBlockOverride,
   type ImportBlockOverrides,
@@ -12,6 +13,7 @@ import {
 import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
 import {
   prepareManuscriptImport,
+  type PrepareManuscriptImportOptions,
   type PreparedManuscriptImport,
 } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 
@@ -20,6 +22,8 @@ type UseManuscriptImportMapStateProps = {
   sourceInfo: ImportedSourceInfo;
   sourceName: string;
   reconcile: boolean;
+  existingReferences: PrepareManuscriptImportOptions['existingReferences'];
+  existingFigureRefKeys: string[];
   onContinue: (
     document: ImportedDocument,
     preparedImport: PreparedManuscriptImport,
@@ -39,6 +43,8 @@ export const useManuscriptImportMapState = ({
   sourceInfo,
   sourceName,
   reconcile,
+  existingReferences,
+  existingFigureRefKeys,
   onContinue,
   registerEnterHandler,
   registerCloseInterception,
@@ -107,8 +113,8 @@ export const useManuscriptImportMapState = ({
         for (const block of blocks) {
           if (!selectedBlockIds.has(block.id)) continue;
           next[block.id] = {
-            ...current[block.id],
-            ...updateForBlock(block, current),
+            ...next[block.id],
+            ...updateForBlock(block, next),
           };
         }
         return next;
@@ -117,19 +123,38 @@ export const useManuscriptImportMapState = ({
     [blocks, selectedBlockIds],
   );
 
+  const setCaptionLink = useCallback(
+    (
+      captionBlockId: string,
+      linkedAssetBlockId: string,
+      assetKind: 'FIGURE' | 'TABLE',
+    ) => {
+      setOverrides((current) =>
+        linkImportCaptionOverride(
+          current,
+          captionBlockId,
+          linkedAssetBlockId,
+          assetKind,
+        ),
+      );
+    },
+    [],
+  );
+
   const confirmLink = useCallback(() => {
     if (linkSourceBlockId === null || activeBlockId === null) return false;
     const target = blocks.find((block) => block.id === activeBlockId);
     if (target === undefined) return false;
     const role = effectiveRole(target, overrides);
     if (role !== 'image' && role !== 'table') return false;
-    updateOverride(linkSourceBlockId, {
-      linkedAssetBlockId: target.id,
-      assetKind: role === 'table' ? 'TABLE' : 'FIGURE',
-    });
+    setCaptionLink(
+      linkSourceBlockId,
+      target.id,
+      role === 'table' ? 'TABLE' : 'FIGURE',
+    );
     setLinkSourceBlockId(null);
     return true;
-  }, [activeBlockId, blocks, linkSourceBlockId, overrides, updateOverride]);
+  }, [activeBlockId, blocks, linkSourceBlockId, overrides, setCaptionLink]);
 
   const beginLink = useCallback(
     (captionBlockId: string) => {
@@ -170,13 +195,14 @@ export const useManuscriptImportMapState = ({
       if (linkSourceBlockId === null) return;
       const role = effectiveRole(block, overrides);
       if (role !== 'image' && role !== 'table') return;
-      updateOverride(linkSourceBlockId, {
-        linkedAssetBlockId: block.id,
-        assetKind: role === 'table' ? 'TABLE' : 'FIGURE',
-      });
+      setCaptionLink(
+        linkSourceBlockId,
+        block.id,
+        role === 'table' ? 'TABLE' : 'FIGURE',
+      );
       setLinkSourceBlockId(null);
     },
-    [linkSourceBlockId, overrides, updateOverride],
+    [linkSourceBlockId, overrides, setCaptionLink],
   );
 
   const moveActiveBlock = useCallback(
@@ -275,7 +301,10 @@ export const useManuscriptImportMapState = ({
       const document = assembleImportedDocument(blocks, overrides, sourceInfo);
       onContinue(
         document,
-        prepareManuscriptImport(document, reconcile),
+        prepareManuscriptImport(document, reconcile, {
+          existingReferences,
+          existingFigureRefKeys,
+        }),
         sourceName,
       );
     } finally {
@@ -283,6 +312,8 @@ export const useManuscriptImportMapState = ({
     }
   }, [
     blocks,
+    existingFigureRefKeys,
+    existingReferences,
     isPreparing,
     onContinue,
     overrides,
@@ -323,7 +354,8 @@ export const useManuscriptImportMapState = ({
   }, [linkSourceBlockId, registerCloseInterception]);
 
   const handleRoleChange = useCallback(
-    (block: ImportBlock, role: ImportBlockRole) =>
+    (block: ImportBlock, role: ImportBlockRole) => {
+      if ((role === 'image' || role === 'table') && block.role !== role) return;
       updateOverride(block.id, {
         role,
         ...(role === 'heading'
@@ -332,7 +364,8 @@ export const useManuscriptImportMapState = ({
                 overrides[block.id]?.headingLevel ?? block.headingLevel ?? 2,
             }
           : {}),
-      }),
+      });
+    },
     [overrides, updateOverride],
   );
 

@@ -655,6 +655,13 @@ export const ManuscriptComposerPage = () => {
             manuscriptId={manuscript.id}
             manuscriptName={manuscript.name}
             existingSectionCount={sections.length}
+            existingReferences={references}
+            existingFigureRefKeys={figures
+              .map((figure) => figure.refKey)
+              .filter(
+                (refKey): refKey is string =>
+                  typeof refKey === 'string' && refKey.length > 0,
+              )}
             exportTableStyle={
               MANUSCRIPT_TABLE_STYLES.find(
                 (tableStyle) => tableStyle === effectiveStyle.tableStyle,

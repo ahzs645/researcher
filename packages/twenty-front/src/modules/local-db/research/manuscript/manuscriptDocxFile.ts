@@ -9,6 +9,7 @@ import {
   parseWordMlToMarkdownBlocks,
   parseWordStyleDefinitions,
   parseWordDocument,
+  parseWordDocumentFromBlocks,
   type ImportedDocument,
   type WordImportOptions,
 } from './manuscriptDocImport';
@@ -323,15 +324,17 @@ export const readImportedDocumentSource = async (
   }
   if (extension === 'docx') {
     const source = await readImportedWordSource(await file.arrayBuffer());
+    const wordBlocks = parseWordMlToMarkdownBlocks(
+      source.documentXml,
+      source.options,
+    );
     const document = addTiffWarning(
-      parseWordDocument(source.documentXml, source.options),
+      parseWordDocumentFromBlocks(source.documentXml, wordBlocks),
       source.hasTiff,
     );
     return {
       kind: 'blocks',
-      blocks: deriveImportBlocks(
-        parseWordMlToMarkdownBlocks(source.documentXml, source.options),
-      ),
+      blocks: deriveImportBlocks(wordBlocks),
       sourceInfo: sourceInfoFromDocument(document),
       sourceName: file.name,
     };

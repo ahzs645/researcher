@@ -217,10 +217,9 @@ const appendBlock = (
   });
 };
 
-const splitMarkdownGroup = (group: string): string[] => {
+const splitNonEquationGroup = (group: string): string[] => {
   const normalized = group.trim();
   if (normalized.length === 0) return [];
-  if (EQUATION_BLOCK.test(normalized)) return [normalized];
 
   const lines = normalized.split('\n');
   if (
@@ -269,6 +268,24 @@ const splitMarkdownGroup = (group: string): string[] => {
     }
   }
   flushProse();
+  return segments;
+};
+
+const splitMarkdownGroup = (group: string): string[] => {
+  const normalized = group.trim();
+  if (normalized.length === 0) return [];
+
+  const segments: string[] = [];
+  let cursor = 0;
+  for (const match of normalized.matchAll(EQUATION_SEGMENT)) {
+    const matchIndex = match.index ?? 0;
+    segments.push(
+      ...splitNonEquationGroup(normalized.slice(cursor, matchIndex)),
+    );
+    segments.push(match[0].trim());
+    cursor = matchIndex + match[0].length;
+  }
+  segments.push(...splitNonEquationGroup(normalized.slice(cursor)));
   return segments;
 };
 
@@ -375,8 +392,13 @@ const serializeCaption = (
   overrides: ImportBlockOverrides,
 ): string => {
   const markdown = (override.markdown ?? block.markdown).trim();
-  if (/^\s*(?:fig(?:ure)?|table|tbl)\b/i.test(markdown)) return markdown;
   const kind = captionKind(block, override, blocksById, overrides);
+  const existingPrefix = /^(\s*)(?:fig(?:ure)?|table|tbl)(\b[\s\S]*)$/i.exec(
+    markdown,
+  );
+  if (existingPrefix !== null) {
+    return `${existingPrefix[1]}${kind === 'TABLE' ? 'Table' : 'Figure'}${existingPrefix[2]}`;
+  }
   const number = captionNumber(block, override, kind, blocks, overrides);
   return `${kind === 'TABLE' ? 'Table' : 'Figure'} ${number}. ${stripMarkdownDelimiters(markdown)}`;
 };
@@ -399,6 +421,12 @@ const serializeBlock = (
   }
   if (role === 'caption') {
     return serializeCaption(block, override, blocks, blocksById, overrides);
+  }
+  if (role === 'body' && block.role === 'table') {
+    return parseMarkdownTable(markdown)
+      .map((row) => row.join(' '))
+      .join('\n')
+      .trim();
   }
   if (role === 'body' && block.role !== 'body') {
     return override.markdown ?? block.text;
@@ -439,6 +467,7 @@ export const assembleImportedDocument = (
   }
 
   const serializedBlocks: string[] = [];
+  const suppressedAssetLineSignatures = new Set<string>();
   for (const block of blocks) {
     const override = overrides[block.id] ?? {};
     if (override.excluded === true) continue;
@@ -449,9 +478,25 @@ export const assembleImportedDocument = (
     ) {
       continue;
     }
-    serializedBlocks.push(
-      serializeBlock(block, override, blocks, blocksById, overrides),
+    const serializedBlock = serializeBlock(
+      block,
+      override,
+      blocks,
+      blocksById,
+      overrides,
     );
+    serializedBlocks.push(serializedBlock);
+    // Demoted captions stay verbatim body text. Preparation uses these exact
+    // signatures to avoid interpreting them as asset captions again.
+    if (
+      block.role === 'caption' &&
+      effectiveRole(block, overrides) === 'body'
+    ) {
+      for (const line of serializedBlock.split('\n')) {
+        const signature = line.trim();
+        if (signature.length > 0) suppressedAssetLineSignatures.add(signature);
+      }
+    }
     for (const caption of linkedCaptionsByAssetId.get(block.id) ?? []) {
       serializedBlocks.push(
         serializeBlock(
@@ -482,7 +527,45 @@ export const assembleImportedDocument = (
       ? { warnings: sourceInfo.warnings }
       : {}),
     ...(sourceInfo.stats !== undefined ? { stats: sourceInfo.stats } : {}),
+    ...(suppressedAssetLineSignatures.size > 0
+      ? {
+          suppressedAssetLineSignatures: [...suppressedAssetLineSignatures],
+        }
+      : {}),
   };
+};
+
+export const linkImportCaptionOverride = (
+  overrides: ImportBlockOverrides,
+  captionBlockId: string,
+  linkedAssetBlockId: string,
+  assetKind: 'FIGURE' | 'TABLE',
+): ImportBlockOverrides => {
+  const next = { ...overrides };
+  for (const [blockId, override] of Object.entries(next)) {
+    if (
+      blockId === captionBlockId ||
+      override.linkedAssetBlockId !== linkedAssetBlockId
+    ) {
+      continue;
+    }
+    const {
+      linkedAssetBlockId: _linkedAssetBlockId,
+      assetKind: _assetKind,
+      ...remainingOverride
+    } = override;
+    if (Object.keys(remainingOverride).length === 0) {
+      delete next[blockId];
+    } else {
+      next[blockId] = remainingOverride;
+    }
+  }
+  next[captionBlockId] = {
+    ...next[captionBlockId],
+    linkedAssetBlockId,
+    assetKind,
+  };
+  return next;
 };
 
 const importBlockWarningSources = (
@@ -501,6 +584,7 @@ const importBlockWarningSources = (
     return role === 'image' || role === 'table';
   });
   const linkedAssetIds = new Set<string>();
+  const captionsByLinkedAssetId = new Map<string, ImportBlock[]>();
   const warningSources: WarningSource[] = [];
 
   for (const caption of captions) {
@@ -519,7 +603,27 @@ const importBlockWarningSources = (
       });
     } else {
       linkedAssetIds.add(assetId);
+      if (linkedAssetId !== undefined) {
+        captionsByLinkedAssetId.set(linkedAssetId, [
+          ...(captionsByLinkedAssetId.get(linkedAssetId) ?? []),
+          caption,
+        ]);
+      }
     }
+  }
+
+  for (const [assetId, matchingCaptions] of captionsByLinkedAssetId) {
+    if (matchingCaptions.length < 2) continue;
+    const asset = blocksById.get(assetId);
+    const assetRole =
+      asset === undefined ? 'image' : effectiveRole(asset, overrides);
+    warningSources.push({
+      message: `${matchingCaptions.length} captions are linked to ${assetRole === 'table' ? 'table' : 'image'} block ${(asset?.index ?? 0) + 1}. Only one caption can be used.`,
+      blockIds: [
+        ...matchingCaptions.map((caption) => caption.id),
+        ...(asset === undefined ? [] : [asset.id]),
+      ],
+    });
   }
 
   for (const asset of assets) {

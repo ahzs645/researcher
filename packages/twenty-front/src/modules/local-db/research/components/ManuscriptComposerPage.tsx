@@ -109,6 +109,12 @@ export const ManuscriptComposerPage = () => {
   const linkedJournal = composer.journals.find(
     (journal) => journal.id === manuscript.targetJournal?.id,
   );
+  // The Export tab falls back to the first journal when none is linked; the
+  // submission checklist must resolve the SAME effective journal or the two
+  // tabs contradict each other.
+  const effectiveJournal =
+    linkedJournal ??
+    composer.journals.find((journal) => journal.id === composer.journalId);
   const exportTableStyle =
     MANUSCRIPT_TABLE_STYLES.find(
       (tableStyle) => tableStyle === composer.effectiveStyle.tableStyle,
@@ -151,6 +157,7 @@ export const ManuscriptComposerPage = () => {
             figures={composer.figures}
             references={composer.references}
             selectedSection={composer.selectedSection}
+            style={composer.effectiveStyle}
             exportTableStyle={exportTableStyle}
             targetJournal={linkedJournal}
             submissionExtras={manuscript.submissionExtras}
@@ -188,7 +195,13 @@ export const ManuscriptComposerPage = () => {
         {manuscriptComposerTab === 'submission' ? (
           <ManuscriptSubmissionTab
             manuscript={manuscript}
-            template={linkedJournal}
+            template={effectiveJournal}
+            isExplicitTarget={isDefined(linkedJournal)}
+            onConfirmTargetJournal={() => {
+              if (isDefined(effectiveJournal)) {
+                composer.selectJournal(effectiveJournal.id);
+              }
+            }}
             sections={composer.sections}
             onSave={composer.saveSubmissionDetails}
             onPickTargetJournal={() => setManuscriptComposerTab('export')}

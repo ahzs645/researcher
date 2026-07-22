@@ -7,11 +7,14 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { ManuscriptImportPanel } from '@/local-db/research/components/ManuscriptImportPanel';
 import { ManuscriptSectionEditor } from '@/local-db/research/components/ManuscriptSectionEditor';
 import { ManuscriptSectionMetadataPanel } from '@/local-db/research/components/ManuscriptSectionMetadataPanel';
+import { ManuscriptSectionOutline } from '@/local-db/research/components/composer/ManuscriptSectionOutline';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
+import { extractCitationKeys } from '@/local-db/research/manuscript/manuscriptCrossReference';
 import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 import { wordLimitStatus } from '@/local-db/research/manuscript/manuscriptScaffold';
 import {
   type FigureLike,
+  type JournalStyle,
   type ReferenceLike,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
@@ -23,6 +26,7 @@ type ManuscriptWriteTabProps = {
   figures: FigureLike[];
   references: ReferenceLike[];
   selectedSection?: SectionLike;
+  style: JournalStyle;
   exportTableStyle: ManuscriptTableStyle;
   targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
   submissionExtras?: string | null;
@@ -71,77 +75,6 @@ const StyledWorkspace = styled.div`
   }
 `;
 
-const StyledOutline = styled.nav`
-  align-self: start;
-  background: ${themeCssVariables.background.secondary};
-  border: 1px solid ${themeCssVariables.border.color.light};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 180px);
-  overflow-y: auto;
-  padding: ${themeCssVariables.spacing[1]};
-  position: sticky;
-  top: ${themeCssVariables.spacing[3]};
-
-  @media (max-width: 720px) {
-    max-height: 220px;
-    position: static;
-  }
-`;
-
-const StyledOutlineRow = styled.button<{
-  active: boolean;
-  excludedFromExport: boolean;
-}>`
-  background: ${({ active }) =>
-    active ? themeCssVariables.background.transparent.blue : 'transparent'};
-  border: 0;
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[1]};
-  opacity: ${({ excludedFromExport }) => (excludedFromExport ? 0.55 : 1)};
-  padding: ${themeCssVariables.spacing[2]};
-  text-align: left;
-  transition: opacity 100ms ease;
-  width: 100%;
-
-  &:hover {
-    background: ${themeCssVariables.background.transparent.light};
-    opacity: ${({ excludedFromExport }) => (excludedFromExport ? 0.75 : 1)};
-  }
-`;
-
-const StyledOutlineTitle = styled.span`
-  font-size: ${themeCssVariables.font.size.sm};
-  font-weight: ${themeCssVariables.font.weight.medium};
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
-`;
-
-const StyledOutlineMeta = styled.span`
-  align-items: center;
-  color: ${themeCssVariables.font.color.tertiary};
-  display: flex;
-  font-size: ${themeCssVariables.font.size.xs};
-  gap: ${themeCssVariables.spacing[1]};
-`;
-
-const StyledBadge = styled.span`
-  background: ${themeCssVariables.background.transparent.light};
-  border-radius: ${themeCssVariables.border.radius.pill};
-  max-width: 130px;
-  overflow: hidden;
-  padding: 1px ${themeCssVariables.spacing[1]};
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`;
-
 const StyledEditorColumn = styled.div`
   display: flex;
   flex-direction: column;
@@ -178,9 +111,6 @@ const StyledEmpty = styled.span`
   font-size: ${themeCssVariables.font.size.sm};
 `;
 
-const sectionTypeLabel = (sectionType?: string | null) =>
-  (sectionType ?? 'OTHER').toLowerCase().replaceAll('_', ' ');
-
 export const ManuscriptWriteTab = ({
   manuscriptId,
   manuscriptName,
@@ -188,6 +118,7 @@ export const ManuscriptWriteTab = ({
   figures,
   references,
   selectedSection,
+  style,
   exportTableStyle,
   targetJournal,
   submissionExtras,
@@ -199,6 +130,12 @@ export const ManuscriptWriteTab = ({
   onSectionMetadataChanged,
   onImported,
 }: ManuscriptWriteTabProps) => {
+  const citationKeys = sections.reduce<string[]>((keys, section) => {
+    for (const key of extractCitationKeys(section.content ?? '')) {
+      if (!keys.includes(key)) keys.push(key);
+    }
+    return keys;
+  }, []);
   const wordStatus = isDefined(selectedSection)
     ? wordLimitStatus(selectedSection.wordCount, selectedSection.wordLimit)
     : undefined;
@@ -244,31 +181,11 @@ export const ManuscriptWriteTab = ({
       </StyledHeader>
 
       <StyledWorkspace>
-        <StyledOutline aria-label="Section outline">
-          {sections.length === 0 ? (
-            <StyledEmpty>No sections yet.</StyledEmpty>
-          ) : (
-            sections.map((section) => (
-              <StyledOutlineRow
-                key={section.id}
-                type="button"
-                active={section.id === selectedSection?.id}
-                excludedFromExport={section.includeInExport === false}
-                onClick={() => onSelectSection(section.id)}
-              >
-                <StyledOutlineTitle>
-                  {section.name ?? 'Untitled section'}
-                </StyledOutlineTitle>
-                <StyledOutlineMeta>
-                  <StyledBadge>
-                    {sectionTypeLabel(section.sectionType)}
-                  </StyledBadge>
-                  <span>{section.wordCount ?? 0} words</span>
-                </StyledOutlineMeta>
-              </StyledOutlineRow>
-            ))
-          )}
-        </StyledOutline>
+        <ManuscriptSectionOutline
+          sections={sections}
+          selectedSectionId={selectedSection?.id}
+          onSelectSection={onSelectSection}
+        />
 
         <StyledEditorColumn>
           {isDefined(selectedSection) ? (
@@ -287,8 +204,12 @@ export const ManuscriptWriteTab = ({
               </StyledDetails>
               <ManuscriptSectionEditor
                 key={selectedSection.id}
+                citationKeys={citationKeys}
+                figures={figures}
                 initialMarkdown={selectedSection.content ?? ''}
                 onPersist={onPersistSection}
+                references={references}
+                style={style}
               />
               {isDefined(wordStatus) ? (
                 <StyledLimit over={wordStatus.over}>

@@ -22,6 +22,8 @@ import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 type ManuscriptSubmissionRequirementsPanelProps = {
   manuscript: SubmissionRequirementManuscript;
   template?: SubmissionRequirementTemplate & { name?: string | null };
+  isExplicitTarget: boolean;
+  onConfirmTargetJournal: () => void;
   onPickTargetJournal: () => void;
   onSaveValues: (values: SubmissionRequirementValues) => Promise<void>;
   onSaveRequirements: (
@@ -73,6 +75,8 @@ const StyledWarning = styled.div`
 export const ManuscriptSubmissionRequirementsPanel = ({
   manuscript,
   template,
+  isExplicitTarget,
+  onConfirmTargetJournal,
   onPickTargetJournal,
   onSaveValues,
   onSaveRequirements,
@@ -180,6 +184,20 @@ export const ManuscriptSubmissionRequirementsPanel = ({
           {filledCount} of {resolvedItems.length} complete
         </StyledMeta>
       </StyledHeader>
+      {!isExplicitTarget ? (
+        <StyledEmpty>
+          Showing the {template.name ?? 'default'} checklist — this journal is
+          not yet set as the manuscript&apos;s target.
+          <div>
+            <Button
+              title={`Set ${template.name ?? 'journal'} as target`}
+              variant="secondary"
+              size="small"
+              onClick={onConfirmTargetJournal}
+            />
+          </div>
+        </StyledEmpty>
+      ) : null}
       {conflicts.length > 0 ? (
         <StyledWarning>
           {conflicts.length} checklist conflict

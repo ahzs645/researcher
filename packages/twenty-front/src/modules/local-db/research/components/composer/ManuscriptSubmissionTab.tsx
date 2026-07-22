@@ -20,6 +20,8 @@ import {
 type ManuscriptSubmissionTabProps = {
   manuscript: ManuscriptRecord;
   template?: JournalRecord;
+  isExplicitTarget: boolean;
+  onConfirmTargetJournal: () => void;
   sections: SectionLike[];
   onSave: (values: ManuscriptSubmissionDetails) => Promise<void>;
   onPickTargetJournal: () => void;
@@ -45,6 +47,8 @@ const StyledTab = styled.div`
 export const ManuscriptSubmissionTab = ({
   manuscript,
   template,
+  isExplicitTarget,
+  onConfirmTargetJournal,
   sections,
   onSave,
   onPickTargetJournal,
@@ -57,6 +61,8 @@ export const ManuscriptSubmissionTab = ({
       key={`${manuscript.id}-${template?.id ?? 'no-journal'}`}
       manuscript={{ ...manuscript, sections }}
       template={template}
+      isExplicitTarget={isExplicitTarget}
+      onConfirmTargetJournal={onConfirmTargetJournal}
       onPickTargetJournal={onPickTargetJournal}
       onSaveValues={onSaveRequirementValues}
       onSaveRequirements={onSaveRequirements}

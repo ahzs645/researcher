@@ -416,6 +416,15 @@ export type WordImportOptions = {
   imageByRelationshipId?: Record<string, { dataUrl: string; altText: string }>;
 };
 
+export type WordMarkdownBlock = {
+  kind: 'paragraph' | 'table' | 'synthetic';
+  markdown: string;
+  styleId?: string;
+  styleName?: string;
+  sourceHeadingLevel?: number;
+  headingSource?: 'style' | 'semantic' | 'bold';
+};
+
 export const parseWordStyleDefinitions = (
   stylesXml: string,
 ): Record<string, WordStyleDefinition> => {
@@ -529,9 +538,10 @@ const semanticHeadingLevel = (text: string): number => {
 const wordParagraphToMarkdown = (
   paragraphXml: string,
   options: WordImportOptions,
-): string => {
+): WordMarkdownBlock => {
   const styleMatch = /<w:pStyle\b[^>]*w:val="([^"]*)"/.exec(paragraphXml);
   const styleId = styleMatch?.[1] ?? '';
+  const styleName = options.styles?.[styleId]?.name;
   const level = headingLevelFromStyle(styleId, options.styles ?? {});
   // OMML carries its own <m:t> text runs. Remove it from the prose pass so an
   // equation is emitted once as math, not once as flattened text and again as
@@ -542,32 +552,62 @@ const wordParagraphToMarkdown = (
   const images = paragraphImages(paragraphXml, options.imageByRelationshipId);
   const math = paragraphMath(paragraphXml).map((value) => `$$${value}$$`);
 
-  if (text.length === 0 && images.length === 0 && math.length === 0) return '';
+  const provenance = {
+    ...(styleId.length > 0 ? { styleId } : {}),
+    ...(styleName !== undefined ? { styleName } : {}),
+  };
+
+  if (text.length === 0 && images.length === 0 && math.length === 0) {
+    return { kind: 'paragraph', markdown: '', ...provenance };
+  }
 
   if (/^keywords?\s*:/i.test(text)) {
-    return `\n## Keywords\n\n${text.replace(/^keywords?\s*:\s*/i, '')}\n`;
+    return {
+      kind: 'paragraph',
+      markdown: `\n## Keywords\n\n${text.replace(/^keywords?\s*:\s*/i, '')}\n`,
+      ...provenance,
+      sourceHeadingLevel: 2,
+      headingSource: 'semantic',
+    };
   }
   if (/^all authors contributed\b/i.test(text)) {
-    return `\n## Author contributions\n\n${text}\n`;
+    return {
+      kind: 'paragraph',
+      markdown: `\n## Author contributions\n\n${text}\n`,
+      ...provenance,
+      sourceHeadingLevel: 2,
+      headingSource: 'semantic',
+    };
   }
 
   const detectedLevel = semanticHeadingLevel(text);
-  const finalLevel =
-    math.length > 0 || isProseLike(text)
-      ? 0
-      : level > 0
-        ? Math.min(level, 3)
-        : detectedLevel > 0
-          ? detectedLevel
-          : isDirectlyBold(paragraphXml) && text.length <= 100
-            ? 3
-            : 0;
+  let headingSource: WordMarkdownBlock['headingSource'];
+  let finalLevel = 0;
+  if (math.length === 0 && !isProseLike(text)) {
+    if (level > 0) {
+      finalLevel = Math.min(level, 3);
+      headingSource = 'style';
+    } else if (detectedLevel > 0) {
+      finalLevel = detectedLevel;
+      headingSource = 'semantic';
+    } else if (isDirectlyBold(paragraphXml) && text.length <= 100) {
+      finalLevel = 3;
+      headingSource = 'bold';
+    }
+  }
   const renderedText =
     finalLevel > 0 ? `\n${'#'.repeat(finalLevel)} ${text}\n` : text;
 
-  return [renderedText, ...math, ...images]
-    .filter((part) => part.trim().length > 0)
-    .join('\n\n');
+  return {
+    kind: 'paragraph',
+    markdown: [renderedText, ...math, ...images]
+      .filter((part) => part.trim().length > 0)
+      .join('\n\n'),
+    ...provenance,
+    ...(finalLevel > 0 && headingSource !== undefined
+      ? { sourceHeadingLevel: finalLevel, headingSource }
+      : {}),
+  };
 };
 
 const wordTableToMarkdown = (tableXml: string): string => {
@@ -643,22 +683,29 @@ const tokenizeWordBody = (body: string): string[] => {
   return tokens;
 };
 
-const injectAbstractHeading = (blocks: string[]): string[] => {
-  if (blocks.some((block) => /^\s*#{1,6}\s+Abstract\b/i.test(block))) {
+const injectAbstractHeading = (
+  blocks: WordMarkdownBlock[],
+): WordMarkdownBlock[] => {
+  if (blocks.some((block) => /^\s*#{1,6}\s+Abstract\b/i.test(block.markdown))) {
     return blocks;
   }
   const keywordsIndex = blocks.findIndex((block) =>
-    /^\s*## Keywords\b/.test(block),
+    /^\s*## Keywords\b/.test(block.markdown),
   );
   if (keywordsIndex < 0) return blocks;
 
   for (let index = keywordsIndex - 1; index >= 0; index -= 1) {
-    const candidate = blocks[index].trim();
+    const candidate = blocks[index].markdown.trim();
     if (candidate.startsWith('#')) continue;
     if (countWords(candidate) < 50) continue;
     return [
       ...blocks.slice(0, index),
-      '## Abstract',
+      {
+        kind: 'synthetic',
+        markdown: '## Abstract',
+        sourceHeadingLevel: 2,
+        headingSource: 'semantic',
+      },
       blocks[index],
       ...blocks.slice(index + 1),
     ];
@@ -666,9 +713,11 @@ const injectAbstractHeading = (blocks: string[]): string[] => {
   return blocks;
 };
 
-const removeDuplicateTitleBlocks = (blocks: string[]): string[] => {
-  const normalizedBlockText = (block: string): string =>
-    block
+const removeDuplicateTitleBlocks = (
+  blocks: WordMarkdownBlock[],
+): WordMarkdownBlock[] => {
+  const normalizedBlockText = (block: WordMarkdownBlock): string =>
+    block.markdown
       .trim()
       .replace(/^#{1,6}\s+/, '')
       .trim();
@@ -688,22 +737,29 @@ const removeDuplicateTitleBlocks = (blocks: string[]): string[] => {
   });
 };
 
-export const parseWordMlToMarkdown = (
+export const parseWordMlToMarkdownBlocks = (
   documentXml: string,
   options: WordImportOptions = {},
-): string => {
+): WordMarkdownBlock[] => {
   const body =
     /<w:body\b[\s\S]*?<\/w:body>/.exec(documentXml)?.[0] ?? documentXml;
   const tokens = tokenizeWordBody(body);
-  const out: string[] = [];
+  const out: WordMarkdownBlock[] = [];
   for (const token of tokens) {
     out.push(
       token.startsWith('<w:tbl')
-        ? wordTableToMarkdown(token)
+        ? { kind: 'table', markdown: wordTableToMarkdown(token) }
         : wordParagraphToMarkdown(token, options),
     );
   }
-  return injectAbstractHeading(removeDuplicateTitleBlocks(out))
+  return injectAbstractHeading(removeDuplicateTitleBlocks(out));
+};
+
+export const serializeWordMarkdownBlocks = (
+  blocks: WordMarkdownBlock[],
+): string =>
+  blocks
+    .map((block) => block.markdown)
     .join('\n')
     .replace(/^#{1,6}\s*$/gm, '')
     .replace(
@@ -712,7 +768,14 @@ export const parseWordMlToMarkdown = (
     )
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-};
+
+export const parseWordMlToMarkdown = (
+  documentXml: string,
+  options: WordImportOptions = {},
+): string =>
+  serializeWordMarkdownBlocks(
+    parseWordMlToMarkdownBlocks(documentXml, options),
+  );
 
 export const parseWordDocument = (
   documentXml: string,
@@ -779,13 +842,13 @@ export const parseWordDocument = (
 const TABLE_SEPARATOR = /^\|?[\s:|-]+\|?$/;
 const isTableLine = (line: string): boolean => line.trim().includes('|');
 
-type ImportedAssetCaption = {
+export type ImportedAssetCaption = {
   caption: string;
   sourceLabel?: string;
   explicitLabel: boolean;
 };
 
-const parseImportedAssetCaption = (
+export const parseImportedAssetCaption = (
   line: string,
   kind: 'FIGURE' | 'TABLE',
 ): ImportedAssetCaption | null => {
@@ -828,9 +891,9 @@ const importedAssetRefKey = (
 export const extractTablesToFigures = (
   sections: ImportedSectionDraft[],
   startOrderIndex = 0,
+  usedRefKeys: Set<string> = new Set<string>(),
 ): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
   const figures: ImportedFigureDraft[] = [];
-  const usedRefKeys = new Set<string>();
   let order = startOrderIndex;
 
   const nextSections = sections.map((section) => {
@@ -930,9 +993,9 @@ const IMAGE_LINE = /^!\[([^\]]*)\]\((data:image\/[^)]+)\)$/i;
 export const extractImagesToFigures = (
   sections: ImportedSectionDraft[],
   startOrderIndex = 0,
+  usedRefKeys: Set<string> = new Set<string>(),
 ): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
   const figures: ImportedFigureDraft[] = [];
-  const usedRefKeys = new Set<string>();
   let order = startOrderIndex;
 
   const nextSections = sections.map((section) => {
@@ -1025,9 +1088,9 @@ export const extractImagesToFigures = (
 export const extractCaptionOnlyFigures = (
   sections: ImportedSectionDraft[],
   startOrderIndex = 0,
+  usedRefKeys: Set<string> = new Set<string>(),
 ): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
   const figures: ImportedFigureDraft[] = [];
-  const usedRefKeys = new Set<string>();
   let order = startOrderIndex;
 
   const nextSections = sections.map((section) => {

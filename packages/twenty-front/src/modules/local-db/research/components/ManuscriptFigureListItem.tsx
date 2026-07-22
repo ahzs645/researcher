@@ -1,9 +1,12 @@
 import { styled } from '@linaria/react';
+import { useState } from 'react';
 import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptFigureMetadataFields } from '@/local-db/research/components/ManuscriptFigureMetadataFields';
+import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
 import { assetPlacementMarker } from '@/local-db/research/manuscript/manuscriptAssetPlacement';
+import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
   describeImageSource,
   resolveFigureImage,
@@ -21,6 +24,7 @@ type ManuscriptFigureListItemProps = {
   peerIndex: number;
   peerCount: number;
   isAdding: boolean;
+  tableStyle: ManuscriptTableStyle;
   onPersist: (values: Record<string, unknown>) => void;
   onMove: (direction: -1 | 1) => void;
   onPlotTable: () => void;
@@ -99,19 +103,6 @@ const StyledCaptionArea = styled.textarea`
   resize: vertical;
 `;
 
-const StyledTableArea = styled.textarea`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-family: monospace;
-  font-size: ${themeCssVariables.font.size.xs};
-  min-height: 56px;
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
-  resize: vertical;
-  width: 100%;
-`;
-
 const StyledActions = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -124,12 +115,14 @@ export const ManuscriptFigureListItem = ({
   peerIndex,
   peerCount,
   isAdding,
+  tableStyle,
   onPersist,
   onMove,
   onPlotTable,
   onReplaceImage,
 }: ManuscriptFigureListItemProps) => {
   const { enqueueSuccessSnackBar } = useSnackBar();
+  const [tableDraft, setTableDraft] = useState(figure.tableData ?? '');
   const image = resolveFigureImage(figure);
   const sectionOptions: SelectOption<string>[] = [
     { value: UNASSIGNED_SECTION, label: 'End of document' },
@@ -244,12 +237,20 @@ export const ManuscriptFigureListItem = ({
       </StyledAssetEditor>
       {figure.assetKind === 'TABLE' ? (
         <>
-          <StyledTableArea
-            defaultValue={figure.tableData ?? ''}
-            placeholder={'| Col A | Col B |\n| --- | --- |\n| 1 | 2 |'}
-            onBlur={(event) => onPersist({ tableData: event.target.value })}
+          <ManuscriptTableEditor
+            markdown={tableDraft}
+            tableStyle={tableStyle}
+            onChange={setTableDraft}
           />
           <StyledActions>
+            <Button
+              title="Save table"
+              variant="primary"
+              accent="blue"
+              size="small"
+              disabled={tableDraft === (figure.tableData ?? '')}
+              onClick={() => onPersist({ tableData: tableDraft })}
+            />
             <Button
               title="Plot as chart"
               variant="secondary"

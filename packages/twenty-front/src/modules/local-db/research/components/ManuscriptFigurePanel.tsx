@@ -11,6 +11,7 @@ import {
 } from '@/local-db/research/manuscript/manuscriptChart';
 import { rasterizeSvgToPngDataUrl } from '@/local-db/research/manuscript/manuscriptChartImage';
 import { numberAssets } from '@/local-db/research/manuscript/manuscriptNumbering';
+import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
   type FigureLike,
   type JournalStyle,
@@ -27,6 +28,12 @@ import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
 const CHART_WIDTH = 640;
 const CHART_HEIGHT = 400;
+const MANUSCRIPT_TABLE_STYLES: ManuscriptTableStyle[] = [
+  'ACADEMIC',
+  'GRID',
+  'SHADED_HEADER',
+  'BORDERLESS',
+];
 
 // Render a Markdown data table to a PNG data-URL chart, or null when it has no
 // numeric columns to plot. Used both by the add form and the per-table action.
@@ -89,6 +96,10 @@ export const ManuscriptFigurePanel = ({
   const [imageUrl, setImageUrl] = useState('');
   const [tableData, setTableData] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const tableStyle =
+    MANUSCRIPT_TABLE_STYLES.find(
+      (candidate) => candidate === style.tableStyle,
+    ) ?? 'ACADEMIC';
 
   // Live numbering — the same pure function the exporter uses, so the panel
   // shows exactly the labels the paper will carry.
@@ -260,6 +271,7 @@ export const ManuscriptFigurePanel = ({
             peerIndex={peerIndex}
             peerCount={peers.length}
             isAdding={isAdding}
+            tableStyle={tableStyle}
             onPersist={(values) => persistFigure(figure, values)}
             onMove={(direction) => moveFigure(figure, direction)}
             onPlotTable={() => {
@@ -278,6 +290,7 @@ export const ManuscriptFigurePanel = ({
         placement={placement}
         imageUrl={imageUrl}
         tableData={tableData}
+        tableStyle={tableStyle}
         isAdding={isAdding}
         onCaptionChange={setCaption}
         onAssetKindChange={setAssetKind}

@@ -281,7 +281,7 @@ const bundleToBlocks = (
   const bodyAlignment =
     bundle.style.bodyAlignment === 'JUSTIFIED' ? 'justify' : 'left';
   const unnumberedHeading =
-    /^(abstract|keywords|acknowledge?ments?|author contributions?|funding|competing interests?|conflicts? of interest|data availability|references|supplementary material)$/i;
+    /^(abstract|keywords|acknowledge?ments?|author contributions?|funding|competing interests?|conflicts? of interest|data availability|references|supplementary material|appendix(?:\s+[A-Z0-9]+)?(?:[.:]\s*.*)?)$/i;
 
   const figurePageLayout = bundle.style.figurePageLayout ?? 'INLINE';
   const supplementStartsOnNewPage = ['NEW_COVER_PAGE', 'NEW_PAGE'].includes(

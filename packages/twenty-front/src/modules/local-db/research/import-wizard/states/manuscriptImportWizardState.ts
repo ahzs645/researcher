@@ -1,0 +1,24 @@
+import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
+
+export type ManuscriptImportWizardOptions = {
+  manuscriptId: string;
+  manuscriptName?: string | null;
+  existingSectionCount: number;
+  onChanged: () => void;
+  exportTableStyle?: ManuscriptTableStyle;
+};
+
+export type ManuscriptImportWizardState = {
+  isOpen: boolean;
+  options: ManuscriptImportWizardOptions | null;
+};
+
+export const manuscriptImportWizardState =
+  createAtomState<ManuscriptImportWizardState>({
+    key: 'manuscriptImportWizardState',
+    defaultValue: {
+      isOpen: false,
+      options: null,
+    },
+  });

@@ -4,11 +4,9 @@ import { isDefined } from 'twenty-shared/utils';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { ManuscriptImportWizardRoot } from '@/local-db/research/import-wizard/components/ManuscriptImportWizardRoot';
+import { useOpenManuscriptImportWizard } from '@/local-db/research/import-wizard/hooks/useOpenManuscriptImportWizard';
 import {
-  extractCaptionOnlyFigures,
-  extractImagesToFigures,
-  extractTablesToFigures,
-  linkImportedAssetReferences,
   parseMarkdownDocument,
   type ImportedDocument,
   type ImportedSectionDraft,
@@ -17,11 +15,9 @@ import {
   ACCEPTED_MANUSCRIPT_IMPORT_EXTENSIONS,
   readImportedDocumentFile,
 } from '@/local-db/research/manuscript/manuscriptDocxFile';
-import { reconcileImportedCitations } from '@/local-db/research/manuscript/manuscriptCitationReconcile';
-import {
-  portableManuscriptRecordUpdate,
-  preparePortableResearchPaperImport,
-} from '@/local-db/research/manuscript/manuscriptPortableImport';
+import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
+import { prepareManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import { portableManuscriptRecordUpdate } from '@/local-db/research/manuscript/manuscriptPortableImport';
 import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
@@ -39,6 +35,7 @@ type ManuscriptImportPanelProps = {
   manuscriptName?: string | null;
   existingSectionCount: number;
   onChanged: () => void;
+  exportTableStyle?: ManuscriptTableStyle;
 };
 
 const StyledPanel = styled.div`
@@ -206,7 +203,9 @@ export const ManuscriptImportPanel = ({
   manuscriptName,
   existingSectionCount,
   onChanged,
+  exportTableStyle,
 }: ManuscriptImportPanelProps) => {
+  const { openManuscriptImportWizard } = useOpenManuscriptImportWizard();
   const { createOneRecord: createSection } = useCreateOneRecord({
     objectNameSingular: 'manuscriptSection',
   });
@@ -231,57 +230,7 @@ export const ManuscriptImportPanel = ({
 
   const preparedImport = useMemo(() => {
     if (pendingDocument === null) return null;
-
-    if (pendingDocument.portablePackage !== undefined) {
-      return preparePortableResearchPaperImport(
-        pendingDocument.portablePackage,
-        pendingDocument.sections,
-      );
-    }
-
-    const images = extractImagesToFigures(pendingDocument.sections);
-    const tables = extractTablesToFigures(
-      images.sections,
-      images.figures.length,
-    );
-    const captionFigures = extractCaptionOnlyFigures(
-      tables.sections,
-      images.figures.length + tables.figures.length,
-    );
-    const linkedAssets = linkImportedAssetReferences(captionFigures.sections, [
-      ...images.figures,
-      ...tables.figures,
-      ...captionFigures.figures,
-    ]);
-    let sections = linkedAssets.sections;
-    const reconciled = reconcile
-      ? reconcileImportedCitations(sections)
-      : {
-          sections,
-          references: [],
-          linkedCount: 0,
-          style: 'none' as const,
-        };
-    sections = reconciled.sections.map((section) =>
-      (section.sectionType === 'TITLE_PAGE' &&
-        isDefined(pendingDocument.authorLine)) ||
-      (section.sectionType === 'REFERENCES' &&
-        reconciled.references.length === 0 &&
-        /see (?:the )?journal.+instructions/i.test(section.name))
-        ? { ...section, includeInExport: false }
-        : section,
-    );
-
-    return {
-      sections,
-      references: reconciled.references,
-      linkedCount: reconciled.linkedCount,
-      figures: linkedAssets.figures,
-      linkedAssetCount: linkedAssets.linkedCount,
-      tableCount: tables.figures.length,
-      imageCount: images.figures.length + captionFigures.figures.length,
-      portable: false,
-    };
+    return prepareManuscriptImport(pendingDocument, reconcile);
   }, [pendingDocument, reconcile]);
 
   const importDocument = async () => {
@@ -473,6 +422,21 @@ export const ManuscriptImportPanel = ({
       </StyledCheckboxLabel>
       <StyledActions>
         <Button
+          title="Import with wizard…"
+          variant="primary"
+          accent="blue"
+          size="small"
+          onClick={() =>
+            openManuscriptImportWizard({
+              manuscriptId,
+              manuscriptName,
+              existingSectionCount,
+              onChanged,
+              exportTableStyle,
+            })
+          }
+        />
+        <Button
           title={isBusy ? 'Importing…' : 'Import file…'}
           variant="secondary"
           size="small"
@@ -618,6 +582,7 @@ export const ManuscriptImportPanel = ({
           </StyledActions>
         </StyledPreview>
       ) : null}
+      <ManuscriptImportWizardRoot />
     </StyledPanel>
   );
 };

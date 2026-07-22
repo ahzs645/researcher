@@ -6,12 +6,31 @@
 
 import {
   parseMarkdownDocument,
+  parseWordMlToMarkdownBlocks,
   parseWordStyleDefinitions,
   parseWordDocument,
   type ImportedDocument,
+  type WordImportOptions,
 } from './manuscriptDocImport';
+import {
+  deriveImportBlocks,
+  deriveImportBlocksFromMarkdown,
+  type ImportBlock,
+  type ImportedSourceInfo,
+} from './manuscriptImportBlocks';
 import { extractPdfText } from './manuscriptPdfFile';
 import { readPortableResearchPaperZip } from './manuscriptPortableZip';
+
+export { type ImportedSourceInfo } from './manuscriptImportBlocks';
+
+export type ImportedDocumentSource =
+  | { kind: 'portable'; document: ImportedDocument }
+  | {
+      kind: 'blocks';
+      blocks: ImportBlock[];
+      sourceInfo: ImportedSourceInfo;
+      sourceName: string;
+    };
 
 const td = new TextDecoder('utf-8');
 
@@ -165,9 +184,15 @@ const readOptionalXmlEntry = async (
   return entry === null ? '' : td.decode(entry);
 };
 
-export const readImportedWordDocument = async (
+type ImportedWordSource = {
+  documentXml: string;
+  options: WordImportOptions;
+  hasTiff: boolean;
+};
+
+const readImportedWordSource = async (
   buffer: ArrayBuffer,
-): Promise<ImportedDocument> => {
+): Promise<ImportedWordSource> => {
   const documentXml = await extractDocxDocumentXml(buffer);
   const [stylesXml, relationshipsXml] = await Promise.all([
     readOptionalXmlEntry(buffer, 'word/styles.xml'),
@@ -178,23 +203,57 @@ export const readImportedWordDocument = async (
     documentXml,
     relationshipsXml,
   );
-  const document = parseWordDocument(documentXml, {
-    styles: parseWordStyleDefinitions(stylesXml),
-    imageByRelationshipId,
-  });
-  const hasTiff = Object.values(imageByRelationshipId).some((image) =>
-    image.dataUrl.startsWith('data:image/tiff'),
-  );
+  return {
+    documentXml,
+    options: {
+      styles: parseWordStyleDefinitions(stylesXml),
+      imageByRelationshipId,
+    },
+    hasTiff: Object.values(imageByRelationshipId).some((image) =>
+      image.dataUrl.startsWith('data:image/tiff'),
+    ),
+  };
+};
 
-  return hasTiff
+const TIFF_WARNING =
+  'A TIFF figure was preserved, but browsers cannot preview TIFF reliably. Replace it with PNG before final export.';
+
+const addTiffWarning = (
+  document: ImportedDocument,
+  hasTiff: boolean,
+): ImportedDocument =>
+  hasTiff
     ? {
         ...document,
-        warnings: [
-          ...(document.warnings ?? []),
-          'A TIFF figure was preserved, but browsers cannot preview TIFF reliably. Replace it with PNG before final export.',
-        ],
+        warnings: [...(document.warnings ?? []), TIFF_WARNING],
       }
     : document;
+
+const sourceInfoFromDocument = (
+  document: ImportedDocument,
+): ImportedSourceInfo => ({
+  ...(document.title !== undefined ? { title: document.title } : {}),
+  ...(document.authorLine !== undefined
+    ? { authorLine: document.authorLine }
+    : {}),
+  ...(document.affiliations !== undefined
+    ? { affiliations: document.affiliations }
+    : {}),
+  ...(document.correspondingAuthor !== undefined
+    ? { correspondingAuthor: document.correspondingAuthor }
+    : {}),
+  ...(document.warnings !== undefined ? { warnings: document.warnings } : {}),
+  ...(document.stats !== undefined ? { stats: document.stats } : {}),
+});
+
+export const readImportedWordDocument = async (
+  buffer: ArrayBuffer,
+): Promise<ImportedDocument> => {
+  const source = await readImportedWordSource(buffer);
+  return addTiffWarning(
+    parseWordDocument(source.documentXml, source.options),
+    source.hasTiff,
+  );
 };
 
 const fileExtension = (name: string): string =>
@@ -253,6 +312,41 @@ export const readImportedDocumentFile = async (
     );
   }
   return parseMarkdownDocument(await file.text());
+};
+
+export const readImportedDocumentSource = async (
+  file: File,
+): Promise<ImportedDocumentSource> => {
+  const extension = fileExtension(file.name);
+  if (extension === 'zip') {
+    return { kind: 'portable', document: await readImportedDocumentFile(file) };
+  }
+  if (extension === 'docx') {
+    const source = await readImportedWordSource(await file.arrayBuffer());
+    const document = addTiffWarning(
+      parseWordDocument(source.documentXml, source.options),
+      source.hasTiff,
+    );
+    return {
+      kind: 'blocks',
+      blocks: deriveImportBlocks(
+        parseWordMlToMarkdownBlocks(source.documentXml, source.options),
+      ),
+      sourceInfo: sourceInfoFromDocument(document),
+      sourceName: file.name,
+    };
+  }
+
+  const markdown =
+    extension === 'pdf'
+      ? await extractPdfText(await file.arrayBuffer())
+      : await file.text();
+  return {
+    kind: 'blocks',
+    blocks: deriveImportBlocksFromMarkdown(markdown),
+    sourceInfo: sourceInfoFromDocument(parseMarkdownDocument(markdown)),
+    sourceName: file.name,
+  };
 };
 
 export const ACCEPTED_IMPORT_EXTENSIONS = '.docx,.pdf,.md,.markdown,.txt';

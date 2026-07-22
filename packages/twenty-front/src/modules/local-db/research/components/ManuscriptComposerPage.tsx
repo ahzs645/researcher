@@ -16,6 +16,7 @@ import {
   type ReferenceLike,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
+import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
   parseManuscriptExportStyleOverrides,
   serializeManuscriptExportStyleOverrides,
@@ -68,6 +69,13 @@ type ManuscriptRecord = {
   targetJournal?: { id?: string | null } | null;
 };
 type JournalRecord = JournalStyle & { id: string };
+
+const MANUSCRIPT_TABLE_STYLES: ManuscriptTableStyle[] = [
+  'ACADEMIC',
+  'GRID',
+  'SHADED_HEADER',
+  'BORDERLESS',
+];
 
 // Mobile-first single-column composer. The whole page is the scroll container
 // and the content is capped to a readable measure, so it reflows cleanly from
@@ -647,6 +655,11 @@ export const ManuscriptComposerPage = () => {
             manuscriptId={manuscript.id}
             manuscriptName={manuscript.name}
             existingSectionCount={sections.length}
+            exportTableStyle={
+              MANUSCRIPT_TABLE_STYLES.find(
+                (tableStyle) => tableStyle === effectiveStyle.tableStyle,
+              ) ?? 'ACADEMIC'
+            }
             onChanged={() => {
               void Promise.all([
                 refetchManuscripts(),

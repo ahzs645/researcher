@@ -393,4 +393,46 @@ describe('buildBlockNoteDocument', () => {
     expect(serialized).toContain('### 1.1 Existing software');
     expect(serialized).toContain('### 1.2 Design gap');
   });
+
+  it('does not continue main-section numbering onto labeled appendices', () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: { id: 'paper', name: 'Appendix numbering paper' },
+      style: { sectionNumbering: true },
+      sections: [
+        {
+          id: 'conclusion',
+          name: 'Conclusions',
+          placement: 'MAIN',
+          includeInExport: true,
+          content: 'Main-text conclusion.',
+        },
+        {
+          id: 'appendix-a',
+          name: 'Appendix A. Algorithm pseudocode',
+          sectionType: 'APPENDIX',
+          placement: 'SUPPLEMENT',
+          includeInExport: true,
+          content: '1. Read the input metadata.',
+        },
+        {
+          id: 'appendix-b',
+          name: 'Appendix B: Primary sensitivity grid',
+          sectionType: 'APPENDIX',
+          placement: 'SUPPLEMENT',
+          includeInExport: true,
+          content: 'Sensitivity settings.',
+        },
+      ],
+      figures: [],
+      references: [],
+    });
+
+    const serialized = JSON.stringify(buildBlockNoteDocument(bundle).blocks);
+
+    expect(serialized).toContain('1. Conclusions');
+    expect(serialized).toContain('Appendix A. Algorithm pseudocode');
+    expect(serialized).toContain('Appendix B: Primary sensitivity grid');
+    expect(serialized).not.toContain('2. Appendix A');
+    expect(serialized).not.toContain('3. Appendix B');
+  });
 });

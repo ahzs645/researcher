@@ -7,7 +7,9 @@ import {
   parseMarkdownDocument,
   parseWordDocument,
   parseWordMlToMarkdown,
+  parseWordMlToMarkdownBlocks,
   parseWordStyleDefinitions,
+  serializeWordMarkdownBlocks,
 } from '@/local-db/research/manuscript/manuscriptDocImport';
 import { stripManuscriptScriptMarkers } from '@/local-db/research/manuscript/manuscriptScripts';
 
@@ -296,11 +298,89 @@ describe('extractImagesToFigures', () => {
     expect(linked.sections[1].content).toContain('[#imported-figure-s2-18]');
     expect(linked.linkedCount).toBe(4);
   });
+
+  it('keeps refKeys unique across embedded and caption-only extractors', () => {
+    const sections = parseMarkdownDocument(
+      [
+        '## Results',
+        '![Map](data:image/png;base64,AAAA)',
+        'Figure 1. Sampling locations',
+        'Figure 1. Planned follow-up figure',
+      ].join('\n'),
+    ).sections;
+    const usedRefKeys = new Set<string>();
+    const embeddedFigures = extractImagesToFigures(sections, 0, usedRefKeys);
+    const captionOnlyFigures = extractCaptionOnlyFigures(
+      embeddedFigures.sections,
+      embeddedFigures.figures.length,
+      usedRefKeys,
+    );
+
+    expect([
+      ...embeddedFigures.figures.map((figure) => figure.refKey),
+      ...captionOnlyFigures.figures.map((figure) => figure.refKey),
+    ]).toEqual(['imported-figure-1', 'imported-figure-1-2']);
+  });
 });
 
 describe('parseWordMlToMarkdown', () => {
   const para = (text: string, style?: string): string =>
     `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t>${text}</w:t></w:r></w:p>`;
+
+  it('preserves the complete normalized output for mixed Word content', () => {
+    const cell = (text: string): string =>
+      `<w:tc><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+    const row = (cells: string[]): string =>
+      `<w:tr>${cells.map(cell).join('')}</w:tr>`;
+    const abstract =
+      'This study evaluates indoor air quality across classrooms using calibrated sensors and repeated observations collected throughout the academic year. The analysis compares ventilation conditions, occupancy patterns, particulate matter, and carbon dioxide concentrations while accounting for seasonal changes. Results provide a reproducible baseline for interpreting exposure patterns and planning practical improvements in school environments.';
+    const boilerplateCaption =
+      'Figure 1. Type your caption here. Obtain permission and include the acknowledgement required by the copyright holder if a figure is being reproduced from another source.';
+    const xml = [
+      '<w:document><w:body>',
+      '<w:p w:rsidR="1"/>',
+      para('A Study', 'Title'),
+      '<w:p></w:p>',
+      para('A Study'),
+      para(abstract),
+      para('Keywords: air quality; classrooms'),
+      `<w:tbl>${row(['Site', 'Value'])}${row(['A', '12'])}</w:tbl>`,
+      '<w:p><w:r><w:t>Figure 2. Observed sites</w:t></w:r><w:r><w:drawing><a:blip r:embed="rIdPlot"/></w:drawing></w:r></w:p>',
+      para(boilerplateCaption),
+      '<w:p/>',
+      '</w:body></w:document>',
+    ].join('\n');
+
+    expect(
+      parseWordMlToMarkdown(xml, {
+        imageByRelationshipId: {
+          rIdPlot: {
+            dataUrl: 'data:image/png;base64,AAAA',
+            altText: 'Plot',
+          },
+        },
+      }),
+    ).toBe(
+      [
+        '# A Study',
+        '',
+        '## Abstract',
+        abstract,
+        '',
+        '## Keywords',
+        '',
+        'air quality; classrooms',
+        '',
+        '| Site | Value |',
+        '| --- | --- |',
+        '| A | 12 |',
+        '',
+        'Figure 2. Observed sites',
+        '',
+        '![Plot](data:image/png;base64,AAAA)',
+      ].join('\n'),
+    );
+  });
 
   it('maps heading styles to Markdown headings and keeps order', () => {
     const xml = `<w:document><w:body>${para('Air Quality', 'Title')}${para(
@@ -407,6 +487,42 @@ describe('parseWordMlToMarkdown', () => {
     expect(doc.sections.map((section) => section.sectionType)).toEqual([
       'INTRODUCTION',
     ]);
+  });
+
+  it('exposes token provenance and serializes blocks without output drift', () => {
+    const styles = parseWordStyleDefinitions(
+      '<w:styles><w:style w:styleId="CustomHead"><w:name w:val="Heading 2"/></w:style></w:styles>',
+    );
+    const xml = `<w:body>${para('Methods', 'CustomHead')}${para(
+      'Results',
+    )}<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Study site</w:t></w:r></w:p></w:body>`;
+    const blocks = parseWordMlToMarkdownBlocks(xml, { styles });
+
+    expect(blocks).toEqual([
+      {
+        kind: 'paragraph',
+        markdown: '\n## Methods\n',
+        styleId: 'CustomHead',
+        styleName: 'Heading 2',
+        sourceHeadingLevel: 2,
+        headingSource: 'style',
+      },
+      {
+        kind: 'paragraph',
+        markdown: '\n## Results\n',
+        sourceHeadingLevel: 2,
+        headingSource: 'semantic',
+      },
+      {
+        kind: 'paragraph',
+        markdown: '\n### Study site\n',
+        sourceHeadingLevel: 3,
+        headingSource: 'bold',
+      },
+    ]);
+    expect(serializeWordMarkdownBlocks(blocks)).toBe(
+      parseWordMlToMarkdown(xml, { styles }),
+    );
   });
 
   it('preserves OMML equations and embedded image relationships', () => {

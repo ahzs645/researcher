@@ -28,6 +28,7 @@ import {
   serializeManuscriptExportStyleOverrides,
   type ManuscriptExportStyleOverrides,
 } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
+import { type ReferenceRecordUpdate } from '@/local-db/research/manuscript/manuscriptReferenceForm';
 import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import {
   parseManuscriptTitlePageExtraLines,
@@ -512,6 +513,71 @@ export const useManuscriptComposer = () => {
     await Promise.all([refetchSections(), refetchFigures()]);
   };
 
+  const updateReference = async (
+    reference: ReferenceLike,
+    referenceUpdate: ReferenceRecordUpdate,
+  ) => {
+    const previousKey = reference.citationKey?.trim() || reference.id;
+    const nextKey = referenceUpdate.citationKey?.trim() || previousKey;
+    const replacements = new Map([[previousKey, nextKey]]);
+    const changedSections =
+      previousKey === nextKey
+        ? []
+        : sections.flatMap((section) => {
+            const content = rewriteCitationKeys(
+              section.content ?? '',
+              replacements,
+            );
+            return content === (section.content ?? '')
+              ? []
+              : [{ section, content }];
+          });
+    const changedFigures =
+      previousKey === nextKey
+        ? []
+        : figures.flatMap((figure) => {
+            const caption = rewriteCitationKeys(
+              figure.caption ?? '',
+              replacements,
+            );
+            const tableData = rewriteCitationKeys(
+              figure.tableData ?? '',
+              replacements,
+            );
+            return caption === (figure.caption ?? '') &&
+              tableData === (figure.tableData ?? '')
+              ? []
+              : [{ figure, caption, tableData }];
+          });
+
+    await Promise.all([
+      updateOneRecord({
+        objectNameSingular: 'reference',
+        idToUpdate: reference.id,
+        updateOneRecordInput: referenceUpdate,
+      }),
+      ...changedSections.map(({ section, content }) =>
+        updateOneRecord({
+          objectNameSingular: 'manuscriptSection',
+          idToUpdate: section.id,
+          updateOneRecordInput: { content, wordCount: countWords(content) },
+        }),
+      ),
+      ...changedFigures.map(({ figure, caption, tableData }) =>
+        updateOneRecord({
+          objectNameSingular: 'figure',
+          idToUpdate: figure.id,
+          updateOneRecordInput: { caption, tableData },
+        }),
+      ),
+    ]);
+    await Promise.all([
+      refetchReferences(),
+      ...(changedSections.length > 0 ? [refetchSections()] : []),
+      ...(changedFigures.length > 0 ? [refetchFigures()] : []),
+    ]);
+  };
+
   const linkedJournal = journals.find(
     (journal) => journal.id === manuscript?.targetJournal?.id,
   );
@@ -765,6 +831,7 @@ export const useManuscriptComposer = () => {
     deleteSections,
     deleteReferences,
     mergeDuplicateReferences,
+    updateReference,
     saveSubmissionRequirementValues,
     saveJournalSubmissionRequirements,
     keepJournalSubmissionValue,

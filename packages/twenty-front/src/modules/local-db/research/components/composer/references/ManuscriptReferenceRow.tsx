@@ -15,7 +15,10 @@ import {
 } from '@/local-db/research/manuscript/manuscriptTypes';
 
 type ManuscriptReferenceRowProps = {
+  editor?: React.ReactNode;
   figures: FigureLike[];
+  isEditing: boolean;
+  onEdit: () => void;
   onSelectSection: (sectionId: string) => void;
   reference: ReferenceLike;
   sections: SectionLike[];
@@ -28,6 +31,11 @@ const StyledRow = styled.div`
   border-radius: ${themeCssVariables.border.radius.sm};
   display: flex;
   flex-direction: column;
+
+  &:hover [data-reference-hover-action],
+  &:focus-within [data-reference-hover-action] {
+    opacity: 1;
+  }
 `;
 
 const StyledRowHeader = styled.div`
@@ -85,6 +93,38 @@ const StyledUsageBadge = styled.button`
   padding: 1px ${themeCssVariables.spacing[2]};
 `;
 
+const StyledEditButton = styled.button`
+  background: none;
+  border: 0;
+  color: ${themeCssVariables.font.color.tertiary};
+  cursor: pointer;
+  font: inherit;
+  font-size: ${themeCssVariables.font.size.xs};
+  opacity: 0;
+  padding: ${themeCssVariables.spacing[1]};
+
+  &[aria-expanded='true'],
+  &:focus {
+    color: ${themeCssVariables.font.color.primary};
+    opacity: 1;
+  }
+`;
+
+const StyledExpandedEditButton = styled.button`
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: ${themeCssVariables.font.color.secondary};
+  cursor: pointer;
+  font: inherit;
+  font-size: ${themeCssVariables.font.size.xs};
+  padding: ${themeCssVariables.spacing[1]} 0;
+
+  &:hover {
+    color: ${themeCssVariables.font.color.primary};
+  }
+`;
+
 const StyledUnusedBadge = styled(StyledUsageBadge)`
   border-color: ${themeCssVariables.color.orange};
   color: ${themeCssVariables.color.orange};
@@ -129,6 +169,11 @@ const StyledUnassigned = styled.span`
   justify-content: space-between;
 `;
 
+const StyledEditor = styled.div`
+  border-top: 1px solid ${themeCssVariables.border.color.light};
+  padding: ${themeCssVariables.spacing[3]};
+`;
+
 const isMissing = (value: string | null | undefined): boolean =>
   value === null || value === undefined || value.trim().length === 0;
 
@@ -161,7 +206,10 @@ const usageInSection = ({
     );
 
 export const ManuscriptReferenceRow = ({
+  editor,
   figures,
+  isEditing,
+  onEdit,
   onSelectSection,
   reference,
   sections,
@@ -211,6 +259,14 @@ export const ManuscriptReferenceRow = ({
             <IconAlertTriangle size={14} />
           </StyledWarning>
         ) : null}
+        <StyledEditButton
+          type="button"
+          aria-expanded={isEditing}
+          data-reference-hover-action
+          onClick={onEdit}
+        >
+          Edit
+        </StyledEditButton>
         <UsageBadge
           type="button"
           aria-expanded={expanded}
@@ -240,8 +296,12 @@ export const ManuscriptReferenceRow = ({
               <span>{unassignedCount}×</span>
             </StyledUnassigned>
           ) : null}
+          <StyledExpandedEditButton type="button" onClick={onEdit}>
+            {isEditing ? 'Close editor' : 'Edit reference'}
+          </StyledExpandedEditButton>
         </StyledWhereCited>
       ) : null}
+      {isEditing ? <StyledEditor>{editor}</StyledEditor> : null}
     </StyledRow>
   );
 };

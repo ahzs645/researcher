@@ -213,6 +213,7 @@ export const ManuscriptComposerPage = () => {
             onApplyCitationLinks={composer.persistCitationLinkedSections}
             onDeleteReferences={composer.deleteReferences}
             onMergeDuplicateReferences={composer.mergeDuplicateReferences}
+            onUpdateReference={composer.updateReference}
             onSelectSection={selectFigureSection}
             onGoToExport={() => setManuscriptComposerTab('export')}
           />

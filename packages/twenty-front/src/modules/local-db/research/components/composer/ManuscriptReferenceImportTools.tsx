@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { ManuscriptManualReferenceForm } from '@/local-db/research/components/composer/references/ManuscriptManualReferenceForm';
 import {
   cslItemToReferenceDraft,
   doiCslJsonUrl,
@@ -99,6 +100,7 @@ export const ManuscriptReferenceImportTools = ({
     libraryId: '',
   });
   const [isBusy, setIsBusy] = useState(false);
+  const [isManualOpen, setIsManualOpen] = useState(false);
 
   const createFromDrafts = async (drafts: ReferenceDraft[]) => {
     const { added, duplicateCount } = dedupeReferenceDrafts(references, drafts);
@@ -206,6 +208,24 @@ export const ManuscriptReferenceImportTools = ({
 
   return (
     <StyledCard>
+      <StyledTitle>Add references</StyledTitle>
+      <Button
+        title={
+          isManualOpen ? 'Cancel manual reference' : 'Add reference manually'
+        }
+        variant="secondary"
+        size="small"
+        onClick={() => setIsManualOpen((isOpen) => !isOpen)}
+      />
+      {isManualOpen ? (
+        <ManuscriptManualReferenceForm
+          manuscriptId={manuscriptId}
+          projectId={projectId}
+          references={references}
+          onChanged={onChanged}
+          onCancel={() => setIsManualOpen(false)}
+        />
+      ) : null}
       <StyledTitle>Import references</StyledTitle>
       <StyledActions>
         <StyledInput

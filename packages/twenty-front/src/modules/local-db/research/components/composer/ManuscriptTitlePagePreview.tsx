@@ -84,9 +84,13 @@ const StyledPreviewHint = styled.div`
   font-size: ${themeCssVariables.font.size.xs};
 `;
 
+// scrollbar-gutter keeps clientWidth stable whether or not a scrollbar is
+// showing — without it the fit measurement feeds back on itself and the page
+// visibly oscillates between two sizes.
 const StyledViewport = styled.div`
   max-height: 70vh;
   overflow: auto;
+  scrollbar-gutter: stable;
 `;
 
 const StyledScaledArea = styled.div`
@@ -153,8 +157,14 @@ export const ManuscriptTitlePagePreview = ({
     const viewport = viewportRef.current;
     if (viewport === null) return;
     const measure = () => {
-      setFitScale(
-        Math.min(1, Math.max(0.2, viewport.clientWidth / PAGE_WIDTH)),
+      const nextScale = Math.min(
+        1,
+        Math.max(0.2, viewport.clientWidth / PAGE_WIDTH),
+      );
+      // Hysteresis: sub-pixel width changes (scrollbars, zoom rounding) must
+      // not retrigger a fit change or the preview flickers between sizes.
+      setFitScale((current) =>
+        Math.abs(current - nextScale) < 0.02 ? current : nextScale,
       );
     };
     measure();

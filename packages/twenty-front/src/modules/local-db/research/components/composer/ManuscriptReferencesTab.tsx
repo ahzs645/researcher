@@ -16,6 +16,7 @@ import {
 } from '@/local-db/research/manuscript/manuscriptCitationLink';
 import { citationStyleKeyFromStyle } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { findDuplicateReferenceGroups } from '@/local-db/research/manuscript/manuscriptReferenceDuplicates';
+import { type ReferenceRecordUpdate } from '@/local-db/research/manuscript/manuscriptReferenceForm';
 import {
   collectReferenceUsage,
   summarizeReferenceUsage,
@@ -41,6 +42,10 @@ type ManuscriptReferencesTabProps = {
     removedReferences: ReferenceLike[],
   ) => Promise<void>;
   onSelectSection: (sectionId: string) => void;
+  onUpdateReference: (
+    reference: ReferenceLike,
+    update: ReferenceRecordUpdate,
+  ) => Promise<void>;
   references: ReferenceLike[];
   sections: SectionLike[];
   style: JournalStyle;
@@ -107,6 +112,7 @@ export const ManuscriptReferencesTab = ({
   onGoToExport,
   onMergeDuplicateReferences,
   onSelectSection,
+  onUpdateReference,
   references,
   sections,
   style,
@@ -274,6 +280,7 @@ export const ManuscriptReferencesTab = ({
         references={references}
         usage={usage}
         onSelectSection={onSelectSection}
+        onUpdateReference={onUpdateReference}
       />
     </StyledTab>
   );

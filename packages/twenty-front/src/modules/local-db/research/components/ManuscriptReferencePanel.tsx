@@ -3,19 +3,34 @@ import { useMemo, useState } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
+  ManuscriptReferenceEditor,
+} from '@/local-db/research/components/composer/references/ManuscriptReferenceEditor';
+import {
   ManuscriptReferenceRow,
   missingReferenceFields,
 } from '@/local-db/research/components/composer/references/ManuscriptReferenceRow';
+import {
+  referenceFormValuesToRecordUpdate,
+  referenceToFormValues,
+  type ReferenceFormValues,
+  type ReferenceRecordUpdate,
+} from '@/local-db/research/manuscript/manuscriptReferenceForm';
 import { type ReferenceUsageByCitationKey } from '@/local-db/research/manuscript/manuscriptReferenceUsage';
 import {
   type FigureLike,
   type ReferenceLike,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
+import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
+import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
 type ManuscriptReferencePanelProps = {
   figures: FigureLike[];
   onSelectSection: (sectionId: string) => void;
+  onUpdateReference: (
+    reference: ReferenceLike,
+    update: ReferenceRecordUpdate,
+  ) => Promise<void>;
   references: ReferenceLike[];
   sections: SectionLike[];
   usage: ReferenceUsageByCitationKey;
@@ -104,12 +119,18 @@ export const referenceSearchText = (reference: ReferenceLike): string =>
 export const ManuscriptReferencePanel = ({
   figures,
   onSelectSection,
+  onUpdateReference,
   references,
   sections,
   usage,
 }: ManuscriptReferencePanelProps) => {
+  const { enqueueDialog } = useDialogManager();
+  const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ReferenceFilter>('all');
+  const [editingReferenceId, setEditingReferenceId] = useState<string | null>(
+    null,
+  );
   const filteredReferences = useMemo(() => {
     const query = search.trim().toLowerCase();
     return references.filter((reference) => {
@@ -127,6 +148,63 @@ export const ManuscriptReferencePanel = ({
       );
     });
   }, [filter, references, search, usage]);
+
+  const persistEdit = async (
+    reference: ReferenceLike,
+    update: ReferenceRecordUpdate,
+  ) => {
+    try {
+      await onUpdateReference(reference, update);
+      setEditingReferenceId(null);
+      enqueueSuccessSnackBar({ message: 'Reference updated' });
+    } catch {
+      enqueueErrorSnackBar({ message: 'Could not update reference' });
+      throw new Error('Could not update reference');
+    }
+  };
+
+  const saveEdit = async (
+    reference: ReferenceLike,
+    values: ReferenceFormValues,
+  ) => {
+    const update = referenceFormValuesToRecordUpdate(values, reference);
+    const oldKey = reference.citationKey?.trim() || reference.id;
+    const newKey = update.citationKey?.trim() ?? '';
+    if (newKey.length === 0) {
+      enqueueErrorSnackBar({ message: 'Citation key cannot be empty' });
+      return;
+    }
+    if (
+      references.some(
+        (candidate) =>
+          candidate.id !== reference.id &&
+          candidate.citationKey?.trim() === newKey,
+      )
+    ) {
+      enqueueErrorSnackBar({
+        message: `Citation key [@${newKey}] is already in use`,
+      });
+      return;
+    }
+    const citationCount = usage.get(oldKey)?.count ?? 0;
+    if (oldKey !== newKey && citationCount > 0) {
+      enqueueDialog({
+        title: 'Rewrite cited reference key?',
+        message: `Change [@${oldKey}] to [@${newKey}] and rewrite ${citationCount} citation token${citationCount === 1 ? '' : 's'} in this manuscript?`,
+        buttons: [
+          { title: 'Cancel' },
+          {
+            title: 'Rewrite and save',
+            variant: 'primary',
+            role: 'confirm',
+            onClick: () => void persistEdit(reference, update),
+          },
+        ],
+      });
+      return;
+    }
+    await persistEdit(reference, update);
+  };
 
   return (
     <StyledPanel>
@@ -153,21 +231,37 @@ export const ManuscriptReferencePanel = ({
       <StyledCount>
         {filteredReferences.length} of {references.length} references
       </StyledCount>
-      {filteredReferences.map((reference) => (
-        <ManuscriptReferenceRow
-          key={reference.id}
-          reference={reference}
-          usage={
-            usage.get(reference.citationKey?.trim() ?? '') ?? {
-              count: 0,
-              sectionIds: [],
+      {filteredReferences.map((reference) => {
+        const isEditing = editingReferenceId === reference.id;
+        return (
+          <ManuscriptReferenceRow
+            key={reference.id}
+            reference={reference}
+            usage={
+              usage.get(reference.citationKey?.trim() ?? '') ?? {
+                count: 0,
+                sectionIds: [],
+              }
             }
-          }
-          sections={sections}
-          figures={figures}
-          onSelectSection={onSelectSection}
-        />
-      ))}
+            sections={sections}
+            figures={figures}
+            isEditing={isEditing}
+            onEdit={() =>
+              setEditingReferenceId((currentId) =>
+                currentId === reference.id ? null : reference.id,
+              )
+            }
+            onSelectSection={onSelectSection}
+            editor={
+              <ManuscriptReferenceEditor
+                initialValues={referenceToFormValues(reference)}
+                onCancel={() => setEditingReferenceId(null)}
+                onSave={(values) => saveEdit(reference, values)}
+              />
+            }
+          />
+        );
+      })}
       {filteredReferences.length === 0 ? (
         <StyledEmpty>No references match this search and filter.</StyledEmpty>
       ) : null}

@@ -90,6 +90,7 @@ const guessTitle = (raw: string): string => {
 
 const parseEntryToDraft = (
   raw: string,
+  referenceIndex: number,
   takenKeys: Set<string>,
 ): ReferenceDraft => {
   const doi = DOI_RE.exec(raw)?.[0] ?? '';
@@ -109,6 +110,10 @@ const parseEntryToDraft = (
     // bibliography formatter can then reproduce imported references verbatim
     // instead of duplicating best-effort parsed fields and DOI text.
     'researcher:rawReference': raw,
+    // Keep numbered-list order portable even though the reference object has
+    // no custom orderIndex field. The linker also supports older imports via
+    // their record creation timestamps.
+    'researcher:referenceIndex': referenceIndex,
   };
   const draft = cslItemToReferenceDraft(cslItem);
   const citationKey = generateCitationKey(
@@ -128,7 +133,7 @@ export const parseReferenceList = (text: string): ParsedReferenceEntry[] => {
     )
     .map(({ index, raw }) => ({
       index,
-      draft: parseEntryToDraft(raw, taken),
+      draft: parseEntryToDraft(raw, index, taken),
     }));
 };
 

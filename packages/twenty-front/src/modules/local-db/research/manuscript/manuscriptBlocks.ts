@@ -238,13 +238,13 @@ const bundleToBlocks = (
       ],
     });
   }
+  const affiliationAlignment =
+    bundle.style.affiliationAlignment === 'CENTER'
+      ? 'center'
+      : bundle.style.affiliationAlignment === 'RIGHT'
+        ? 'right'
+        : 'left';
   if (isNonEmptyString(bundle.metadata.affiliations)) {
-    const affiliationAlignment =
-      bundle.style.affiliationAlignment === 'CENTER'
-        ? 'center'
-        : bundle.style.affiliationAlignment === 'RIGHT'
-          ? 'right'
-          : 'left';
     blocks.push(
       ...bundle.metadata.affiliations
         .split(/\r?\n|[;,]\s*(?=\d+\s)/)
@@ -259,6 +259,18 @@ const bundleToBlocks = (
         ),
     );
   }
+  blocks.push(
+    ...bundle.metadata.titlePageExtraLines
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map(
+        (line): ExportPartialBlock => ({
+          type: 'paragraph',
+          props: { textAlignment: affiliationAlignment },
+          content: line,
+        }),
+      ),
+  );
   if (isNonEmptyString(bundle.metadata.correspondingAuthor)) {
     blocks.push({
       type: 'paragraph',
@@ -281,7 +293,7 @@ const bundleToBlocks = (
   const bodyAlignment =
     bundle.style.bodyAlignment === 'JUSTIFIED' ? 'justify' : 'left';
   const unnumberedHeading =
-    /^(abstract|keywords|acknowledge?ments?|author contributions?|funding|competing interests?|conflicts? of interest|data availability|references|supplementary material)$/i;
+    /^(abstract|keywords|acknowledge?ments?|author contributions?|funding|competing interests?|conflicts? of interest|data availability|references|supplementary material|appendix(?:\s+[A-Z0-9]+)?(?:[.:]\s*.*)?)$/i;
 
   const figurePageLayout = bundle.style.figurePageLayout ?? 'INLINE';
   const supplementStartsOnNewPage = ['NEW_COVER_PAGE', 'NEW_PAGE'].includes(

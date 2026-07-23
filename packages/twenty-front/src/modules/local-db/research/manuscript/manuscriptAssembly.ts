@@ -5,8 +5,10 @@ import {
   buildCitationContext,
   formatBibliography,
   renderCitationsInText,
+  renderCitationsInTextWithLabels,
   type FormattedBibliographyEntry,
 } from './manuscriptCitations';
+import { referenceToCslItem } from './manuscriptCiteproc';
 import {
   extractCitationKeys,
   resolveCrossReferences,
@@ -38,20 +40,6 @@ const PLACEMENT_ORDER: Record<string, number> = {
   SUPPLEMENT: 3,
 };
 
-const CSL_TYPE_REVERSE: Record<string, string> = {
-  ARTICLE_JOURNAL: 'article-journal',
-  PAPER_CONFERENCE: 'paper-conference',
-  BOOK: 'book',
-  CHAPTER: 'chapter',
-  THESIS: 'thesis',
-  REPORT: 'report',
-  DATASET: 'dataset',
-  WEBPAGE: 'webpage',
-  PREPRINT: 'article',
-  SOFTWARE: 'software',
-  OTHER: 'article-journal',
-};
-
 export const slugifyTitle = (value: string): string =>
   value
     .toLowerCase()
@@ -73,57 +61,6 @@ const keyOf = (reference: ReferenceLike): string =>
     ? reference.citationKey
     : reference.id;
 
-const parseAuthorsToCsl = (
-  authors: string | null | undefined,
-): { family: string; given?: string }[] => {
-  if (!isNonEmptyString(authors)) return [];
-  return authors
-    .split(';')
-    .map((name) => name.trim())
-    .filter((name) => name.length > 0)
-    .map((name) => {
-      if (name.includes(',')) {
-        const [family, given] = name.split(',');
-        return { family: family.trim(), given: given.trim() };
-      }
-      const parts = name.split(/\s+/);
-      return {
-        family: parts[parts.length - 1],
-        given: parts.slice(0, -1).join(' '),
-      };
-    });
-};
-
-const referenceToCslItem = (
-  reference: ReferenceLike,
-): Record<string, unknown> => {
-  if (isNonEmptyString(reference.cslJson)) {
-    try {
-      const parsed = JSON.parse(reference.cslJson) as Record<string, unknown>;
-      return { ...parsed, id: keyOf(reference) };
-    } catch {
-      // fall through to synthesis
-    }
-  }
-  return {
-    id: keyOf(reference),
-    type: CSL_TYPE_REVERSE[reference.cslType ?? 'OTHER'] ?? 'article-journal',
-    title: reference.name ?? '',
-    author: parseAuthorsToCsl(reference.authors),
-    ...(isDefined(reference.year)
-      ? { issued: { 'date-parts': [[reference.year]] } }
-      : {}),
-    ...(isNonEmptyString(reference.containerTitle)
-      ? { 'container-title': reference.containerTitle }
-      : {}),
-    ...(isNonEmptyString(reference.volume) ? { volume: reference.volume } : {}),
-    ...(isNonEmptyString(reference.issue) ? { issue: reference.issue } : {}),
-    ...(isNonEmptyString(reference.pages) ? { page: reference.pages } : {}),
-    ...(isNonEmptyString(reference.doi) ? { DOI: reference.doi } : {}),
-    ...(isNonEmptyString(reference.url) ? { URL: reference.url } : {}),
-  };
-};
-
 const compareSections = (a: SectionLike, b: SectionLike): number => {
   const placementDelta =
     (PLACEMENT_ORDER[a.placement ?? 'MAIN'] ?? 1) -
@@ -133,6 +70,18 @@ const compareSections = (a: SectionLike, b: SectionLike): number => {
   if (orderDelta !== 0) return orderDelta;
   return (a.name ?? '').localeCompare(b.name ?? '');
 };
+
+export const manuscriptSectionsForExport = (
+  input: Pick<BuildBundleInput, 'references' | 'sections'>,
+): SectionLike[] =>
+  [...input.sections]
+    .filter(
+      (section) =>
+        section.includeInExport !== false &&
+        section.sectionType !== 'TITLE_PAGE' &&
+        !(section.sectionType === 'REFERENCES' && input.references.length > 0),
+    )
+    .sort(compareSections);
 
 const sectionHeadingLevel = (section: SectionLike, heading: string): 2 | 3 => {
   if (
@@ -154,6 +103,7 @@ export type ManuscriptMeta = {
   doi?: string | null;
   authorLine?: string | null;
   affiliations?: string | null;
+  titlePageExtraLines?: string[] | null;
   correspondingAuthor?: string | null;
   supplementTitle?: string | null;
   supplementAuthorLine?: string | null;
@@ -176,6 +126,7 @@ export type ManuscriptBundle = {
     abstract: string;
     keywords: string[];
     affiliations: string;
+    titlePageExtraLines: string[];
     correspondingAuthor: string;
     supplementTitle: string;
     supplementAuthors: string;
@@ -205,6 +156,12 @@ export type ManuscriptBundle = {
     supplementSectionCount: number;
     supplementFigureCount: number;
   };
+  sourceInput: BuildBundleInput;
+};
+
+export type ManuscriptCitationFormatting = {
+  bibliography: FormattedBibliographyEntry[];
+  labelsByCluster: ReadonlyMap<string, string>;
 };
 
 // One unit of the neutral document model.
@@ -241,6 +198,7 @@ const renderSectionBody = (
 
 export const buildManuscriptBundle = (
   input: BuildBundleInput,
+  citationFormatting?: ManuscriptCitationFormatting,
 ): ManuscriptBundle => {
   const { manuscript, style } = input;
   const warnings: string[] = [];
@@ -272,20 +230,9 @@ export const buildManuscriptBundle = (
     referencesByKey.set(keyOf(reference), reference);
   }
 
-  const sections = [...input.sections]
-    // The manuscript metadata already renders the title, authors,
-    // affiliations, and corresponding author. A TITLE_PAGE import section is
-    // the source copy of that same material, not a second manuscript section.
-    .filter(
-      (section) =>
-        section.includeInExport !== false &&
-        section.sectionType !== 'TITLE_PAGE' &&
-        // Once reconciliation has created structured reference records, the
-        // generated bibliography replaces the imported source list. Keeping
-        // both would duplicate References and disturb back-matter ordering.
-        !(section.sectionType === 'REFERENCES' && input.references.length > 0),
-    )
-    .sort(compareSections);
+  // The metadata already renders title-page fields, and a generated
+  // bibliography replaces an imported source References section.
+  const sections = manuscriptSectionsForExport(input);
 
   // First pass: resolve cross-refs and collect citation keys in document order.
   const rendered = sections.map((section) =>
@@ -334,7 +281,14 @@ export const buildManuscriptBundle = (
 
   sections.forEach((section, index) => {
     const part = rendered[index];
-    const withCitations = renderCitationsInText(part.resolved, context);
+    const withCitations =
+      citationFormatting === undefined
+        ? renderCitationsInText(part.resolved, context)
+        : renderCitationsInTextWithLabels(
+            part.resolved,
+            citationFormatting.labelsByCluster,
+            context,
+          );
     const anchored = figuresBySection.get(section.id) ?? [];
 
     const isSupplement = section.placement === 'SUPPLEMENT';
@@ -407,7 +361,9 @@ export const buildManuscriptBundle = (
   }
 
   // Bibliography.
-  const bibliography = formatBibliography(context, orderedKeys);
+  const bibliography =
+    citationFormatting?.bibliography ??
+    formatBibliography(context, orderedKeys);
   if (bibliography.length > 0) {
     const bibBlock = [
       '## References',
@@ -465,6 +421,7 @@ export const buildManuscriptBundle = (
       abstract,
       keywords,
       affiliations: manuscript.affiliations ?? '',
+      titlePageExtraLines: manuscript.titlePageExtraLines ?? [],
       correspondingAuthor: manuscript.correspondingAuthor ?? '',
       supplementTitle: manuscript.supplementTitle?.trim() || '',
       supplementAuthors: manuscript.supplementAuthorLine?.trim() || '',
@@ -493,5 +450,6 @@ export const buildManuscriptBundle = (
       ).length,
       supplementFigureCount: supplementFigures.length,
     },
+    sourceInput: input,
   };
 };

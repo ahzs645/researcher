@@ -48,8 +48,10 @@ const jestConfig = {
         },
       },
     ],
+    '^.+\\.(csl|xml)$': '<rootDir>/rawTextTransform.cjs',
   },
   moduleNameMapper: {
+    '^(.+\\.(?:csl|xml))\\?raw$': '$1',
     '\\.(jpg|jpeg|png|gif|webp|svg|svg\\?react)$':
       '<rootDir>/__mocks__/imageMockFront.js',
     '\\.css$': '<rootDir>/__mocks__/styleMock.js',
@@ -57,7 +59,7 @@ const jestConfig = {
       prefix: '<rootDir>/',
     }),
   },
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'csl', 'xml'],
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
   coverageThreshold: {
     global: {

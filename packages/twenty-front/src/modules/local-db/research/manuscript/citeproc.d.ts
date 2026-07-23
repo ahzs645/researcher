@@ -1,13 +1,16 @@
-// Minimal ambient types for citeproc-js (the `citeproc` package ships none).
-// Only the surface we use: an Engine that takes a sys object + a CSL style XML,
-// is told which item ids are cited, and emits a formatted bibliography.
 declare module 'citeproc' {
   export type CiteprocSys = {
-    retrieveLocale: (lang: string) => string;
+    retrieveLocale: (language: string) => string;
     retrieveItem: (id: string) => Record<string, unknown>;
   };
 
-  export type BibliographyMeta = {
+  export type Citation = {
+    citationID: string;
+    citationItems: { id: string }[];
+    properties: { noteIndex: number };
+  };
+
+  export type BibliographyMetadata = {
     entry_ids: string[][];
   };
 
@@ -15,13 +18,19 @@ declare module 'citeproc' {
     constructor(
       sys: CiteprocSys,
       style: string,
-      lang?: string,
-      forceLang?: boolean,
+      language?: string,
+      forceLanguage?: boolean,
     );
     updateItems(ids: string[]): void;
-    makeBibliography(): [BibliographyMeta, string[]] | false;
+    processCitationCluster(
+      citation: Citation,
+      citationsPre: [string, number][],
+      citationsPost: [string, number][],
+    ): [{ bibchange: boolean }, [number, string, string?][]];
+    makeCitationCluster(citationItems: { id: string }[]): string;
+    makeBibliography(): [BibliographyMetadata, string[]] | false;
   }
 
-  const CSL: { Engine: typeof Engine };
-  export default CSL;
+  const Citeproc: { Engine: typeof Engine };
+  export default Citeproc;
 }

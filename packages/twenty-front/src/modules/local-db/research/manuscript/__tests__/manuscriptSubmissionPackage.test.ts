@@ -43,6 +43,7 @@ describe('createSubmissionPackage', () => {
       figures: [],
       references: [],
       style: {
+        id: 'test-journal-id',
         name: 'Test journal',
         profileKey: 'test-journal',
         lineNumbering: true,
@@ -57,6 +58,12 @@ describe('createSubmissionPackage', () => {
       bundle,
       {
         coverLetter: 'Please consider this manuscript.',
+        submissionExtras: JSON.stringify({
+          'test-journal': {
+            FUNDING: 'Funded by Example Council.',
+            EMPTY_FIELD: '   ',
+          },
+        }),
       },
       {
         manuscript: {
@@ -93,10 +100,17 @@ describe('createSubmissionPackage', () => {
         'references.json',
         'research-paper.json',
         'submission-readiness.txt',
+        'submission-extras/FUNDING.txt',
       ]),
     );
     expect(strFromU8(packageFiles['metadata.json'])).toContain(
       'Reusable air-quality paper',
+    );
+    expect(strFromU8(packageFiles['submission-extras/FUNDING.txt'])).toBe(
+      'Funded by Example Council.',
+    );
+    expect(strFromU8(packageFiles['submission-readiness.txt'])).toContain(
+      'submission-extras/FUNDING.txt',
     );
 
     expect(

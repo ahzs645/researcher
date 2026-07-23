@@ -1,29 +1,33 @@
 import { styled } from '@linaria/react';
 import { useState } from 'react';
-import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { ManuscriptExportActionsCard } from '@/local-db/research/components/composer/export/ManuscriptExportActionsCard';
+import { ManuscriptExportStyleCard } from '@/local-db/research/components/composer/export/ManuscriptExportStyleCard';
+import { ManuscriptJournalFormatCard } from '@/local-db/research/components/composer/export/ManuscriptJournalFormatCard';
 import { type ManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
-import { type ManuscriptExportStyleOverrides } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
-import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
+import {
+  citationStyleKeyFromStyle,
+  CITATION_MODE_SETTING_KEYS,
+  type CitationModeStyleSettings,
+  type ManuscriptExportStyleOverrides,
+  withCitationStyle,
+  withCitationModeSetting,
+} from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import {
   downloadExportFile,
   getManuscriptExporters,
 } from '@/local-db/research/manuscript/manuscriptExport';
+import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import {
   type SubmissionMaterials,
   validateSubmission,
 } from '@/local-db/research/manuscript/manuscriptSubmission';
-import { createSubmissionPackage } from '@/local-db/research/manuscript/manuscriptSubmissionPackage';
-import { ManuscriptExportProfileSummary } from '@/local-db/research/components/ManuscriptExportProfileSummary';
-import { ManuscriptExportStyleControls } from '@/local-db/research/components/ManuscriptExportStyleControls';
-import { ManuscriptSubmissionReadinessPanel } from '@/local-db/research/components/ManuscriptSubmissionReadinessPanel';
+import {
+  createPortableResearchPackage,
+  createSubmissionPackage,
+} from '@/local-db/research/manuscript/manuscriptSubmissionPackage';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { Select } from '@/ui/input/components/Select';
-
-// Pick the target journal format and export. Numbering, captions and citations
-// in the bundle already reflect the selected template, so the warnings + stats
-// shown here are exactly what the exported document will carry.
 
 type JournalOption = { id: string; name: string };
 
@@ -46,36 +50,6 @@ const StyledPanel = styled.div`
   gap: ${themeCssVariables.spacing[3]};
 `;
 
-const StyledWarning = styled.div`
-  color: ${themeCssVariables.font.color.secondary};
-  font-size: ${themeCssVariables.font.size.xs};
-`;
-
-const StyledWarningTitle = styled.div`
-  color: ${themeCssVariables.color.orange};
-  font-size: ${themeCssVariables.font.size.xs};
-  font-weight: ${themeCssVariables.font.weight.medium};
-`;
-
-const StyledExporterRow = styled.div`
-  align-items: center;
-  display: flex;
-  gap: ${themeCssVariables.spacing[2]};
-  justify-content: space-between;
-`;
-
-const StyledFormats = styled.span`
-  color: ${themeCssVariables.font.color.tertiary};
-  font-size: ${themeCssVariables.font.size.xs};
-`;
-
-const StyledSettingsActions = styled.div`
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: ${themeCssVariables.spacing[2]};
-`;
-
 export const ManuscriptExportPanel = ({
   bundle,
   journals,
@@ -87,14 +61,46 @@ export const ManuscriptExportPanel = ({
   portableSource,
 }: ManuscriptExportPanelProps) => {
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
-  const [isExporting, setIsExporting] = useState(false);
+  const [activeExportId, setActiveExportId] = useState<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [styleOverrides, setStyleOverrides] =
     useState<ManuscriptExportStyleOverrides>(initialStyleOverrides);
   const effectiveStyle = { ...bundle.style, ...styleOverrides };
   const exportBundle = { ...bundle, style: effectiveStyle };
+  const citationStyleKey = citationStyleKeyFromStyle(effectiveStyle);
+  const exporters = getManuscriptExporters();
+  const readiness = validateSubmission(exportBundle, materials);
+
   const updateStyleOverrides = (updates: ManuscriptExportStyleOverrides) =>
-    setStyleOverrides((current) => ({ ...current, ...updates }));
+    setStyleOverrides((current) => {
+      let next = { ...current, ...updates };
+      for (const key of CITATION_MODE_SETTING_KEYS) {
+        const value = updates[key];
+        if (typeof value !== 'string') continue;
+        next = withCitationModeSetting(next, citationStyleKey, {
+          [key]: value,
+        } as CitationModeStyleSettings);
+      }
+      return next;
+    });
+
+  const changeCitationStyle = async (nextStyleKey: string) => {
+    if (isSavingSettings || nextStyleKey === citationStyleKey) return;
+    const previous = styleOverrides;
+    const next = withCitationStyle(previous, citationStyleKey, nextStyleKey);
+    setStyleOverrides(next);
+    setIsSavingSettings(true);
+    try {
+      await onSaveStyleOverrides(next);
+      enqueueSuccessSnackBar({ message: 'Citation style updated' });
+    } catch {
+      setStyleOverrides(previous);
+      enqueueErrorSnackBar({ message: 'Could not update citation style' });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   const saveStyleOverrides = async () => {
     if (isSavingSettings) return;
     setIsSavingSettings(true);
@@ -107,6 +113,7 @@ export const ManuscriptExportPanel = ({
       setIsSavingSettings(false);
     }
   };
+
   const resetStyleOverrides = async () => {
     if (isSavingSettings) return;
     setIsSavingSettings(true);
@@ -120,34 +127,52 @@ export const ManuscriptExportPanel = ({
       setIsSavingSettings(false);
     }
   };
-  const exporters = getManuscriptExporters();
-  const readiness = validateSubmission(exportBundle, materials);
-  const journalOptions: SelectOption<string>[] = journals.map((journal) => ({
-    value: journal.id,
-    label: journal.name,
-  }));
 
   const runExport = async (exporterId: string) => {
-    if (isExporting) return;
+    if (activeExportId !== null) return;
     const exporter = exporters.find((candidate) => candidate.id === exporterId);
     if (exporter === undefined) return;
-    setIsExporting(true);
+    setActiveExportId(exporterId);
     try {
       const files = await exporter.export(exportBundle);
-      for (const file of files) {
-        downloadExportFile(file);
-      }
+      for (const file of files) downloadExportFile(file);
       enqueueSuccessSnackBar({
         message: `Exported ${files.length} file(s) via ${exporter.label}`,
       });
     } finally {
-      setIsExporting(false);
+      setActiveExportId(null);
     }
   };
 
-  const runPackageExport = async () => {
-    if (isExporting) return;
-    setIsExporting(true);
+  const runPortableResearchExport = async () => {
+    if (activeExportId !== null) return;
+    setActiveExportId('portable-research');
+    try {
+      const portablePackage = await createPortableResearchPackage(
+        exportBundle,
+        materials,
+        portableSource,
+      );
+      downloadExportFile({
+        filename: portablePackage.filename,
+        mimeType: 'application/zip',
+        content: portablePackage.blob,
+      });
+      enqueueSuccessSnackBar({
+        message: `Portable research ZIP created with ${portablePackage.includedFiles.length} files`,
+      });
+    } catch {
+      enqueueErrorSnackBar({
+        message: 'Could not create the portable research ZIP',
+      });
+    } finally {
+      setActiveExportId(null);
+    }
+  };
+
+  const runSubmissionPackageExport = async () => {
+    if (activeExportId !== null) return;
+    setActiveExportId('submission-package');
     try {
       const submissionPackage = await createSubmissionPackage(
         exportBundle,
@@ -167,81 +192,41 @@ export const ManuscriptExportPanel = ({
         message: 'Could not create the submission package',
       });
     } finally {
-      setIsExporting(false);
+      setActiveExportId(null);
     }
   };
 
   return (
     <StyledPanel>
-      <Select
-        dropdownId="manuscript-export-journal-select"
-        label="Journal format"
-        fullWidth
-        options={journalOptions}
-        value={selectedJournalId ?? journalOptions[0]?.value}
-        onChange={onSelectJournal}
-      />
-
-      <ManuscriptExportStyleControls
-        style={effectiveStyle}
-        onChange={updateStyleOverrides}
-      />
-      <StyledSettingsActions>
-        <Button
-          title={isSavingSettings ? 'Saving settings…' : 'Save export settings'}
-          variant="primary"
-          accent="blue"
-          size="small"
-          disabled={isSavingSettings}
-          onClick={saveStyleOverrides}
-        />
-        <Button
-          title="Reset to journal defaults"
-          variant="secondary"
-          size="small"
-          disabled={isSavingSettings}
-          onClick={resetStyleOverrides}
-        />
-        <StyledFormats>
-          Saved settings apply only to this manuscript; the journal profile
-          remains reusable.
-        </StyledFormats>
-      </StyledSettingsActions>
-
-      <ManuscriptExportProfileSummary bundle={exportBundle} />
-      <ManuscriptSubmissionReadinessPanel
+      <ManuscriptExportActionsCard
+        activeExportId={activeExportId}
+        exporters={exporters}
         readiness={readiness}
-        isExporting={isExporting}
-        onDownloadPackage={runPackageExport}
+        warnings={bundle.warnings}
+        onExport={(exporterId) => void runExport(exporterId)}
+        onPortableResearchExport={() => void runPortableResearchExport()}
+        onSubmissionPackageExport={() => void runSubmissionPackageExport()}
       />
-
-      {bundle.warnings.length > 0 ? (
-        <div>
-          <StyledWarningTitle>
-            {bundle.warnings.length} issue(s) before submission
-          </StyledWarningTitle>
-          {bundle.warnings.slice(0, 6).map((warning) => (
-            <StyledWarning key={warning}>• {warning}</StyledWarning>
-          ))}
-        </div>
-      ) : null}
-
-      {exporters.map((exporter) => (
-        <StyledExporterRow key={exporter.id}>
-          <StyledFormats>
-            {exporter.label} · {exporter.formats.join(', ')}
-            {exporter.offline ? ' · offline' : ''}
-          </StyledFormats>
-          <Button
-            title={isExporting ? 'Exporting…' : 'Export'}
-            variant="primary"
-            accent="blue"
-            size="small"
-            disabled={isExporting}
-            onClick={() => runExport(exporter.id)}
-          />
-        </StyledExporterRow>
-      ))}
+      <ManuscriptJournalFormatCard
+        citationStyleKey={citationStyleKey}
+        hasStyleOverrides={Object.keys(styleOverrides).length > 0}
+        isSavingSettings={isSavingSettings}
+        journals={journals}
+        selectedJournalId={selectedJournalId}
+        onCitationStyleChange={(nextStyleKey) =>
+          void changeCitationStyle(nextStyleKey)
+        }
+        onResetStyleOverrides={() => void resetStyleOverrides()}
+        onSelectJournal={onSelectJournal}
+      />
+      <ManuscriptExportStyleCard
+        bundle={exportBundle}
+        isSavingSettings={isSavingSettings}
+        style={effectiveStyle}
+        styleOverrides={styleOverrides}
+        onChange={updateStyleOverrides}
+        onSave={() => void saveStyleOverrides()}
+      />
     </StyledPanel>
   );
 };

@@ -219,16 +219,40 @@ export const formatBibliography = (
 // formatted in-text form. (A simple pass that handles the common bracket forms.)
 const CITATION_CLUSTER = /\[(@[^\]]+)\]/g;
 
+const citationKeysFromCluster = (inner: string): string[] =>
+  inner
+    .split(';')
+    .map((part) => part.trim().replace(/^@/, ''))
+    .filter((part) => part.length > 0);
+
+export const citationClusterKey = (keys: string[]): string =>
+  keys.join('\u001f');
+
+export const extractCitationClusters = (markdown: string): string[][] =>
+  [...markdown.matchAll(CITATION_CLUSTER)].map((match) =>
+    citationKeysFromCluster(match[1]),
+  );
+
 export const renderCitationsInText = (
   markdown: string,
   context: CitationContext,
 ): string =>
   markdown.replace(CITATION_CLUSTER, (_match, inner: string) => {
-    const keys = inner
-      .split(';')
-      .map((part) => part.trim().replace(/^@/, ''))
-      .filter((part) => part.length > 0);
+    const keys = citationKeysFromCluster(inner);
     return formatInTextCitation(keys, context);
+  });
+
+export const renderCitationsInTextWithLabels = (
+  markdown: string,
+  labelsByCluster: ReadonlyMap<string, string>,
+  fallbackContext: CitationContext,
+): string =>
+  markdown.replace(CITATION_CLUSTER, (_match, inner: string) => {
+    const keys = citationKeysFromCluster(inner);
+    return (
+      labelsByCluster.get(citationClusterKey(keys)) ??
+      formatInTextCitation(keys, fallbackContext)
+    );
   });
 
 // ── Seam for full CSL rendering (citeproc-js / @citeproc-rs) ────────────────

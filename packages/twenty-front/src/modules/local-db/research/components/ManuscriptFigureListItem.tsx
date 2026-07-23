@@ -1,9 +1,9 @@
 import { styled } from '@linaria/react';
-import { Button, type SelectOption } from 'twenty-ui/input';
+import { type KeyboardEvent } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { ManuscriptFigureMetadataFields } from '@/local-db/research/components/ManuscriptFigureMetadataFields';
-import { assetPlacementMarker } from '@/local-db/research/manuscript/manuscriptAssetPlacement';
+import { ManuscriptFigureExpandedEditor } from '@/local-db/research/components/ManuscriptFigureExpandedEditor';
+import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
   describeImageSource,
   resolveFigureImage,
@@ -12,8 +12,6 @@ import {
   type NumberedFigure,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { Select } from '@/ui/input/components/Select';
 
 type ManuscriptFigureListItemProps = {
   figure: NumberedFigure;
@@ -21,28 +19,41 @@ type ManuscriptFigureListItemProps = {
   peerIndex: number;
   peerCount: number;
   isAdding: boolean;
+  isExpanded: boolean;
+  tableStyle: ManuscriptTableStyle;
+  onToggle: () => void;
+  onSelectSection: (sectionId: string) => void;
   onPersist: (values: Record<string, unknown>) => void;
   onMove: (direction: -1 | 1) => void;
   onPlotTable: () => void;
   onReplaceImage: (file: File) => void;
 };
 
-const PLACEMENT_OPTIONS: SelectOption<string>[] = [
-  { value: 'MAIN', label: 'Main' },
-  { value: 'SUPPLEMENT', label: 'Supplement' },
-];
-
-const UNASSIGNED_SECTION = '__UNASSIGNED__';
+const StyledItem = styled.div`
+  border: 1px solid ${themeCssVariables.border.color.light};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  overflow: hidden;
+`;
 
 const StyledRow = styled.div`
   align-items: center;
   background: ${themeCssVariables.background.secondary};
-  border: 1px solid ${themeCssVariables.border.color.light};
-  border-radius: ${themeCssVariables.border.radius.sm};
+  cursor: pointer;
   display: flex;
   gap: ${themeCssVariables.spacing[2]};
   justify-content: space-between;
   padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]};
+
+  &:hover {
+    background: ${themeCssVariables.background.transparent.light};
+  }
+`;
+
+const StyledSummary = styled.div`
+  align-items: center;
+  display: flex;
+  gap: ${themeCssVariables.spacing[2]};
+  min-width: 0;
 `;
 
 const StyledMain = styled.div`
@@ -58,9 +69,30 @@ const StyledLabel = styled.span`
   font-weight: ${themeCssVariables.font.weight.medium};
 `;
 
-const StyledMeta = styled.span`
-  color: ${themeCssVariables.font.color.tertiary};
+const StyledCaption = styled.span`
+  color: ${themeCssVariables.font.color.secondary};
   font-size: ${themeCssVariables.font.size.xs};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const StyledMeta = styled.span`
+  align-items: center;
+  color: ${themeCssVariables.font.color.tertiary};
+  display: flex;
+  font-size: ${themeCssVariables.font.size.xs};
+  gap: ${themeCssVariables.spacing[1]};
+`;
+
+const StyledSectionLink = styled.button`
+  background: transparent;
+  border: 0;
+  color: ${themeCssVariables.font.color.secondary};
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
 `;
 
 const StyledThumb = styled.img`
@@ -71,52 +103,27 @@ const StyledThumb = styled.img`
   width: 56px;
 `;
 
-const StyledAssetEditor = styled.div`
-  display: grid;
-  gap: ${themeCssVariables.spacing[2]};
-  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr);
-  padding: ${themeCssVariables.spacing[1]} 0 ${themeCssVariables.spacing[2]};
-`;
-
-const StyledInput = styled.input`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
+const StyledKindBadge = styled.span`
+  align-items: center;
+  background: ${themeCssVariables.background.transparent.light};
   border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.sm};
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
-`;
-
-const StyledCaptionArea = styled.textarea`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-family: inherit;
-  font-size: ${themeCssVariables.font.size.sm};
-  min-height: 52px;
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
-  resize: vertical;
-`;
-
-const StyledTableArea = styled.textarea`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-family: monospace;
-  font-size: ${themeCssVariables.font.size.xs};
-  min-height: 56px;
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
-  resize: vertical;
-  width: 100%;
-`;
-
-const StyledActions = styled.div`
+  color: ${themeCssVariables.font.color.secondary};
   display: flex;
-  flex-wrap: wrap;
-  gap: ${themeCssVariables.spacing[2]};
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.medium};
+  height: 40px;
+  justify-content: center;
+  text-transform: capitalize;
+  width: 56px;
 `;
+
+const StyledExpandHint = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
+const firstLine = (value?: string | null): string =>
+  value?.split(/\r?\n/, 1)[0]?.trim() || 'No caption';
 
 export const ManuscriptFigureListItem = ({
   figure,
@@ -124,142 +131,83 @@ export const ManuscriptFigureListItem = ({
   peerIndex,
   peerCount,
   isAdding,
+  isExpanded,
+  tableStyle,
+  onToggle,
+  onSelectSection,
   onPersist,
   onMove,
   onPlotTable,
   onReplaceImage,
 }: ManuscriptFigureListItemProps) => {
-  const { enqueueSuccessSnackBar } = useSnackBar();
   const image = resolveFigureImage(figure);
-  const sectionOptions: SelectOption<string>[] = [
-    { value: UNASSIGNED_SECTION, label: 'End of document' },
-    ...sections
-      .filter((section) =>
-        figure.placement === 'SUPPLEMENT'
-          ? section.placement === 'SUPPLEMENT'
-          : section.placement !== 'SUPPLEMENT',
-      )
-      .map((section) => ({
-        value: section.id,
-        label: section.name ?? section.sectionType ?? 'Section',
-      })),
-  ];
-
-  const copyText = (value: string, message: string) => {
-    void navigator.clipboard.writeText(value);
-    enqueueSuccessSnackBar({ message });
+  const linkedSection = sections.find(({ id }) => id === figure.sectionId);
+  const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onToggle();
+    }
   };
 
   return (
-    <div>
-      <StyledRow>
-        <StyledMain>
-          <StyledLabel>
-            {figure.label} — {figure.name}
-          </StyledLabel>
-          <StyledMeta>
-            [#{figure.refKey ?? figure.id}] ·{' '}
-            {assetPlacementMarker(figure.refKey ?? figure.id)} ·{' '}
-            {describeImageSource(figure)}
-          </StyledMeta>
-        </StyledMain>
-        {image.kind !== 'none' ? (
-          <StyledThumb src={image.src} alt={figure.altText ?? ''} />
-        ) : null}
+    <StyledItem>
+      <StyledRow
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onClick={onToggle}
+        onKeyDown={handleRowKeyDown}
+      >
+        <StyledSummary>
+          {figure.assetKind === 'TABLE' || image.kind === 'none' ? (
+            <StyledKindBadge>
+              {figure.assetKind?.toLowerCase() ?? 'asset'}
+            </StyledKindBadge>
+          ) : (
+            <StyledThumb src={image.src} alt={figure.altText ?? ''} />
+          )}
+          <StyledMain>
+            <StyledLabel>
+              {figure.label} · #{figure.refKey ?? figure.id}
+            </StyledLabel>
+            <StyledCaption>
+              {firstLine(figure.caption ?? figure.name)}
+            </StyledCaption>
+            <StyledMeta>
+              {linkedSection !== undefined ? (
+                <StyledSectionLink
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectSection(linkedSection.id);
+                  }}
+                >
+                  {linkedSection.name ?? 'Untitled section'}
+                </StyledSectionLink>
+              ) : (
+                <span>End of document</span>
+              )}
+              <span>· {describeImageSource(figure)}</span>
+            </StyledMeta>
+          </StyledMain>
+        </StyledSummary>
+        <StyledExpandHint>{isExpanded ? 'Collapse' : 'Edit'}</StyledExpandHint>
       </StyledRow>
-      <StyledAssetEditor>
-        <StyledInput
-          aria-label={`${figure.label} name`}
-          defaultValue={figure.name ?? ''}
-          placeholder="Figure name"
-          onBlur={(event) => onPersist({ name: event.target.value.trim() })}
+
+      {isExpanded ? (
+        <ManuscriptFigureExpandedEditor
+          figure={figure}
+          sections={sections}
+          peerIndex={peerIndex}
+          peerCount={peerCount}
+          isAdding={isAdding}
+          tableStyle={tableStyle}
+          onPersist={onPersist}
+          onMove={onMove}
+          onPlotTable={onPlotTable}
+          onReplaceImage={onReplaceImage}
         />
-        <StyledCaptionArea
-          aria-label={`${figure.label} caption`}
-          defaultValue={figure.caption ?? figure.name ?? ''}
-          placeholder="Full figure caption"
-          onBlur={(event) => onPersist({ caption: event.target.value.trim() })}
-        />
-        <Select
-          dropdownId={`figure-section-${figure.id}`}
-          options={sectionOptions}
-          value={figure.sectionId ?? UNASSIGNED_SECTION}
-          onChange={(value) =>
-            onPersist({
-              sectionId: value === UNASSIGNED_SECTION ? null : value,
-            })
-          }
-        />
-        <Select
-          dropdownId={`figure-placement-${figure.id}`}
-          options={PLACEMENT_OPTIONS}
-          value={figure.placement ?? 'MAIN'}
-          onChange={(value) => onPersist({ placement: value, sectionId: null })}
-        />
-        <StyledActions>
-          <Button
-            title="Move up"
-            variant="secondary"
-            size="small"
-            disabled={peerIndex === 0}
-            onClick={() => onMove(-1)}
-          />
-          <Button
-            title="Move down"
-            variant="secondary"
-            size="small"
-            disabled={peerIndex === peerCount - 1}
-            onClick={() => onMove(1)}
-          />
-          <Button
-            title="Copy reference"
-            variant="secondary"
-            size="small"
-            onClick={() =>
-              copyText(
-                `[#${figure.refKey ?? figure.id}]`,
-                `Copied live reference for ${figure.label}`,
-              )
-            }
-          />
-          <Button
-            title="Copy placement linker"
-            variant="secondary"
-            size="small"
-            onClick={() =>
-              copyText(
-                assetPlacementMarker(figure.refKey ?? figure.id),
-                `Copied placement linker for ${figure.label}`,
-              )
-            }
-          />
-        </StyledActions>
-        {figure.assetKind !== 'TABLE' ? (
-          <ManuscriptFigureMetadataFields
-            figure={figure}
-            onPersist={onPersist}
-            onReplaceImage={onReplaceImage}
-          />
-        ) : null}
-      </StyledAssetEditor>
-      {figure.assetKind === 'TABLE' ? (
-        <>
-          <StyledTableArea
-            defaultValue={figure.tableData ?? ''}
-            placeholder={'| Col A | Col B |\n| --- | --- |\n| 1 | 2 |'}
-            onBlur={(event) => onPersist({ tableData: event.target.value })}
-          />
-          <StyledActions>
-            <Button
-              title="Plot as chart"
-              variant="secondary"
-              size="small"
-              disabled={isAdding}
-              onClick={onPlotTable}
-            />
-          </StyledActions>
-        </>
       ) : null}
-    </div>
+    </StyledItem>
   );
 };

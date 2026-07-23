@@ -19,6 +19,7 @@ export type ImportedSectionDraft = {
   placement: string;
   content: string;
   orderIndex: number;
+  level?: number;
   wordCount: number;
   includeInExport: boolean;
   status?: string;
@@ -37,6 +38,9 @@ export type ImportedDocument = {
     embeddedImageCount: number;
     tableCount: number;
   };
+  // Exact body lines that the import map deliberately demoted from captions.
+  // Asset extraction must preserve them as prose instead of reclassifying them.
+  suppressedAssetLineSignatures?: string[];
   portablePackage?: PortableResearchPaperManifest;
 };
 
@@ -237,26 +241,11 @@ const splitIntoBlocks = (text: string): Block[] => {
   return blocks;
 };
 
-const appendSubheadingToSection = (
-  section: ImportedSectionDraft,
-  block: Block,
-): ImportedSectionDraft => {
-  const heading = stripHeadingNumbering(block.heading ?? 'Details');
-  const content = [section.content, `### ${heading}`, block.body]
-    .filter((part) => part.trim().length > 0)
-    .join('\n\n');
-
-  return {
-    ...section,
-    content,
-    wordCount: countWords(content),
-  };
-};
-
 const draftFromBlock = (
   heading: string,
   body: string,
   orderIndex: number,
+  level: number,
 ): ImportedSectionDraft => {
   const { sectionType, placement } = classifyHeading(heading);
   return {
@@ -265,9 +254,34 @@ const draftFromBlock = (
     placement,
     content: body,
     orderIndex,
+    level: Math.min(3, Math.max(1, level || 1)),
     wordCount: countWords(body),
     includeInExport: true,
   };
+};
+
+const STRUCTURAL_SECTION_TYPES = new Set([
+  'ABSTRACT',
+  'KEYWORDS',
+  'INTRODUCTION',
+  'TITLE_PAGE',
+]);
+
+export const applyLeadingFrontMatterPlacement = (
+  sections: ImportedSectionDraft[],
+): ImportedSectionDraft[] => {
+  const firstStructuralIndex = sections.findIndex((section) =>
+    STRUCTURAL_SECTION_TYPES.has(section.sectionType),
+  );
+  if (firstStructuralIndex < 0) return sections;
+
+  return sections.map((section, index) =>
+    index < firstStructuralIndex &&
+    section.sectionType === 'OTHER' &&
+    section.wordCount < 40
+      ? { ...section, placement: 'FRONT_MATTER' }
+      : section,
+  );
 };
 
 // Parse a Markdown / plain-text document into a title + ordered section drafts.
@@ -319,35 +333,17 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
   }
 
   const sections: ImportedSectionDraft[] = [];
-  let currentSectionLevel = 0;
   for (let index = startIndex; index < blocks.length; index += 1) {
     const block = blocks[index];
     const heading = block.heading ?? 'Body';
     if (block.body.length === 0 && block.heading === null) continue;
 
-    const blockPlacement = classifyHeading(heading).placement;
-    const currentSection = sections[sections.length - 1];
-    // Preserve the source heading hierarchy inside the owning manuscript
-    // section. This handles both Markdown (## / ###) and Word documents that
-    // correctly use Heading 1 for sections and Heading 2 for subsections.
-    if (
-      sections.length > 0 &&
-      block.level > currentSectionLevel &&
-      currentSection.placement === blockPlacement &&
-      (blockPlacement === 'MAIN' || blockPlacement === 'SUPPLEMENT')
-    ) {
-      sections[sections.length - 1] = appendSubheadingToSection(
-        currentSection,
-        block,
-      );
-      continue;
-    }
-
-    sections.push(draftFromBlock(heading, block.body, sections.length));
-    currentSectionLevel = block.level;
+    sections.push(
+      draftFromBlock(heading, block.body, sections.length, block.level),
+    );
   }
 
-  return { title, sections };
+  return { title, sections: applyLeadingFrontMatterPlacement(sections) };
 };
 
 // ── WordprocessingML (.docx body) → Markdown ────────────────────────────────
@@ -414,6 +410,15 @@ export type WordStyleDefinition = {
 export type WordImportOptions = {
   styles?: Record<string, WordStyleDefinition>;
   imageByRelationshipId?: Record<string, { dataUrl: string; altText: string }>;
+};
+
+export type WordMarkdownBlock = {
+  kind: 'paragraph' | 'table' | 'synthetic';
+  markdown: string;
+  styleId?: string;
+  styleName?: string;
+  sourceHeadingLevel?: number;
+  headingSource?: 'style' | 'semantic' | 'bold';
 };
 
 export const parseWordStyleDefinitions = (
@@ -529,9 +534,10 @@ const semanticHeadingLevel = (text: string): number => {
 const wordParagraphToMarkdown = (
   paragraphXml: string,
   options: WordImportOptions,
-): string => {
+): WordMarkdownBlock => {
   const styleMatch = /<w:pStyle\b[^>]*w:val="([^"]*)"/.exec(paragraphXml);
   const styleId = styleMatch?.[1] ?? '';
+  const styleName = options.styles?.[styleId]?.name;
   const level = headingLevelFromStyle(styleId, options.styles ?? {});
   // OMML carries its own <m:t> text runs. Remove it from the prose pass so an
   // equation is emitted once as math, not once as flattened text and again as
@@ -542,32 +548,62 @@ const wordParagraphToMarkdown = (
   const images = paragraphImages(paragraphXml, options.imageByRelationshipId);
   const math = paragraphMath(paragraphXml).map((value) => `$$${value}$$`);
 
-  if (text.length === 0 && images.length === 0 && math.length === 0) return '';
+  const provenance = {
+    ...(styleId.length > 0 ? { styleId } : {}),
+    ...(styleName !== undefined ? { styleName } : {}),
+  };
+
+  if (text.length === 0 && images.length === 0 && math.length === 0) {
+    return { kind: 'paragraph', markdown: '', ...provenance };
+  }
 
   if (/^keywords?\s*:/i.test(text)) {
-    return `\n## Keywords\n\n${text.replace(/^keywords?\s*:\s*/i, '')}\n`;
+    return {
+      kind: 'paragraph',
+      markdown: `\n## Keywords\n\n${text.replace(/^keywords?\s*:\s*/i, '')}\n`,
+      ...provenance,
+      sourceHeadingLevel: 2,
+      headingSource: 'semantic',
+    };
   }
   if (/^all authors contributed\b/i.test(text)) {
-    return `\n## Author contributions\n\n${text}\n`;
+    return {
+      kind: 'paragraph',
+      markdown: `\n## Author contributions\n\n${text}\n`,
+      ...provenance,
+      sourceHeadingLevel: 2,
+      headingSource: 'semantic',
+    };
   }
 
   const detectedLevel = semanticHeadingLevel(text);
-  const finalLevel =
-    math.length > 0 || isProseLike(text)
-      ? 0
-      : level > 0
-        ? Math.min(level, 3)
-        : detectedLevel > 0
-          ? detectedLevel
-          : isDirectlyBold(paragraphXml) && text.length <= 100
-            ? 3
-            : 0;
+  let headingSource: WordMarkdownBlock['headingSource'];
+  let finalLevel = 0;
+  if (math.length === 0 && !isProseLike(text)) {
+    if (level > 0) {
+      finalLevel = Math.min(level, 3);
+      headingSource = 'style';
+    } else if (detectedLevel > 0) {
+      finalLevel = detectedLevel;
+      headingSource = 'semantic';
+    } else if (isDirectlyBold(paragraphXml) && text.length <= 100) {
+      finalLevel = 3;
+      headingSource = 'bold';
+    }
+  }
   const renderedText =
     finalLevel > 0 ? `\n${'#'.repeat(finalLevel)} ${text}\n` : text;
 
-  return [renderedText, ...math, ...images]
-    .filter((part) => part.trim().length > 0)
-    .join('\n\n');
+  return {
+    kind: 'paragraph',
+    markdown: [renderedText, ...math, ...images]
+      .filter((part) => part.trim().length > 0)
+      .join('\n\n'),
+    ...provenance,
+    ...(finalLevel > 0 && headingSource !== undefined
+      ? { sourceHeadingLevel: finalLevel, headingSource }
+      : {}),
+  };
 };
 
 const wordTableToMarkdown = (tableXml: string): string => {
@@ -643,22 +679,29 @@ const tokenizeWordBody = (body: string): string[] => {
   return tokens;
 };
 
-const injectAbstractHeading = (blocks: string[]): string[] => {
-  if (blocks.some((block) => /^\s*#{1,6}\s+Abstract\b/i.test(block))) {
+const injectAbstractHeading = (
+  blocks: WordMarkdownBlock[],
+): WordMarkdownBlock[] => {
+  if (blocks.some((block) => /^\s*#{1,6}\s+Abstract\b/i.test(block.markdown))) {
     return blocks;
   }
   const keywordsIndex = blocks.findIndex((block) =>
-    /^\s*## Keywords\b/.test(block),
+    /^\s*## Keywords\b/.test(block.markdown),
   );
   if (keywordsIndex < 0) return blocks;
 
   for (let index = keywordsIndex - 1; index >= 0; index -= 1) {
-    const candidate = blocks[index].trim();
+    const candidate = blocks[index].markdown.trim();
     if (candidate.startsWith('#')) continue;
     if (countWords(candidate) < 50) continue;
     return [
       ...blocks.slice(0, index),
-      '## Abstract',
+      {
+        kind: 'synthetic',
+        markdown: '## Abstract',
+        sourceHeadingLevel: 2,
+        headingSource: 'semantic',
+      },
       blocks[index],
       ...blocks.slice(index + 1),
     ];
@@ -666,9 +709,11 @@ const injectAbstractHeading = (blocks: string[]): string[] => {
   return blocks;
 };
 
-const removeDuplicateTitleBlocks = (blocks: string[]): string[] => {
-  const normalizedBlockText = (block: string): string =>
-    block
+const removeDuplicateTitleBlocks = (
+  blocks: WordMarkdownBlock[],
+): WordMarkdownBlock[] => {
+  const normalizedBlockText = (block: WordMarkdownBlock): string =>
+    block.markdown
       .trim()
       .replace(/^#{1,6}\s+/, '')
       .trim();
@@ -688,22 +733,29 @@ const removeDuplicateTitleBlocks = (blocks: string[]): string[] => {
   });
 };
 
-export const parseWordMlToMarkdown = (
+export const parseWordMlToMarkdownBlocks = (
   documentXml: string,
   options: WordImportOptions = {},
-): string => {
+): WordMarkdownBlock[] => {
   const body =
     /<w:body\b[\s\S]*?<\/w:body>/.exec(documentXml)?.[0] ?? documentXml;
   const tokens = tokenizeWordBody(body);
-  const out: string[] = [];
+  const out: WordMarkdownBlock[] = [];
   for (const token of tokens) {
     out.push(
       token.startsWith('<w:tbl')
-        ? wordTableToMarkdown(token)
+        ? { kind: 'table', markdown: wordTableToMarkdown(token) }
         : wordParagraphToMarkdown(token, options),
     );
   }
-  return injectAbstractHeading(removeDuplicateTitleBlocks(out))
+  return injectAbstractHeading(removeDuplicateTitleBlocks(out));
+};
+
+export const serializeWordMarkdownBlocks = (
+  blocks: WordMarkdownBlock[],
+): string =>
+  blocks
+    .map((block) => block.markdown)
     .join('\n')
     .replace(/^#{1,6}\s*$/gm, '')
     .replace(
@@ -712,13 +764,20 @@ export const parseWordMlToMarkdown = (
     )
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-};
 
-export const parseWordDocument = (
+export const parseWordMlToMarkdown = (
   documentXml: string,
   options: WordImportOptions = {},
+): string =>
+  serializeWordMarkdownBlocks(
+    parseWordMlToMarkdownBlocks(documentXml, options),
+  );
+
+export const parseWordDocumentFromBlocks = (
+  documentXml: string,
+  blocks: WordMarkdownBlock[],
 ): ImportedDocument => {
-  const markdown = parseWordMlToMarkdown(documentXml, options);
+  const markdown = serializeWordMarkdownBlocks(blocks);
   const document = parseMarkdownDocument(markdown);
   const equationCount = (documentXml.match(/<m:oMath\b/g) ?? []).length;
   const embeddedImageCount = (
@@ -770,6 +829,15 @@ export const parseWordDocument = (
   };
 };
 
+export const parseWordDocument = (
+  documentXml: string,
+  options: WordImportOptions = {},
+): ImportedDocument =>
+  parseWordDocumentFromBlocks(
+    documentXml,
+    parseWordMlToMarkdownBlocks(documentXml, options),
+  );
+
 // ── Lift standalone tables into numbered figure records ─────────────────────
 // An imported GFM table sitting in a section body is data, not prose. This pulls
 // each one out into a `figure` (TABLE) draft and leaves an exact-position
@@ -779,13 +847,13 @@ export const parseWordDocument = (
 const TABLE_SEPARATOR = /^\|?[\s:|-]+\|?$/;
 const isTableLine = (line: string): boolean => line.trim().includes('|');
 
-type ImportedAssetCaption = {
+export type ImportedAssetCaption = {
   caption: string;
   sourceLabel?: string;
   explicitLabel: boolean;
 };
 
-const parseImportedAssetCaption = (
+export const parseImportedAssetCaption = (
   line: string,
   kind: 'FIGURE' | 'TABLE',
 ): ImportedAssetCaption | null => {
@@ -828,9 +896,10 @@ const importedAssetRefKey = (
 export const extractTablesToFigures = (
   sections: ImportedSectionDraft[],
   startOrderIndex = 0,
+  usedRefKeys: Set<string> = new Set<string>(),
+  suppressedAssetLineSignatures: ReadonlySet<string> = new Set<string>(),
 ): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
   const figures: ImportedFigureDraft[] = [];
-  const usedRefKeys = new Set<string>();
   let order = startOrderIndex;
 
   const nextSections = sections.map((section) => {
@@ -858,7 +927,9 @@ export const extractTablesToFigures = (
             previousIndex -= 1;
           }
           const previous = out[previousIndex]?.trim() ?? '';
-          const captionMatch = parseImportedAssetCaption(previous, 'TABLE');
+          const captionMatch = suppressedAssetLineSignatures.has(previous)
+            ? null
+            : parseImportedAssetCaption(previous, 'TABLE');
           let captionIndex = end;
           while (
             captionIndex < lines.length &&
@@ -867,7 +938,9 @@ export const extractTablesToFigures = (
             captionIndex += 1;
           }
           const following = lines[captionIndex]?.trim() ?? '';
-          const followingMatch = parseImportedAssetCaption(following, 'TABLE');
+          const followingMatch = suppressedAssetLineSignatures.has(following)
+            ? null
+            : parseImportedAssetCaption(following, 'TABLE');
           const preferFollowing =
             followingMatch !== null &&
             followingMatch.explicitLabel &&
@@ -930,9 +1003,10 @@ const IMAGE_LINE = /^!\[([^\]]*)\]\((data:image\/[^)]+)\)$/i;
 export const extractImagesToFigures = (
   sections: ImportedSectionDraft[],
   startOrderIndex = 0,
+  usedRefKeys: Set<string> = new Set<string>(),
+  suppressedAssetLineSignatures: ReadonlySet<string> = new Set<string>(),
 ): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
   const figures: ImportedFigureDraft[] = [];
-  const usedRefKeys = new Set<string>();
   let order = startOrderIndex;
 
   const nextSections = sections.map((section) => {
@@ -956,7 +1030,9 @@ export const extractImagesToFigures = (
         previousCaptionIndex -= 1;
       }
       const previousLine = out[previousCaptionIndex]?.trim() ?? '';
-      const previousCaption = parseImportedAssetCaption(previousLine, 'FIGURE');
+      const previousCaption = suppressedAssetLineSignatures.has(previousLine)
+        ? null
+        : parseImportedAssetCaption(previousLine, 'FIGURE');
       let nextCaptionIndex = index + 1;
       while (
         nextCaptionIndex < lines.length &&
@@ -965,7 +1041,9 @@ export const extractImagesToFigures = (
         nextCaptionIndex += 1;
       }
       const nextLine = lines[nextCaptionIndex]?.trim() ?? '';
-      const nextCaption = parseImportedAssetCaption(nextLine, 'FIGURE');
+      const nextCaption = suppressedAssetLineSignatures.has(nextLine)
+        ? null
+        : parseImportedAssetCaption(nextLine, 'FIGURE');
       const preferNext =
         nextCaption !== null &&
         nextCaption.explicitLabel &&
@@ -1025,13 +1103,15 @@ export const extractImagesToFigures = (
 export const extractCaptionOnlyFigures = (
   sections: ImportedSectionDraft[],
   startOrderIndex = 0,
+  usedRefKeys: Set<string> = new Set<string>(),
+  suppressedAssetLineSignatures: ReadonlySet<string> = new Set<string>(),
 ): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
   const figures: ImportedFigureDraft[] = [];
-  const usedRefKeys = new Set<string>();
   let order = startOrderIndex;
 
   const nextSections = sections.map((section) => {
     const out = section.content.split('\n').map((line) => {
+      if (suppressedAssetLineSignatures.has(line.trim())) return line;
       const captionInfo = parseImportedAssetCaption(line.trim(), 'FIGURE');
       if (
         captionInfo === null ||

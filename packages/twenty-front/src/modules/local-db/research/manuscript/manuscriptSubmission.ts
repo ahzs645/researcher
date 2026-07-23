@@ -2,12 +2,14 @@ import { isNonEmptyString } from '@sniptt/guards';
 import { isDefined } from 'twenty-shared/utils';
 
 import { countWords, type ManuscriptBundle } from './manuscriptAssembly';
+import { resolveSubmissionRequirementItems } from './manuscriptSubmissionRequirements';
 
 export type SubmissionMaterials = {
   coverLetter?: string | null;
   highlights?: string | null;
   competingInterests?: string | null;
   suggestedReviewers?: string | null;
+  submissionExtras?: string | null;
 };
 
 export type SubmissionCheckSeverity = 'ERROR' | 'WARNING' | 'READY';
@@ -217,6 +219,28 @@ export const validateSubmission = (
     });
   }
 
+  if ((style.submissionRequirements ?? '').trim().length > 0) {
+    const journalName =
+      style.name?.trim() || bundle.metadata.journal || 'journal';
+    const requirementItems = resolveSubmissionRequirementItems(
+      {
+        id: style.id?.trim() || style.profileKey?.trim() || journalName,
+        profileKey: style.profileKey,
+        submissionRequirements: style.submissionRequirements,
+      },
+      materials,
+    );
+    for (const item of requirementItems) {
+      if (!item.required || item.filled) continue;
+      checks.push({
+        id: `journal-requirement-${item.definition.key}`,
+        label: item.definition.label,
+        detail: `Required by ${journalName}: ${item.definition.label}`,
+        severity: 'WARNING',
+      });
+    }
+  }
+
   if (style.profileKey === 'elsevier-atmospheric-environment') {
     const highlights = (materials.highlights ?? '')
       .split('\n')
@@ -254,6 +278,7 @@ export const validateSubmission = (
 export const buildSubmissionManifest = (
   bundle: ManuscriptBundle,
   readiness: SubmissionReadiness,
+  submissionExtraFiles: string[] = [],
 ): string =>
   [
     bundle.metadata.title,
@@ -264,6 +289,9 @@ export const buildSubmissionManifest = (
     ...readiness.checks.map(
       (check) => `[${check.severity}] ${check.label}: ${check.detail}`,
     ),
+    ...(submissionExtraFiles.length > 0
+      ? ['', 'Submission extras', ...submissionExtraFiles]
+      : []),
     '',
     'Package contents are editable working files. Review every item in the journal submission portal before final submission.',
   ].join('\n');

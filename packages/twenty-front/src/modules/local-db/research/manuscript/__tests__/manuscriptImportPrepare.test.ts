@@ -1,0 +1,195 @@
+import {
+  PORTABLE_MANUSCRIPT_FORMAT,
+  PORTABLE_MANUSCRIPT_VERSION,
+  type PortableResearchPaperManifest,
+} from '@/local-db/research/manuscript/manuscriptPortableManifest';
+import {
+  parseMarkdownDocument,
+  type ImportedDocument,
+  type ImportedSectionDraft,
+} from '@/local-db/research/manuscript/manuscriptDocImport';
+import { prepareManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
+
+const section = (
+  sectionType: string,
+  name: string,
+  content: string,
+  orderIndex: number,
+): ImportedSectionDraft => ({
+  name,
+  sectionType,
+  placement:
+    sectionType === 'TITLE_PAGE'
+      ? 'FRONT_MATTER'
+      : sectionType === 'REFERENCES'
+        ? 'BACK_MATTER'
+        : 'MAIN',
+  content,
+  orderIndex,
+  level: 1,
+  wordCount: content.split(/\s+/).filter(Boolean).length,
+  includeInExport: true,
+});
+
+describe('prepareManuscriptImport', () => {
+  it('demotes an imported title page when author metadata was extracted', () => {
+    const document: ImportedDocument = {
+      authorLine: 'Alice Example; Bob Example',
+      sections: [
+        section(
+          'TITLE_PAGE',
+          'Title page',
+          'Alice Example; Bob Example\nExample Institute',
+          0,
+        ),
+        section('INTRODUCTION', 'Introduction', 'Body.', 1),
+      ],
+    };
+
+    const prepared = prepareManuscriptImport(document, false);
+
+    expect(prepared.sections[0]).toMatchObject({
+      sectionType: 'TITLE_PAGE',
+      includeInExport: false,
+    });
+    expect(prepared.sections[1].includeInExport).toBe(true);
+  });
+
+  it('demotes journal-instructions references with no parsed references', () => {
+    const document: ImportedDocument = {
+      sections: [
+        section('INTRODUCTION', 'Introduction', 'Body.', 0),
+        section(
+          'REFERENCES',
+          'References — see the journal submission instructions',
+          '',
+          1,
+        ),
+      ],
+    };
+
+    const prepared = prepareManuscriptImport(document, true);
+
+    expect(prepared.references).toHaveLength(0);
+    expect(prepared.sections[1]).toMatchObject({
+      sectionType: 'REFERENCES',
+      includeInExport: false,
+    });
+  });
+
+  it('deduplicates existing references and rewrites imported citation keys', () => {
+    const document = parseMarkdownDocument(
+      [
+        '## Introduction',
+        'Ventilation helps [1].',
+        '## References',
+        '1. Mendell, M. J. Classroom ventilation. Indoor Air 2013, 23, 515-528. doi:10.1111/ina.12042',
+      ].join('\n'),
+    );
+
+    const prepared = prepareManuscriptImport(document, true, {
+      existingReferences: [
+        {
+          id: 'existing-reference',
+          name: 'Classroom ventilation',
+          citationKey: 'saved-mendell',
+          doi: '10.1111/ina.12042',
+          year: 2013,
+        },
+      ],
+    });
+
+    expect(prepared.references).toHaveLength(0);
+    expect(prepared.sections[0].content).toContain('[@saved-mendell]');
+    expect(prepared.sections[0].content).not.toContain('[@mendell2013]');
+  });
+
+  it('reserves existing figure keys before linking imported asset references', () => {
+    const document = parseMarkdownDocument(
+      [
+        '## Results',
+        'See Figure 1 for the result.',
+        '![Plot](data:image/png;base64,AAAA)',
+        'Figure 1. Imported result.',
+      ].join('\n'),
+    );
+
+    const prepared = prepareManuscriptImport(document, false, {
+      existingFigureRefKeys: ['imported-figure-1'],
+    });
+
+    expect(prepared.figures).toMatchObject([
+      { refKey: 'imported-figure-1-2', sourceLabel: '1' },
+    ]);
+    expect(prepared.sections[0].content).toContain(
+      '[[asset:imported-figure-1-2]]',
+    );
+    expect(prepared.sections[0].content).toContain('[#imported-figure-1-2]');
+  });
+
+  it('passes portable sections and records through the portable preparation path', () => {
+    const portablePackage: PortableResearchPaperManifest = {
+      format: PORTABLE_MANUSCRIPT_FORMAT,
+      schemaVersion: PORTABLE_MANUSCRIPT_VERSION,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      metadata: { title: 'Portable paper' },
+      contributors: { affiliations: [], authors: [] },
+      sections: [
+        {
+          key: 'section-1',
+          name: 'Results',
+          sectionType: 'RESULTS',
+          placement: 'MAIN',
+          content: 'Portable result.',
+          status: 'DRAFTING',
+          orderIndex: 0,
+          wordCount: 2,
+          includeInExport: true,
+        },
+      ],
+      figures: [
+        {
+          key: 'figure-1',
+          name: 'Portable figure',
+          refKey: 'portable-figure',
+          caption: 'Portable caption.',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+          imageSource: 'NONE',
+          orderIndex: 0,
+          sectionKey: 'section-1',
+        },
+      ],
+      references: [
+        {
+          key: 'reference-1',
+          name: 'Portable reference',
+          citationKey: 'portable2026',
+          cslType: 'ARTICLE_JOURNAL',
+        },
+      ],
+      exportStyle: {},
+      submissionMaterials: {},
+    };
+    const sections = [section('RESULTS', 'Edited results', 'Edited.', 0)];
+    const document: ImportedDocument = {
+      title: 'Portable paper',
+      sections,
+      portablePackage,
+    };
+
+    const prepared = prepareManuscriptImport(document, false);
+
+    expect(prepared).toMatchObject({
+      portable: true,
+      sections,
+      references: [{ citationKey: 'portable2026' }],
+      figures: [
+        {
+          refKey: 'portable-figure',
+          sectionOrderIndex: 0,
+        },
+      ],
+    });
+  });
+});

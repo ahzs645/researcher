@@ -1,45 +1,24 @@
 import { styled } from '@linaria/react';
-import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { type SubmissionReadiness } from '@/local-db/research/manuscript/manuscriptSubmission';
 
 type ManuscriptSubmissionReadinessPanelProps = {
   readiness: SubmissionReadiness;
-  isExporting: boolean;
-  onDownloadPackage: () => void;
 };
 
-const StyledPackage = styled.div`
-  background: ${themeCssVariables.background.secondary};
+const StyledReadiness = styled.details`
+  background: ${themeCssVariables.background.primary};
   border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.md};
-  display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[2]};
-  padding: ${themeCssVariables.spacing[3]};
-`;
+  border-radius: ${themeCssVariables.border.radius.sm};
 
-const StyledHeader = styled.div`
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: ${themeCssVariables.spacing[2]};
-  justify-content: space-between;
-`;
-
-const StyledTitle = styled.span`
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.sm};
-  font-weight: ${themeCssVariables.font.weight.medium};
-`;
-
-const StyledStats = styled.div`
-  color: ${themeCssVariables.font.color.tertiary};
-  display: flex;
-  flex-wrap: wrap;
-  font-size: ${themeCssVariables.font.size.xs};
-  gap: ${themeCssVariables.spacing[2]};
+  & > summary {
+    color: ${themeCssVariables.font.color.secondary};
+    cursor: pointer;
+    font-size: ${themeCssVariables.font.size.xs};
+    font-weight: ${themeCssVariables.font.weight.medium};
+    padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]};
+  }
 `;
 
 const StyledCheck = styled.div`
@@ -55,52 +34,37 @@ const StyledCheck = styled.div`
   }
 `;
 
+const StyledChecks = styled.div`
+  border-top: 1px solid ${themeCssVariables.border.color.light};
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[1]};
+  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]}
+    ${themeCssVariables.spacing[3]};
+`;
+
 export const ManuscriptSubmissionReadinessPanel = ({
   readiness,
-  isExporting,
-  onDownloadPackage,
 }: ManuscriptSubmissionReadinessPanelProps) => (
-  <StyledPackage>
-    <StyledHeader>
-      <div>
-        <StyledTitle>
-          {readiness.ready
-            ? 'Ready to package'
-            : 'Submission package needs attention'}
-        </StyledTitle>
-        <StyledStats>
-          <span>{readiness.readyCount} ready</span>
-          <span>{readiness.warningCount} warnings</span>
-          <span>{readiness.errorCount} required items missing</span>
-        </StyledStats>
-      </div>
-      <Button
-        title={
-          isExporting
-            ? 'Packaging…'
-            : 'Download portable submission package (.zip)'
-        }
-        variant="primary"
-        accent="blue"
-        size="small"
-        disabled={isExporting}
-        onClick={onDownloadPackage}
-      />
-    </StyledHeader>
-    <StyledStats>
-      Includes a versioned research-paper manifest so this ZIP can be imported
-      into the composer with its sections, links, figures, references, and
-      export settings intact.
-    </StyledStats>
-    {readiness.checks.map((check) => (
-      <StyledCheck key={check.id} data-severity={check.severity}>
-        {check.severity === 'READY'
-          ? '✓'
-          : check.severity === 'ERROR'
-            ? '!'
-            : '•'}{' '}
-        {check.label}: {check.detail}
-      </StyledCheck>
-    ))}
-  </StyledPackage>
+  <StyledReadiness>
+    <summary>
+      Submission readiness · {readiness.readyCount} ready /{' '}
+      {readiness.warningCount} warnings
+      {readiness.errorCount > 0
+        ? ` / ${readiness.errorCount} required items missing`
+        : ''}
+    </summary>
+    <StyledChecks>
+      {readiness.checks.map((check) => (
+        <StyledCheck key={check.id} data-severity={check.severity}>
+          {check.severity === 'READY'
+            ? '✓'
+            : check.severity === 'ERROR'
+              ? '!'
+              : '•'}{' '}
+          {check.label}: {check.detail}
+        </StyledCheck>
+      ))}
+    </StyledChecks>
+  </StyledReadiness>
 );

@@ -1,16 +1,20 @@
 import { styled } from '@linaria/react';
 import { useMemo, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
+import { IconPlus } from 'twenty-ui/display';
+import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptFigureCreateForm } from '@/local-db/research/components/ManuscriptFigureCreateForm';
 import { ManuscriptFigureListItem } from '@/local-db/research/components/ManuscriptFigureListItem';
 import {
-  renderChartSvg,
-  tableMarkdownToChartData,
-} from '@/local-db/research/manuscript/manuscriptChart';
-import { rasterizeSvgToPngDataUrl } from '@/local-db/research/manuscript/manuscriptChartImage';
+  chartPngFromTable,
+  deriveFigureNameFromCaption,
+  fileToDataUrl,
+  slugifyFigureKey,
+} from '@/local-db/research/components/composer/manuscriptFigurePanelUtils';
 import { numberAssets } from '@/local-db/research/manuscript/manuscriptNumbering';
+import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
   type FigureLike,
   type JournalStyle,
@@ -20,28 +24,12 @@ import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
-// The figure manager: every figure/table/scheme with its live, journal-aware
-// label (Figure 1 / Table 1 / Figure S1), and an "add figure" row supporting the
-// modular image sources — paste a URL or upload a file (stored as a data-URL so
-// it works with no backend).
-
-const CHART_WIDTH = 640;
-const CHART_HEIGHT = 400;
-
-// Render a Markdown data table to a PNG data-URL chart, or null when it has no
-// numeric columns to plot. Used both by the add form and the per-table action.
-const chartPngFromTable = async (
-  tableMarkdown: string,
-): Promise<string | null> => {
-  const data = tableMarkdownToChartData(tableMarkdown);
-  if (data === null) return null;
-  const svg = renderChartSvg(data, {
-    kind: 'bar',
-    width: CHART_WIDTH,
-    height: CHART_HEIGHT,
-  });
-  return rasterizeSvgToPngDataUrl(svg, CHART_WIDTH, CHART_HEIGHT);
-};
+const MANUSCRIPT_TABLE_STYLES: ManuscriptTableStyle[] = [
+  'ACADEMIC',
+  'GRID',
+  'SHADED_HEADER',
+  'BORDERLESS',
+];
 
 type ManuscriptFigurePanelProps = {
   manuscriptId: string;
@@ -49,6 +37,7 @@ type ManuscriptFigurePanelProps = {
   sections: SectionLike[];
   style: JournalStyle;
   onChanged: () => void;
+  onSelectSection: (sectionId: string) => void;
 };
 
 const StyledPanel = styled.div`
@@ -57,26 +46,13 @@ const StyledPanel = styled.div`
   gap: ${themeCssVariables.spacing[2]};
 `;
 
-const fileToDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('Could not read file'));
-    reader.readAsDataURL(file);
-  });
-
-const slugify = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-
 export const ManuscriptFigurePanel = ({
   manuscriptId,
   figures,
   sections,
   style,
   onChanged,
+  onSelectSection,
 }: ManuscriptFigurePanelProps) => {
   const { createOneRecord } = useCreateOneRecord({
     objectNameSingular: 'figure',
@@ -88,10 +64,15 @@ export const ManuscriptFigurePanel = ({
   const [placement, setPlacement] = useState('MAIN');
   const [imageUrl, setImageUrl] = useState('');
   const [tableData, setTableData] = useState('');
+  const [tableEditorVersion, setTableEditorVersion] = useState(0);
   const [isAdding, setIsAdding] = useState(false);
+  const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
+  const [expandedFigureId, setExpandedFigureId] = useState<string | null>(null);
+  const tableStyle =
+    MANUSCRIPT_TABLE_STYLES.find(
+      (candidate) => candidate === style.tableStyle,
+    ) ?? 'ACADEMIC';
 
-  // Live numbering — the same pure function the exporter uses, so the panel
-  // shows exactly the labels the paper will carry.
   const numbered = useMemo(
     () => numberAssets(figures, style),
     [figures, style],
@@ -157,11 +138,12 @@ export const ManuscriptFigurePanel = ({
       return false;
     }
     await createOneRecord({
-      name: captionText || 'Chart',
+      name: deriveFigureNameFromCaption(captionText) || 'Chart',
       manuscriptId,
       assetKind: 'FIGURE',
       placement,
-      refKey: slugify(refKeyBase).slice(0, 24) || `chart-${Date.now()}`,
+      refKey:
+        slugifyFigureKey(refKeyBase).slice(0, 24) || `chart-${Date.now()}`,
       caption: captionText,
       imageUrl: png,
       imageSource: 'GENERATED',
@@ -188,9 +170,11 @@ export const ManuscriptFigurePanel = ({
         enqueueSuccessSnackBar({ message: 'Plotted chart from table' });
       } else {
         const refKey =
-          slugify(trimmedCaption).slice(0, 24) || `asset-${Date.now()}`;
+          slugifyFigureKey(trimmedCaption).slice(0, 24) ||
+          `asset-${Date.now()}`;
         await createOneRecord({
-          name: trimmedCaption || 'Untitled figure',
+          name:
+            deriveFigureNameFromCaption(trimmedCaption) || 'Untitled figure',
           manuscriptId,
           assetKind,
           placement,
@@ -211,6 +195,8 @@ export const ManuscriptFigurePanel = ({
       setCaption('');
       setImageUrl('');
       setTableData('');
+      setTableEditorVersion((version) => version + 1);
+      setIsCreateFormOpen(false);
       onChanged();
     } finally {
       setIsAdding(false);
@@ -247,6 +233,38 @@ export const ManuscriptFigurePanel = ({
 
   return (
     <StyledPanel>
+      <Button
+        title={isCreateFormOpen ? 'Cancel' : 'Add figure or table'}
+        Icon={isCreateFormOpen ? undefined : IconPlus}
+        variant="secondary"
+        size="small"
+        onClick={() => setIsCreateFormOpen((isOpen) => !isOpen)}
+      />
+
+      {isCreateFormOpen ? (
+        <ManuscriptFigureCreateForm
+          caption={caption}
+          assetKind={assetKind}
+          placement={placement}
+          imageUrl={imageUrl}
+          tableData={tableData}
+          tableStyle={tableStyle}
+          tableEditorVersion={tableEditorVersion}
+          isAdding={isAdding}
+          onCaptionChange={setCaption}
+          onAssetKindChange={setAssetKind}
+          onPlacementChange={setPlacement}
+          onImageUrlChange={setImageUrl}
+          onTableDataChange={setTableData}
+          onAdd={() => {
+            void addFigure();
+          }}
+          onUpload={(file) => {
+            void fileToDataUrl(file).then(addFigure);
+          }}
+        />
+      ) : null}
+
       {numbered.map((figure) => {
         const peers = orderedPeers(figure);
         const peerIndex = peers.findIndex(
@@ -260,6 +278,14 @@ export const ManuscriptFigurePanel = ({
             peerIndex={peerIndex}
             peerCount={peers.length}
             isAdding={isAdding}
+            isExpanded={expandedFigureId === figure.id}
+            tableStyle={tableStyle}
+            onToggle={() =>
+              setExpandedFigureId((currentId) =>
+                currentId === figure.id ? null : figure.id,
+              )
+            }
+            onSelectSection={onSelectSection}
             onPersist={(values) => persistFigure(figure, values)}
             onMove={(direction) => moveFigure(figure, direction)}
             onPlotTable={() => {
@@ -271,26 +297,6 @@ export const ManuscriptFigurePanel = ({
           />
         );
       })}
-
-      <ManuscriptFigureCreateForm
-        caption={caption}
-        assetKind={assetKind}
-        placement={placement}
-        imageUrl={imageUrl}
-        tableData={tableData}
-        isAdding={isAdding}
-        onCaptionChange={setCaption}
-        onAssetKindChange={setAssetKind}
-        onPlacementChange={setPlacement}
-        onImageUrlChange={setImageUrl}
-        onTableDataChange={setTableData}
-        onAdd={() => {
-          void addFigure();
-        }}
-        onUpload={(file) => {
-          void fileToDataUrl(file).then(addFigure);
-        }}
-      />
     </StyledPanel>
   );
 };

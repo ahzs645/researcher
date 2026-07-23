@@ -25,6 +25,7 @@ export type SectionLike = {
   content?: string | null;
   status?: string | null;
   orderIndex?: number | null;
+  level?: number | null;
   wordLimit?: number | null;
   wordCount?: number | null;
   includeInExport?: boolean | null;
@@ -50,6 +51,8 @@ export type FigureLike = {
 
 export type ReferenceLike = {
   id: string;
+  createdAt?: string | null;
+  orderIndex?: number | null;
   name?: string | null; // title
   citationKey?: string | null;
   cslType?: string | null;
@@ -68,6 +71,7 @@ export type ReferenceLike = {
 // The journal format's knobs — everything the numbering/citation/layout logic
 // reads. Every field is optional; sensible defaults fill the gaps.
 export type JournalStyle = {
+  id?: string | null;
   name?: string | null;
   profileKey?: string | null;
   citationMode?: string | null;
@@ -91,6 +95,7 @@ export type JournalStyle = {
   keywordMinimum?: number | null;
   keywordMaximum?: number | null;
   requiredArtifacts?: string[] | null;
+  submissionRequirements?: string | null;
   lineNumbering?: boolean | null;
   pageNumbering?: boolean | null;
   sectionNumbering?: boolean | null;

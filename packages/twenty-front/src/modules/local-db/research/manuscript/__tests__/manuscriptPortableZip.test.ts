@@ -1,6 +1,9 @@
 import { zipSync } from 'fflate';
 
+import { buildManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
 import {
+  buildPortableResearchPaperManifest,
+  parsePortableResearchPaperManifest,
   PORTABLE_MANUSCRIPT_FILENAME,
   type PortableManuscriptSource,
 } from '@/local-db/research/manuscript/manuscriptPortableManifest';
@@ -12,6 +15,12 @@ import {
   addPortableResearchPaperFiles,
   readPortableResearchPaperZip,
 } from '@/local-db/research/manuscript/manuscriptPortableZip';
+import { createPortableResearchPackage } from '@/local-db/research/manuscript/manuscriptSubmissionPackage';
+
+jest.mock('@/local-db/research/manuscript/manuscriptDocxExport', () => ({
+  exportManuscriptToDocxBlob: jest.fn(),
+  exportStandaloneMarkdownToDocxBlob: jest.fn(),
+}));
 
 const source: PortableManuscriptSource = {
   manuscript: {
@@ -21,6 +30,7 @@ const source: PortableManuscriptSource = {
     targetVenue: 'Example Journal',
     authorLine: 'Alice Example [1]; Bob Example [2*]',
     affiliations: '1 Lab A\n2 Lab B',
+    titlePageExtraLines: ['A thesis submitted for the degree of PhD', '2026'],
     correspondingAuthor: 'Bob Example, bob@example.org',
     supplementTitle: 'Supplemental Information for Portable aerosol paper',
   },
@@ -33,6 +43,7 @@ const source: PortableManuscriptSource = {
       content: 'See [#absorption-plot] and [@smith2024].',
       status: 'IN_REVIEW',
       orderIndex: 0,
+      level: 2,
       wordCount: 3,
       includeInExport: true,
     },
@@ -80,6 +91,43 @@ const source: PortableManuscriptSource = {
 };
 
 describe('portable research-paper ZIP', () => {
+  it('creates a standalone portable download from the export bundle', async () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: {
+        id: 'paper-1',
+        name: source.manuscript.title,
+      },
+      sections: source.sections,
+      figures: source.figures,
+      references: source.references,
+      style: { citationMode: 'AUTHOR_DATE' },
+    });
+    const portablePackage = await createPortableResearchPackage(
+      bundle,
+      { coverLetter: 'Please consider this manuscript.' },
+      source,
+    );
+    const packageBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.readAsArrayBuffer(portablePackage.blob);
+    });
+    const restored = readPortableResearchPaperZip(
+      new Uint8Array(packageBuffer),
+    );
+
+    expect(portablePackage.filename).toBe(
+      'portable-aerosol-paper-portable-research.zip',
+    );
+    expect(portablePackage.includedFiles).toEqual([
+      'portable-assets/absorption-plot.png',
+      'research-paper.json',
+    ]);
+    expect(restored.metadata.title).toBe('Portable aerosol paper');
+    expect(restored.exportStyle.citationMode).toBe('AUTHOR_DATE');
+  });
+
   it('round-trips structure, links, contributors, assets, and export settings', () => {
     const files: Record<string, Uint8Array> = {};
     addPortableResearchPaperFiles(
@@ -103,6 +151,10 @@ describe('portable research-paper ZIP', () => {
     const restored = readPortableResearchPaperZip(zipSync(files));
 
     expect(restored.metadata.title).toBe('Portable aerosol paper');
+    expect(restored.metadata.titlePageExtraLines).toEqual([
+      'A thesis submitted for the degree of PhD',
+      '2026',
+    ]);
     expect(restored.contributors.authors[1]).toMatchObject({
       name: 'Bob Example',
       affiliationKeys: ['affiliation-2'],
@@ -110,6 +162,7 @@ describe('portable research-paper ZIP', () => {
     });
     expect(restored.sections[0].content).toContain('[#absorption-plot]');
     expect(restored.sections[0].content).toContain('[@smith2024]');
+    expect(restored.sections[0].level).toBe(2);
     expect(restored.figures[0]).toMatchObject({
       refKey: 'absorption-plot',
       sectionKey: 'section-1',
@@ -142,6 +195,10 @@ describe('portable research-paper ZIP', () => {
     expect(portableManuscriptRecordUpdate(restored)).toMatchObject({
       name: 'Portable aerosol paper',
       targetVenue: 'Example Journal',
+      titlePageExtraLines: JSON.stringify([
+        'A thesis submitted for the degree of PhD',
+        '2026',
+      ]),
       coverLetter: 'Please consider this manuscript.',
     });
   });
@@ -150,5 +207,24 @@ describe('portable research-paper ZIP', () => {
     expect(() =>
       readPortableResearchPaperZip(zipSync({ 'notes.txt': new Uint8Array() })),
     ).toThrow(`ZIP does not contain ${PORTABLE_MANUSCRIPT_FILENAME}`);
+  });
+
+  it('defaults legacy section levels without changing explicit placements', () => {
+    const manifest = buildPortableResearchPaperManifest(source, {}, {});
+    const legacySections = manifest.sections.map(
+      ({ level: _level, ...section }) => section,
+    );
+    const restored = parsePortableResearchPaperManifest(
+      JSON.stringify({ ...manifest, sections: legacySections }),
+    );
+
+    expect(restored.sections[0]).toMatchObject({
+      level: 1,
+      placement: 'MAIN',
+    });
+    expect(restored.sections[1]).toMatchObject({
+      level: 1,
+      placement: 'SUPPLEMENT',
+    });
   });
 });

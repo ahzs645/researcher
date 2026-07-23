@@ -30,6 +30,7 @@ describe('parseReferenceList', () => {
     expect(entries[0].draft.doi).toBe('10.1111/ina.12042');
     expect(entries[0].draft.year).toBe(2013);
     expect(entries[0].draft.cslJson).toContain('researcher:rawReference');
+    expect(entries[0].draft.cslJson).toContain('"researcher:referenceIndex":1');
     expect(
       formatReferenceEntry(
         { id: 'imported-reference', ...entries[0].draft },

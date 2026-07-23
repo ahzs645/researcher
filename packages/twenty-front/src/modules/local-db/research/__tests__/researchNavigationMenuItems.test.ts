@@ -37,6 +37,19 @@ describe('research navigation menu items', () => {
     Record<string, unknown>
   >([]);
 
+  it('defines manuscript heading levels with a top-level default', () => {
+    const manuscriptSection = RESEARCH_OBJECT_SPECS.find(
+      (spec) => spec.nameSingular === 'manuscriptSection',
+    );
+    expect(
+      manuscriptSection?.fields.find((field) => field.name === 'level'),
+    ).toMatchObject({
+      label: 'Heading level',
+      type: 'NUMBER',
+      defaultValue: 1,
+    });
+  });
+
   it('groups research objects under the Lab/Work/Funding/Discovery folders', () => {
     const folders = augmented.filter((item) => item.type === 'FOLDER');
     expect(folders.map((folder) => folder.name)).toEqual(

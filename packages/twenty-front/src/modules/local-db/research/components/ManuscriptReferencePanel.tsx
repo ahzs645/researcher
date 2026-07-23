@@ -1,36 +1,50 @@
 import { styled } from '@linaria/react';
-import { useState } from 'react';
-import { Button } from 'twenty-ui/input';
+import { useMemo, useState } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { ManuscriptReferenceEditor } from '@/local-db/research/components/composer/references/ManuscriptReferenceEditor';
 import {
-  cslItemToReferenceDraft,
-  doiCslJsonUrl,
-  parseReferences,
-  type ReferenceDraft,
-} from '@/local-db/research/manuscript/manuscriptReferenceImport';
-import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
+  ManuscriptReferenceRow,
+  missingReferenceFields,
+} from '@/local-db/research/components/composer/references/ManuscriptReferenceRow';
 import {
-  isZoteroConfigComplete,
-  parseZoteroCslResponse,
-  zoteroItemsUrl,
-  type ZoteroConfig,
-} from '@/local-db/research/manuscript/manuscriptZoteroImport';
-import { type ReferenceLike } from '@/local-db/research/manuscript/manuscriptTypes';
-import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
+  referenceFormValuesToRecordUpdate,
+  referenceToFormValues,
+  type ReferenceFormValues,
+  type ReferenceRecordUpdate,
+} from '@/local-db/research/manuscript/manuscriptReferenceForm';
+import { type ReferenceUsageByCitationKey } from '@/local-db/research/manuscript/manuscriptReferenceUsage';
+import {
+  type FigureLike,
+  type ReferenceLike,
+  type SectionLike,
+} from '@/local-db/research/manuscript/manuscriptTypes';
+import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
-// Reference manager + staged import: paste BibTeX or CSL-JSON, or add by DOI
-// (content-negotiation returns CSL JSON). All paths normalize to a `reference`
-// record carrying the CSL-JSON blob, so the exporter stays source-agnostic. The
-// Zotero Web API import reuses `cslItemToReferenceDraft` and slots in here next.
-
 type ManuscriptReferencePanelProps = {
-  manuscriptId: string;
-  projectId?: string | null;
+  figures: FigureLike[];
+  onSelectSection: (sectionId: string) => void;
+  onUpdateReference: (
+    reference: ReferenceLike,
+    update: ReferenceRecordUpdate,
+  ) => Promise<void>;
   references: ReferenceLike[];
-  onChanged: () => void;
+  sections: SectionLike[];
+  usage: ReferenceUsageByCitationKey;
 };
+
+type ReferenceFilter = 'all' | 'cited' | 'unused' | 'incomplete';
+
+const REFERENCE_FILTERS: Array<{
+  id: ReferenceFilter;
+  label: string;
+}> = [
+  { id: 'all', label: 'All' },
+  { id: 'cited', label: 'Cited' },
+  { id: 'unused', label: 'Unused' },
+  { id: 'incomplete', label: 'Incomplete' },
+];
 
 const StyledPanel = styled.div`
   display: flex;
@@ -38,263 +52,217 @@ const StyledPanel = styled.div`
   gap: ${themeCssVariables.spacing[2]};
 `;
 
-const StyledRow = styled.div`
-  background: ${themeCssVariables.background.secondary};
-  border: 1px solid ${themeCssVariables.border.color.light};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.secondary};
-  font-size: ${themeCssVariables.font.size.xs};
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
+const StyledControls = styled.div`
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
-const StyledKey = styled.span`
-  color: ${themeCssVariables.font.color.primary};
-  font-weight: ${themeCssVariables.font.weight.medium};
-`;
-
-const StyledTextarea = styled.textarea`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-family: monospace;
-  font-size: ${themeCssVariables.font.size.xs};
-  min-height: 72px;
-  padding: ${themeCssVariables.spacing[2]};
-  resize: vertical;
-`;
-
-const StyledInput = styled.input`
+const StyledSearch = styled.input`
   background: ${themeCssVariables.background.primary};
   border: 1px solid ${themeCssVariables.border.color.medium};
   border-radius: ${themeCssVariables.border.radius.sm};
   color: ${themeCssVariables.font.color.primary};
   flex: 1;
   font-size: ${themeCssVariables.font.size.sm};
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
+  min-width: 240px;
+  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]};
 `;
 
-const StyledActions = styled.div`
+const StyledFilters = styled.div`
   display: flex;
-  gap: ${themeCssVariables.spacing[2]};
+  flex-wrap: wrap;
+  gap: ${themeCssVariables.spacing[1]};
 `;
 
-const StyledSubhead = styled.span`
+const StyledFilter = styled.button`
+  background: ${themeCssVariables.background.primary};
+  border: 1px solid ${themeCssVariables.border.color.medium};
+  border-radius: ${themeCssVariables.border.radius.pill};
+  color: ${themeCssVariables.font.color.secondary};
+  cursor: pointer;
+  font: inherit;
+  font-size: ${themeCssVariables.font.size.xs};
+  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
+
+  &[aria-pressed='true'] {
+    background: ${themeCssVariables.background.tertiary};
+    border-color: ${themeCssVariables.border.color.strong};
+    color: ${themeCssVariables.font.color.primary};
+    font-weight: ${themeCssVariables.font.weight.medium};
+  }
+`;
+
+const StyledCount = styled.span`
   color: ${themeCssVariables.font.color.tertiary};
   font-size: ${themeCssVariables.font.size.xs};
-  font-weight: ${themeCssVariables.font.weight.medium};
-  margin-top: ${themeCssVariables.spacing[2]};
 `;
 
+const StyledEmpty = styled.div`
+  border: 1px dashed ${themeCssVariables.border.color.medium};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.sm};
+  padding: ${themeCssVariables.spacing[4]};
+  text-align: center;
+`;
+
+export const referenceSearchText = (reference: ReferenceLike): string =>
+  [reference.citationKey, reference.authors, reference.name, reference.year]
+    .filter((value) => value !== null && value !== undefined)
+    .join(' ')
+    .toLowerCase();
+
 export const ManuscriptReferencePanel = ({
-  manuscriptId,
-  projectId,
+  figures,
+  onSelectSection,
+  onUpdateReference,
   references,
-  onChanged,
+  sections,
+  usage,
 }: ManuscriptReferencePanelProps) => {
-  const { createOneRecord } = useCreateOneRecord({
-    objectNameSingular: 'reference',
-  });
+  const { enqueueDialog } = useDialogManager();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
-
-  const [pasteText, setPasteText] = useState('');
-  const [doi, setDoi] = useState('');
-  const [zotero, setZotero] = useState<ZoteroConfig>({
-    apiKey: '',
-    libraryType: 'users',
-    libraryId: '',
-  });
-  const [isBusy, setIsBusy] = useState(false);
-
-  // Persist drafts after de-duplicating against the existing library and
-  // assigning unique citation keys — so re-importing a DOI or a whole Zotero
-  // library never creates duplicates. Returns counts for the caller's message.
-  const createFromDrafts = async (drafts: ReferenceDraft[]) => {
-    const { added, duplicateCount } = dedupeReferenceDrafts(references, drafts);
-    for (const draft of added) {
-      await createOneRecord({
-        ...draft,
-        manuscriptId,
-        ...(projectId ? { projectId } : {}),
-      });
-    }
-    onChanged();
-    return { addedCount: added.length, duplicateCount };
-  };
-
-  const summarize = (
-    addedCount: number,
-    duplicateCount: number,
-    source: string,
-  ): void => {
-    if (addedCount === 0) {
-      enqueueSuccessSnackBar({
-        message:
-          duplicateCount > 0
-            ? `Already in your library — skipped ${duplicateCount} duplicate(s)`
-            : 'Nothing to import',
-      });
-      return;
-    }
-    const skipped =
-      duplicateCount > 0 ? `, skipped ${duplicateCount} duplicate(s)` : '';
-    enqueueSuccessSnackBar({
-      message: `Imported ${addedCount} reference(s)${source}${skipped}`,
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<ReferenceFilter>('all');
+  const [editingReferenceId, setEditingReferenceId] = useState<string | null>(
+    null,
+  );
+  const filteredReferences = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return references.filter((reference) => {
+      const key = reference.citationKey?.trim() ?? '';
+      const count = usage.get(key)?.count ?? 0;
+      const matchesFilter =
+        filter === 'all' ||
+        (filter === 'cited' && count > 0) ||
+        (filter === 'unused' && count === 0) ||
+        (filter === 'incomplete' &&
+          missingReferenceFields(reference).length > 0);
+      return (
+        matchesFilter &&
+        (query.length === 0 || referenceSearchText(reference).includes(query))
+      );
     });
+  }, [filter, references, search, usage]);
+
+  const persistEdit = async (
+    reference: ReferenceLike,
+    update: ReferenceRecordUpdate,
+  ) => {
+    try {
+      await onUpdateReference(reference, update);
+      setEditingReferenceId(null);
+      enqueueSuccessSnackBar({ message: 'Reference updated' });
+    } catch {
+      enqueueErrorSnackBar({ message: 'Could not update reference' });
+      throw new Error('Could not update reference');
+    }
   };
 
-  const importPaste = async () => {
-    if (isBusy) return;
-    const drafts = parseReferences(pasteText);
-    if (drafts.length === 0) {
-      enqueueErrorSnackBar({ message: 'Could not parse any references' });
+  const saveEdit = async (
+    reference: ReferenceLike,
+    values: ReferenceFormValues,
+  ) => {
+    const update = referenceFormValuesToRecordUpdate(values, reference);
+    const oldKey = reference.citationKey?.trim() || reference.id;
+    const newKey = update.citationKey?.trim() ?? '';
+    if (newKey.length === 0) {
+      enqueueErrorSnackBar({ message: 'Citation key cannot be empty' });
       return;
     }
-    setIsBusy(true);
-    try {
-      const { addedCount, duplicateCount } = await createFromDrafts(drafts);
-      summarize(addedCount, duplicateCount, '');
-      setPasteText('');
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const importDoi = async () => {
-    if (isBusy || doi.trim().length === 0) return;
-    setIsBusy(true);
-    try {
-      const response = await fetch(doiCslJsonUrl(doi), {
-        headers: { Accept: 'application/vnd.citationstyles.csl+json' },
-      });
-      if (!response.ok) {
-        enqueueErrorSnackBar({
-          message: `DOI lookup failed (${response.status})`,
-        });
-        return;
-      }
-      const item = (await response.json()) as Record<string, unknown>;
-      const { addedCount, duplicateCount } = await createFromDrafts([
-        cslItemToReferenceDraft(item),
-      ]);
-      summarize(addedCount, duplicateCount, ' from DOI');
-      setDoi('');
-    } catch {
-      enqueueErrorSnackBar({ message: 'Could not reach doi.org' });
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const importZotero = async () => {
-    if (isBusy || !isZoteroConfigComplete(zotero)) return;
-    setIsBusy(true);
-    try {
-      const response = await fetch(zoteroItemsUrl(zotero));
-      if (!response.ok) {
-        enqueueErrorSnackBar({
-          message: `Zotero import failed (${response.status})`,
-        });
-        return;
-      }
-      const drafts = parseZoteroCslResponse(await response.json());
-      if (drafts.length === 0) {
-        enqueueErrorSnackBar({
-          message: 'No references in that Zotero library',
-        });
-        return;
-      }
-      const { addedCount, duplicateCount } = await createFromDrafts(drafts);
-      summarize(addedCount, duplicateCount, ' from Zotero');
-    } catch {
+    if (
+      references.some(
+        (candidate) =>
+          candidate.id !== reference.id &&
+          candidate.citationKey?.trim() === newKey,
+      )
+    ) {
       enqueueErrorSnackBar({
-        message: 'Could not reach Zotero — check the key/library id',
+        message: `Citation key [@${newKey}] is already in use`,
       });
-    } finally {
-      setIsBusy(false);
+      return;
     }
+    const citationCount = usage.get(oldKey)?.count ?? 0;
+    if (oldKey !== newKey && citationCount > 0) {
+      enqueueDialog({
+        title: 'Rewrite cited reference key?',
+        message: `Change [@${oldKey}] to [@${newKey}] and rewrite ${citationCount} citation token${citationCount === 1 ? '' : 's'} in this manuscript?`,
+        buttons: [
+          { title: 'Cancel' },
+          {
+            title: 'Rewrite and save',
+            variant: 'primary',
+            role: 'confirm',
+            onClick: () => void persistEdit(reference, update),
+          },
+        ],
+      });
+      return;
+    }
+    await persistEdit(reference, update);
   };
 
   return (
     <StyledPanel>
-      {references.map((reference) => (
-        <StyledRow key={reference.id}>
-          <StyledKey>[@{reference.citationKey ?? reference.id}]</StyledKey>{' '}
-          {reference.authors} ({reference.year ?? 'n.d.'}). {reference.name}
-        </StyledRow>
-      ))}
-
-      <StyledActions>
-        <StyledInput
-          placeholder="Add by DOI (e.g. 10.1038/…)"
-          value={doi}
-          onChange={(event) => setDoi(event.target.value)}
+      <StyledControls>
+        <StyledSearch
+          aria-label="Search references"
+          placeholder="Search citation key, authors, title, or year…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
         />
-        <Button
-          title="Add"
-          variant="secondary"
-          size="small"
-          disabled={isBusy || doi.trim().length === 0}
-          onClick={importDoi}
-        />
-      </StyledActions>
-
-      <StyledTextarea
-        placeholder="Paste BibTeX or CSL-JSON…"
-        value={pasteText}
-        onChange={(event) => setPasteText(event.target.value)}
-      />
-      <Button
-        title={isBusy ? 'Importing…' : 'Import pasted references'}
-        variant="secondary"
-        size="small"
-        disabled={isBusy || pasteText.trim().length === 0}
-        onClick={importPaste}
-      />
-
-      <StyledSubhead>Zotero library</StyledSubhead>
-      <StyledActions>
-        <select
-          value={zotero.libraryType}
-          onChange={(event) =>
-            setZotero((previous) => ({
-              ...previous,
-              libraryType: event.target.value as ZoteroConfig['libraryType'],
-            }))
-          }
-        >
-          <option value="users">User</option>
-          <option value="groups">Group</option>
-        </select>
-        <StyledInput
-          placeholder="Library ID"
-          value={zotero.libraryId}
-          onChange={(event) =>
-            setZotero((previous) => ({
-              ...previous,
-              libraryId: event.target.value,
-            }))
-          }
-        />
-      </StyledActions>
-      <StyledInput
-        type="password"
-        placeholder="Zotero API key"
-        value={zotero.apiKey}
-        onChange={(event) =>
-          setZotero((previous) => ({
-            ...previous,
-            apiKey: event.target.value,
-          }))
-        }
-      />
-      <Button
-        title="Import from Zotero"
-        variant="secondary"
-        size="small"
-        disabled={isBusy || !isZoteroConfigComplete(zotero)}
-        onClick={importZotero}
-      />
+        <StyledFilters aria-label="Filter references">
+          {REFERENCE_FILTERS.map((option) => (
+            <StyledFilter
+              key={option.id}
+              type="button"
+              aria-pressed={filter === option.id}
+              onClick={() => setFilter(option.id)}
+            >
+              {option.label}
+            </StyledFilter>
+          ))}
+        </StyledFilters>
+      </StyledControls>
+      <StyledCount>
+        {filteredReferences.length} of {references.length} references
+      </StyledCount>
+      {filteredReferences.map((reference) => {
+        const isEditing = editingReferenceId === reference.id;
+        return (
+          <ManuscriptReferenceRow
+            key={reference.id}
+            reference={reference}
+            usage={
+              usage.get(reference.citationKey?.trim() ?? '') ?? {
+                count: 0,
+                sectionIds: [],
+              }
+            }
+            sections={sections}
+            figures={figures}
+            isEditing={isEditing}
+            onEdit={() =>
+              setEditingReferenceId((currentId) =>
+                currentId === reference.id ? null : reference.id,
+              )
+            }
+            onSelectSection={onSelectSection}
+            editor={
+              <ManuscriptReferenceEditor
+                initialValues={referenceToFormValues(reference)}
+                onCancel={() => setEditingReferenceId(null)}
+                onSave={(values) => saveEdit(reference, values)}
+              />
+            }
+          />
+        );
+      })}
+      {filteredReferences.length === 0 ? (
+        <StyledEmpty>No references match this search and filter.</StyledEmpty>
+      ) : null}
     </StyledPanel>
   );
 };

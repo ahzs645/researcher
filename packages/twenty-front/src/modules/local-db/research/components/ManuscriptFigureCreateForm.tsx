@@ -3,6 +3,8 @@ import { type ChangeEvent, useRef } from 'react';
 import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
+import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { Select } from '@/ui/input/components/Select';
 
 type ManuscriptFigureCreateFormProps = {
@@ -11,6 +13,8 @@ type ManuscriptFigureCreateFormProps = {
   placement: string;
   imageUrl: string;
   tableData: string;
+  tableStyle: ManuscriptTableStyle;
+  tableEditorVersion: number;
   isAdding: boolean;
   onCaptionChange: (value: string) => void;
   onAssetKindChange: (value: string) => void;
@@ -51,18 +55,6 @@ const StyledInput = styled.input`
   padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
 `;
 
-const StyledTableArea = styled.textarea`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  font-family: monospace;
-  font-size: ${themeCssVariables.font.size.xs};
-  min-height: 56px;
-  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
-  resize: vertical;
-`;
-
 const StyledActions = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -75,6 +67,8 @@ export const ManuscriptFigureCreateForm = ({
   placement,
   imageUrl,
   tableData,
+  tableStyle,
+  tableEditorVersion,
   isAdding,
   onCaptionChange,
   onAssetKindChange,
@@ -113,10 +107,11 @@ export const ManuscriptFigureCreateForm = ({
         />
       </StyledActions>
       {assetKind === 'TABLE' || assetKind === 'CHART' ? (
-        <StyledTableArea
-          placeholder={'| Site | PM2.5 |\n| --- | --- |\n| A | 12 |'}
-          value={tableData}
-          onChange={(event) => onTableDataChange(event.target.value)}
+        <ManuscriptTableEditor
+          key={tableEditorVersion}
+          markdown={tableData}
+          tableStyle={tableStyle}
+          onChange={onTableDataChange}
         />
       ) : (
         <StyledInput

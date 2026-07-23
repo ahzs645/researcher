@@ -1,4 +1,5 @@
-import { type JournalStyle } from './manuscriptTypes';
+import { type CitationMode, type JournalStyle } from './manuscriptTypes';
+import { isVendoredCslStyleId } from './manuscriptCiteproc';
 
 export const MANUSCRIPT_EXPORT_STYLE_OVERRIDE_KEYS = [
   'citationMode',
@@ -44,9 +45,30 @@ export const MANUSCRIPT_EXPORT_STYLE_OVERRIDE_KEYS = [
 export type ManuscriptExportStyleOverrideKey =
   (typeof MANUSCRIPT_EXPORT_STYLE_OVERRIDE_KEYS)[number];
 
+export const CITATION_MODES: CitationMode[] = [
+  'NUMERIC',
+  'NUMERIC_SUPERSCRIPT',
+  'AUTHOR_DATE',
+  'AUTHOR_NUMBER',
+];
+
+export const CITATION_MODE_SETTING_KEYS = [
+  'citationStyleId',
+  'crossRefFormat',
+] as const satisfies ReadonlyArray<keyof JournalStyle>;
+
+export type CitationModeSettingKey =
+  (typeof CITATION_MODE_SETTING_KEYS)[number];
+export type CitationModeStyleSettings = Partial<
+  Pick<JournalStyle, CitationModeSettingKey>
+>;
+export type CitationModeSettings = Record<string, CitationModeStyleSettings>;
+
 export type ManuscriptExportStyleOverrides = Partial<
   Pick<JournalStyle, ManuscriptExportStyleOverrideKey>
->;
+> & {
+  citationModeSettings?: CitationModeSettings;
+};
 
 const STRING_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'citationMode',
@@ -98,6 +120,39 @@ const BOOLEAN_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+export const isCitationMode = (value: unknown): value is CitationMode =>
+  typeof value === 'string' &&
+  CITATION_MODES.some((citationMode) => citationMode === value);
+
+export const citationModeFromStyle = (
+  value: string | null | undefined,
+): CitationMode => (isCitationMode(value) ? value : 'NUMERIC');
+
+const emptyCitationModeSettings = (): CitationModeSettings => ({
+  NUMERIC: {},
+  NUMERIC_SUPERSCRIPT: {},
+  AUTHOR_DATE: {},
+  AUTHOR_NUMBER: {},
+});
+
+export const citationStyleKeyFromStyle = (style: JournalStyle): string =>
+  isVendoredCslStyleId(style.citationStyleId)
+    ? style.citationStyleId
+    : citationModeFromStyle(style.citationMode);
+
+const sanitizeCitationStyleSettings = (
+  value: unknown,
+): CitationModeStyleSettings => {
+  if (!isRecord(value)) return {};
+  const settings: CitationModeStyleSettings = {};
+  for (const key of CITATION_MODE_SETTING_KEYS) {
+    if (typeof value[key] === 'string') {
+      settings[key] = value[key];
+    }
+  }
+  return settings;
+};
+
 export const parseManuscriptExportStyleOverrides = (
   serialized: string | null | undefined,
 ): ManuscriptExportStyleOverrides => {
@@ -109,10 +164,19 @@ export const parseManuscriptExportStyleOverrides = (
     const parsed: unknown = JSON.parse(serialized);
     if (!isRecord(parsed)) return {};
 
-    const sanitized: Record<string, string | number | boolean> = {};
+    const sanitized: Record<
+      string,
+      string | number | boolean | CitationModeSettings
+    > = {};
     for (const key of MANUSCRIPT_EXPORT_STYLE_OVERRIDE_KEYS) {
       const value = parsed[key];
-      if (STRING_FIELDS.has(key) && typeof value === 'string') {
+      if (key === 'citationMode' && isCitationMode(value)) {
+        sanitized[key] = value;
+      } else if (
+        key !== 'citationMode' &&
+        STRING_FIELDS.has(key) &&
+        typeof value === 'string'
+      ) {
         sanitized[key] = value;
       } else if (
         NUMBER_FIELDS.has(key) &&
@@ -123,6 +187,22 @@ export const parseManuscriptExportStyleOverrides = (
       } else if (BOOLEAN_FIELDS.has(key) && typeof value === 'boolean') {
         sanitized[key] = value;
       }
+    }
+    if (isRecord(parsed.citationModeSettings)) {
+      const citationModeSettings = emptyCitationModeSettings();
+      for (const [citationStyleKey, settings] of Object.entries(
+        parsed.citationModeSettings,
+      )) {
+        if (
+          !isCitationMode(citationStyleKey) &&
+          !isVendoredCslStyleId(citationStyleKey)
+        ) {
+          continue;
+        }
+        citationModeSettings[citationStyleKey] =
+          sanitizeCitationStyleSettings(settings);
+      }
+      sanitized.citationModeSettings = citationModeSettings;
     }
     return sanitized as ManuscriptExportStyleOverrides;
   } catch {
@@ -136,3 +216,82 @@ export const serializeManuscriptExportStyleOverrides = (
   JSON.stringify(
     parseManuscriptExportStyleOverrides(JSON.stringify(overrides)),
   );
+
+export const citationSettingsForMode = (
+  overrides: ManuscriptExportStyleOverrides,
+  citationMode: CitationMode,
+): CitationModeStyleSettings =>
+  citationSettingsForStyle(overrides, citationMode);
+
+export const citationSettingsForStyle = (
+  overrides: ManuscriptExportStyleOverrides,
+  citationStyleKey: string,
+): CitationModeStyleSettings => ({
+  ...(overrides.citationModeSettings?.[citationStyleKey] ?? {}),
+});
+
+export const withCitationModeSetting = (
+  overrides: ManuscriptExportStyleOverrides,
+  citationStyleKey: string,
+  setting: CitationModeStyleSettings,
+): ManuscriptExportStyleOverrides => {
+  const sanitizedSetting = sanitizeCitationStyleSettings(setting);
+  const citationModeSettings: CitationModeSettings = {
+    ...emptyCitationModeSettings(),
+    ...overrides.citationModeSettings,
+    [citationStyleKey]: {
+      ...citationSettingsForStyle(overrides, citationStyleKey),
+      ...sanitizedSetting,
+    },
+  };
+  return {
+    ...overrides,
+    ...sanitizedSetting,
+    citationModeSettings,
+  };
+};
+
+export const withCitationStyle = (
+  overrides: ManuscriptExportStyleOverrides,
+  activeStyleKey: string,
+  nextStyleKey: string,
+): ManuscriptExportStyleOverrides => {
+  const activeFlatSettings = sanitizeCitationStyleSettings(overrides);
+  const citationModeSettings: CitationModeSettings = {
+    ...emptyCitationModeSettings(),
+    ...overrides.citationModeSettings,
+    [activeStyleKey]: {
+      ...citationSettingsForStyle(overrides, activeStyleKey),
+      ...activeFlatSettings,
+    },
+  };
+  const nextSettings = citationModeSettings[nextStyleKey] ?? {};
+  const withoutFlatSettings = { ...overrides };
+  for (const key of CITATION_MODE_SETTING_KEYS) {
+    delete withoutFlatSettings[key];
+  }
+
+  if (isCitationMode(nextStyleKey)) {
+    return {
+      ...withoutFlatSettings,
+      ...nextSettings,
+      citationMode: nextStyleKey,
+      citationStyleId: '',
+      citationModeSettings,
+    };
+  }
+
+  return {
+    ...withoutFlatSettings,
+    ...nextSettings,
+    citationStyleId: nextStyleKey,
+    citationModeSettings,
+  };
+};
+
+export const withCitationMode = (
+  overrides: ManuscriptExportStyleOverrides,
+  activeMode: CitationMode,
+  nextMode: CitationMode,
+): ManuscriptExportStyleOverrides =>
+  withCitationStyle(overrides, activeMode, nextMode);

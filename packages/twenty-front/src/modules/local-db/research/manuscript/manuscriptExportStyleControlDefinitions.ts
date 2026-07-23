@@ -218,7 +218,7 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
   },
   {
     id: 'figures-tables',
-    title: 'Figures & tables',
+    title: 'Figures, tables & captions',
     description: 'Caption typography, pagination, and table appearance.',
     texts: [],
     selects: [
@@ -345,18 +345,10 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
     ],
   },
   {
-    id: 'numbering-references',
-    title: 'Numbering & references',
-    description:
-      'Citation style, live labels, cross-references, and numbering.',
+    id: 'numbering-cross-references',
+    title: 'Numbering & cross-references',
+    description: 'Live labels, cross-references, and document numbering.',
     texts: [
-      {
-        id: 'manuscript-export-citation-style-input',
-        label: 'CSL citation style id',
-        field: 'citationStyleId',
-        defaultValue: '',
-        placeholder: 'american-chemical-society',
-      },
       {
         id: 'manuscript-export-figure-label-input',
         label: 'Figure label format',
@@ -387,19 +379,6 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
       },
     ],
     selects: [
-      {
-        id: 'manuscript-export-citation-mode-select',
-        label: 'Citation mode',
-        field: 'citationMode',
-        defaultValue: 'NUMERIC',
-        valueType: 'STRING',
-        options: [
-          { value: 'NUMERIC', label: 'Numeric [1]' },
-          { value: 'NUMERIC_SUPERSCRIPT', label: 'Numeric superscript¹' },
-          { value: 'AUTHOR_DATE', label: 'Author–date (Smith, 2024)' },
-          { value: 'AUTHOR_NUMBER', label: 'Author + number' },
-        ],
-      },
       {
         id: 'manuscript-export-numbering-scope-select',
         label: 'Asset numbering scope',
@@ -434,6 +413,36 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
         defaultValue: 'false',
         valueType: 'BOOLEAN',
         options: enabledOptions,
+      },
+    ],
+  },
+  {
+    id: 'citations',
+    title: 'Citations',
+    description:
+      'CSL formatting details for the citation style selected above.',
+    texts: [
+      {
+        id: 'manuscript-export-citation-style-input',
+        label: 'CSL citation style id',
+        field: 'citationStyleId',
+        defaultValue: '',
+        placeholder: 'american-chemical-society',
+      },
+    ],
+    selects: [
+      {
+        id: 'manuscript-export-citation-mode-select',
+        label: 'Citation mode',
+        field: 'citationMode',
+        defaultValue: 'NUMERIC',
+        valueType: 'STRING',
+        options: [
+          { value: 'NUMERIC', label: 'Numeric [1]' },
+          { value: 'NUMERIC_SUPERSCRIPT', label: 'Numeric superscript¹' },
+          { value: 'AUTHOR_DATE', label: 'Author–date (Smith, 2024)' },
+          { value: 'AUTHOR_NUMBER', label: 'Author + number' },
+        ],
       },
     ],
   },

@@ -1,5 +1,4 @@
 import { styled } from '@linaria/react';
-import { motion } from 'framer-motion';
 import { Key } from 'ts-key-enum';
 
 import { DIALOG_CLICK_OUTSIDE_ID } from '@/ui/feedback/dialog-manager/constants/DialogClickOutsideId';
@@ -25,8 +24,6 @@ const StyledDialogOverlayBase = styled.div`
   width: 100vw;
   z-index: ${RootStackingContextZIndices.Dialog};
 `;
-const StyledDialogOverlay = motion.create(StyledDialogOverlayBase);
-
 const StyledDialogContainerBase = styled.div`
   background: ${themeCssVariables.background.primary};
   border-radius: 8px;
@@ -37,7 +34,6 @@ const StyledDialogContainerBase = styled.div`
   position: relative;
   width: 100%;
 `;
-const StyledDialogContainer = motion.create(StyledDialogContainerBase);
 
 const StyledDialogTitle = styled.span`
   color: ${themeCssVariables.font.color.primary};
@@ -71,7 +67,7 @@ export type DialogButtonOptions = Omit<
   role?: 'confirm';
 };
 
-export type DialogProps = React.ComponentPropsWithoutRef<typeof motion.div> & {
+export type DialogProps = React.ComponentPropsWithoutRef<'div'> & {
   title?: string;
   message?: string;
   buttons?: DialogButtonOptions[];
@@ -89,16 +85,6 @@ export const Dialog = ({
   onClose,
   id,
 }: DialogProps) => {
-  const dialogVariants = {
-    open: { opacity: 1 },
-    closed: { opacity: 0 },
-  };
-
-  const containerVariants = {
-    open: { y: 0 },
-    closed: { y: '50vh' },
-  };
-
   const handleEnter = (event: KeyboardEvent) => {
     const confirmButton = buttons.find((button) => button.role === 'confirm');
 
@@ -140,17 +126,14 @@ export const Dialog = ({
   });
 
   return (
-    <StyledDialogOverlay
-      variants={dialogVariants}
-      initial="closed"
-      animate="open"
-      exit="closed"
+    <StyledDialogOverlayBase
       className={className}
       data-click-outside-id={DIALOG_CLICK_OUTSIDE_ID}
+      role="presentation"
     >
-      <StyledDialogContainer
-        variants={containerVariants}
-        transition={{ damping: 15, stiffness: 100 }}
+      <StyledDialogContainerBase
+        aria-modal="true"
+        role="dialog"
         id={id}
         ref={dialogRef}
       >
@@ -171,7 +154,7 @@ export const Dialog = ({
             />
           </StyledDialogButtonContainer>
         ))}
-      </StyledDialogContainer>
-    </StyledDialogOverlay>
+      </StyledDialogContainerBase>
+    </StyledDialogOverlayBase>
   );
 };

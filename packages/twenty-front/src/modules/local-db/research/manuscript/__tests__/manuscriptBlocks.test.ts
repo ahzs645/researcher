@@ -360,6 +360,48 @@ describe('buildBlockNoteDocument', () => {
     );
   });
 
+  it('renders extra title-page lines after affiliations using their alignment', () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: {
+        id: 'paper',
+        name: 'Thesis title',
+        authorLine: 'Alice Example [1]',
+        affiliations: '1 Example University',
+        titlePageExtraLines: [
+          'A thesis submitted for the degree of PhD',
+          '2026',
+        ],
+        correspondingAuthor: 'alice@example.edu',
+      },
+      style: { affiliationAlignment: 'LEFT' },
+      sections: [],
+      figures: [],
+      references: [],
+    });
+
+    const { blocks } = buildBlockNoteDocument(bundle);
+    const indexContaining = (value: string) =>
+      blocks.findIndex((block) =>
+        JSON.stringify(block.content).includes(value),
+      );
+    const affiliationIndex = indexContaining('Example University');
+    const degreeIndex = indexContaining('A thesis submitted');
+    const dateIndex = indexContaining('2026');
+    const correspondenceIndex = indexContaining('alice@example.edu');
+
+    expect(affiliationIndex).toBeLessThan(degreeIndex);
+    expect(degreeIndex).toBeLessThan(dateIndex);
+    expect(dateIndex).toBeLessThan(correspondenceIndex);
+    expect(blocks[degreeIndex]).toMatchObject({
+      type: 'paragraph',
+      props: { textAlignment: 'left' },
+    });
+    expect(blocks[dateIndex]).toMatchObject({
+      type: 'paragraph',
+      props: { textAlignment: 'left' },
+    });
+  });
+
   it('numbers imported nested headings beneath their parent section', () => {
     const bundle = buildManuscriptBundle({
       manuscript: { id: 'paper', name: 'Modular paper' },
@@ -392,5 +434,47 @@ describe('buildBlockNoteDocument', () => {
     expect(serialized).toContain('1. Background and related tools');
     expect(serialized).toContain('### 1.1 Existing software');
     expect(serialized).toContain('### 1.2 Design gap');
+  });
+
+  it('does not continue main-section numbering onto labeled appendices', () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: { id: 'paper', name: 'Appendix numbering paper' },
+      style: { sectionNumbering: true },
+      sections: [
+        {
+          id: 'conclusion',
+          name: 'Conclusions',
+          placement: 'MAIN',
+          includeInExport: true,
+          content: 'Main-text conclusion.',
+        },
+        {
+          id: 'appendix-a',
+          name: 'Appendix A. Algorithm pseudocode',
+          sectionType: 'APPENDIX',
+          placement: 'SUPPLEMENT',
+          includeInExport: true,
+          content: '1. Read the input metadata.',
+        },
+        {
+          id: 'appendix-b',
+          name: 'Appendix B: Primary sensitivity grid',
+          sectionType: 'APPENDIX',
+          placement: 'SUPPLEMENT',
+          includeInExport: true,
+          content: 'Sensitivity settings.',
+        },
+      ],
+      figures: [],
+      references: [],
+    });
+
+    const serialized = JSON.stringify(buildBlockNoteDocument(bundle).blocks);
+
+    expect(serialized).toContain('1. Conclusions');
+    expect(serialized).toContain('Appendix A. Algorithm pseudocode');
+    expect(serialized).toContain('Appendix B: Primary sensitivity grid');
+    expect(serialized).not.toContain('2. Appendix A');
+    expect(serialized).not.toContain('3. Appendix B');
   });
 });

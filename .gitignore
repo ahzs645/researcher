@@ -68,3 +68,11 @@ TRANSLATION_QA_REPORT.md
 .playwright-mcp/
 .playwright-cli/
 output/playwright/
+
+# Local manuscript/document generation outputs and one-off Codex helpers.
+# Keep product code and portable importer support tracked; these files are
+# regenerated locally and may contain machine-specific absolute paths.
+/artifacts/
+/__pycache__/
+/.codex-*.py
+/.github/aeth.py

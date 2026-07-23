@@ -17,6 +17,7 @@ import {
   sortSections,
 } from '@/local-db/research/components/composer/manuscriptComposerData';
 import { type ManuscriptSubmissionDetails } from '@/local-db/research/components/ManuscriptSubmissionDetailsPanel';
+import { type ManuscriptTitlePageDetails } from '@/local-db/research/components/composer/ManuscriptTitlePageTab';
 import {
   buildManuscriptBundle,
   countWords,
@@ -27,6 +28,10 @@ import {
   type ManuscriptExportStyleOverrides,
 } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
+import {
+  parseManuscriptTitlePageExtraLines,
+  serializeManuscriptTitlePageExtraLines,
+} from '@/local-db/research/manuscript/manuscriptTitlePage';
 import { buildSectionSkeleton } from '@/local-db/research/manuscript/manuscriptScaffold';
 import {
   type JournalStyle,
@@ -42,6 +47,7 @@ import {
 } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 import { getRecordsFromRecordConnection } from '@/object-record/cache/utils/getRecordsFromRecordConnection';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
+import { useDeleteOneRecord } from '@/object-record/hooks/useDeleteOneRecord';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 
@@ -72,6 +78,9 @@ export const useManuscriptComposer = () => {
       recordGqlFields: REFERENCE_GQL,
     });
   const { createOneRecord: createSection } = useCreateOneRecord({
+    objectNameSingular: 'manuscriptSection',
+  });
+  const { deleteOneRecord: deleteSectionRecord } = useDeleteOneRecord({
     objectNameSingular: 'manuscriptSection',
   });
   const { updateOneRecord } = useUpdateOneRecord();
@@ -205,6 +214,9 @@ export const useManuscriptComposer = () => {
         targetVenue: manuscript.targetVenue,
         authorLine: manuscript.authorLine,
         affiliations: manuscript.affiliations,
+        titlePageExtraLines: parseManuscriptTitlePageExtraLines(
+          manuscript.titlePageExtraLines,
+        ),
         correspondingAuthor: manuscript.correspondingAuthor,
         supplementTitle: manuscript.supplementTitle,
         supplementAuthorLine: manuscript.supplementAuthorLine,
@@ -235,6 +247,14 @@ export const useManuscriptComposer = () => {
           : {}),
         ...(isDefined(manuscript.affiliations)
           ? { affiliations: manuscript.affiliations }
+          : {}),
+        ...(parseManuscriptTitlePageExtraLines(manuscript.titlePageExtraLines)
+          .length > 0
+          ? {
+              titlePageExtraLines: parseManuscriptTitlePageExtraLines(
+                manuscript.titlePageExtraLines,
+              ),
+            }
           : {}),
         ...(isDefined(manuscript.correspondingAuthor)
           ? { correspondingAuthor: manuscript.correspondingAuthor }
@@ -317,6 +337,68 @@ export const useManuscriptComposer = () => {
       updateOneRecordInput: values,
     });
     await refetchManuscripts();
+  };
+
+  const saveTitlePageDetails = async (values: ManuscriptTitlePageDetails) => {
+    if (!isDefined(manuscript)) return;
+    const {
+      keywords,
+      keywordsSectionId,
+      titlePageExtraLines,
+      ...manuscriptValues
+    } = values;
+    await Promise.all([
+      updateOneRecord({
+        objectNameSingular: 'manuscript',
+        idToUpdate: manuscript.id,
+        updateOneRecordInput: {
+          ...manuscriptValues,
+          titlePageExtraLines:
+            serializeManuscriptTitlePageExtraLines(titlePageExtraLines),
+        },
+      }),
+      ...(isDefined(keywordsSectionId)
+        ? [
+            updateOneRecord({
+              objectNameSingular: 'manuscriptSection',
+              idToUpdate: keywordsSectionId,
+              updateOneRecordInput: {
+                content: keywords,
+                wordCount: countWords(keywords),
+              },
+            }),
+          ]
+        : []),
+    ]);
+    await Promise.all([refetchManuscripts(), refetchSections()]);
+  };
+
+  const addKeywordsSection = async () => {
+    if (!isDefined(manuscript)) return;
+    const frontMatterOrder = Math.max(
+      -1,
+      ...sections
+        .filter((section) => section.placement === 'FRONT_MATTER')
+        .map((section) => section.orderIndex ?? -1),
+    );
+    await createSection({
+      name: 'Keywords',
+      manuscriptId: manuscript.id,
+      sectionType: 'KEYWORDS',
+      placement: 'FRONT_MATTER',
+      orderIndex: frontMatterOrder + 1,
+      level: 1,
+      status: 'NOT_STARTED',
+      includeInExport: true,
+      content: '',
+      wordCount: 0,
+    });
+    await refetchSections();
+  };
+
+  const deleteSection = async (sectionIdToDelete: string) => {
+    await deleteSectionRecord(sectionIdToDelete);
+    await refetchSections();
   };
 
   const linkedJournal = journals.find(
@@ -565,6 +647,9 @@ export const useManuscriptComposer = () => {
     addSection,
     scaffoldSections,
     saveSubmissionDetails,
+    saveTitlePageDetails,
+    addKeywordsSection,
+    deleteSection,
     saveSubmissionRequirementValues,
     saveJournalSubmissionRequirements,
     keepJournalSubmissionValue,

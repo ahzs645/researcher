@@ -8,6 +8,7 @@ import { ManuscriptExportTab } from '@/local-db/research/components/composer/Man
 import { ManuscriptFiguresTab } from '@/local-db/research/components/composer/ManuscriptFiguresTab';
 import { ManuscriptReferencesTab } from '@/local-db/research/components/composer/ManuscriptReferencesTab';
 import { ManuscriptSubmissionTab } from '@/local-db/research/components/composer/ManuscriptSubmissionTab';
+import { ManuscriptTitlePageTab } from '@/local-db/research/components/composer/ManuscriptTitlePageTab';
 import {
   type ManuscriptComposerTab,
   manuscriptComposerTabState,
@@ -23,6 +24,7 @@ const COMPOSER_TABS: Array<{
   title: string;
 }> = [
   { id: 'write', title: 'Write' },
+  { id: 'titlePage', title: 'Title page' },
   { id: 'figures', title: 'Figures & tables' },
   { id: 'references', title: 'References' },
   { id: 'submission', title: 'Submission' },
@@ -184,6 +186,18 @@ export const ManuscriptComposerPage = () => {
             style={composer.effectiveStyle}
             onChanged={() => void composer.refetchFigures()}
             onSelectSection={selectFigureSection}
+          />
+        ) : null}
+
+        {manuscriptComposerTab === 'titlePage' ? (
+          <ManuscriptTitlePageTab
+            key={`${manuscript.id}-${composer.sections.find((section) => section.sectionType === 'KEYWORDS')?.id ?? 'no-keywords'}`}
+            manuscript={manuscript}
+            sections={composer.sections}
+            style={composer.effectiveStyle}
+            onSave={composer.saveTitlePageDetails}
+            onAddKeywordsSection={composer.addKeywordsSection}
+            onDeleteSection={composer.deleteSection}
           />
         ) : null}
 

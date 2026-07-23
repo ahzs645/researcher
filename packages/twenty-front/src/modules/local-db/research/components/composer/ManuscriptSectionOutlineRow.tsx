@@ -29,6 +29,7 @@ const StyledRow = styled.div<{
   border-radius: ${themeCssVariables.border.radius.sm};
   display: flex;
   opacity: ${({ excludedFromExport }) => (excludedFromExport ? 0.55 : 1)};
+  position: relative;
   transition: opacity 100ms ease;
 
   &:hover,
@@ -95,21 +96,28 @@ const StyledBadge = styled.span`
   white-space: nowrap;
 `;
 
+// Overlaid on the row's right edge so its natural width never squeezes the
+// title flex layout (a flex-participating select got crushed to ~28px).
 const StyledPlacementSelect = styled.select`
   background: ${themeCssVariables.background.primary};
   border: 1px solid ${themeCssVariables.border.color.medium};
   border-radius: ${themeCssVariables.border.radius.sm};
+  box-shadow: ${themeCssVariables.boxShadow.light};
   color: ${themeCssVariables.font.color.secondary};
   cursor: pointer;
   font-size: ${themeCssVariables.font.size.xs};
-  margin: 0 ${themeCssVariables.spacing[1]};
-  max-width: 28px;
   opacity: 0;
   padding: 2px;
+  pointer-events: none;
+  position: absolute;
+  right: ${themeCssVariables.spacing[1]};
+  top: 50%;
+  transform: translateY(-50%);
 
   ${StyledRow}:hover &,
   ${StyledRow}:focus-within & {
     opacity: 1;
+    pointer-events: auto;
   }
 `;
 

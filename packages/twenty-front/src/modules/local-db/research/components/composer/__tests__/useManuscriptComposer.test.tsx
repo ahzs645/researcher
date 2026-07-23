@@ -8,12 +8,16 @@ import {
 import { useManuscriptComposer } from '@/local-db/research/components/composer/useManuscriptComposer';
 import { parseManuscriptSubmissionExtras } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
+import { useDeleteOneRecord } from '@/object-record/hooks/useDeleteOneRecord';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 
 jest.mock('react-router-dom', () => ({ useSearchParams: jest.fn() }));
 jest.mock('@/object-record/hooks/useCreateOneRecord', () => ({
   useCreateOneRecord: jest.fn(),
+}));
+jest.mock('@/object-record/hooks/useDeleteOneRecord', () => ({
+  useDeleteOneRecord: jest.fn(),
 }));
 jest.mock('@/object-record/hooks/useFindManyRecords', () => ({
   useFindManyRecords: jest.fn(),
@@ -103,6 +107,9 @@ describe('useManuscriptComposer submission persistence', () => {
     jest.mocked(useCreateOneRecord).mockReturnValue({
       createOneRecord: jest.fn(),
     } as unknown as ReturnType<typeof useCreateOneRecord>);
+    jest.mocked(useDeleteOneRecord).mockReturnValue({
+      deleteOneRecord: jest.fn(),
+    } as unknown as ReturnType<typeof useDeleteOneRecord>);
     jest.mocked(useUpdateOneRecord).mockReturnValue({
       updateOneRecord,
     } as unknown as ReturnType<typeof useUpdateOneRecord>);

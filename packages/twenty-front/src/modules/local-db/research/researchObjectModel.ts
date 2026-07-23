@@ -1342,6 +1342,13 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconBuilding',
       },
       {
+        name: 'titlePageExtraLines',
+        label: 'Title-page extra lines',
+        type: 'TEXT',
+        icon: 'IconList',
+        description: 'Ordered JSON lines shown below title-page affiliations',
+      },
+      {
         name: 'correspondingAuthor',
         label: 'Corresponding author',
         type: 'TEXT',

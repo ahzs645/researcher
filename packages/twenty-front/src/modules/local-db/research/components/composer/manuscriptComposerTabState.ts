@@ -2,6 +2,7 @@ import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomStat
 
 export type ManuscriptComposerTab =
   | 'write'
+  | 'titlePage'
   | 'figures'
   | 'references'
   | 'submission'

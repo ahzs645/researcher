@@ -36,6 +36,7 @@ type ManuscriptMetadataUpdate = {
   name?: string;
   authorLine?: string;
   affiliations?: string;
+  titlePageExtraLines?: string;
   correspondingAuthor?: string;
   manuscriptType?: string;
   status?: string;

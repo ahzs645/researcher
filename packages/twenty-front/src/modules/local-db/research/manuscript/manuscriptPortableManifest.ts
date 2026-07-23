@@ -22,6 +22,7 @@ export type PortableManuscriptMetadata = {
   doi?: string;
   authorLine?: string;
   affiliations?: string;
+  titlePageExtraLines?: string[];
   correspondingAuthor?: string;
   supplementTitle?: string;
   supplementAuthorLine?: string;

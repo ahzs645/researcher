@@ -68,13 +68,10 @@ export const ManuscriptSubmissionTab = ({
       onSaveRequirements={onSaveRequirements}
       onKeepJournalValue={onKeepJournalValue}
     />
-    <H2Title title="Submission details" />
+    <H2Title title="Supplement details" />
     <ManuscriptSubmissionDetailsPanel
       key={manuscript.id}
       initialValues={{
-        authorLine: manuscript.authorLine,
-        affiliations: manuscript.affiliations,
-        correspondingAuthor: manuscript.correspondingAuthor,
         supplementTitle: manuscript.supplementTitle,
         supplementAuthorLine: manuscript.supplementAuthorLine,
         supplementAffiliations: manuscript.supplementAffiliations,

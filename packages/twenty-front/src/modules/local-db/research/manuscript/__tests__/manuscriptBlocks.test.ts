@@ -360,6 +360,48 @@ describe('buildBlockNoteDocument', () => {
     );
   });
 
+  it('renders extra title-page lines after affiliations using their alignment', () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: {
+        id: 'paper',
+        name: 'Thesis title',
+        authorLine: 'Alice Example [1]',
+        affiliations: '1 Example University',
+        titlePageExtraLines: [
+          'A thesis submitted for the degree of PhD',
+          '2026',
+        ],
+        correspondingAuthor: 'alice@example.edu',
+      },
+      style: { affiliationAlignment: 'LEFT' },
+      sections: [],
+      figures: [],
+      references: [],
+    });
+
+    const { blocks } = buildBlockNoteDocument(bundle);
+    const indexContaining = (value: string) =>
+      blocks.findIndex((block) =>
+        JSON.stringify(block.content).includes(value),
+      );
+    const affiliationIndex = indexContaining('Example University');
+    const degreeIndex = indexContaining('A thesis submitted');
+    const dateIndex = indexContaining('2026');
+    const correspondenceIndex = indexContaining('alice@example.edu');
+
+    expect(affiliationIndex).toBeLessThan(degreeIndex);
+    expect(degreeIndex).toBeLessThan(dateIndex);
+    expect(dateIndex).toBeLessThan(correspondenceIndex);
+    expect(blocks[degreeIndex]).toMatchObject({
+      type: 'paragraph',
+      props: { textAlignment: 'left' },
+    });
+    expect(blocks[dateIndex]).toMatchObject({
+      type: 'paragraph',
+      props: { textAlignment: 'left' },
+    });
+  });
+
   it('numbers imported nested headings beneath their parent section', () => {
     const bundle = buildManuscriptBundle({
       manuscript: { id: 'paper', name: 'Modular paper' },

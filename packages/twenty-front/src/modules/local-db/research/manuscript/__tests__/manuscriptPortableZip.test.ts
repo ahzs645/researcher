@@ -23,6 +23,7 @@ const source: PortableManuscriptSource = {
     targetVenue: 'Example Journal',
     authorLine: 'Alice Example [1]; Bob Example [2*]',
     affiliations: '1 Lab A\n2 Lab B',
+    titlePageExtraLines: ['A thesis submitted for the degree of PhD', '2026'],
     correspondingAuthor: 'Bob Example, bob@example.org',
     supplementTitle: 'Supplemental Information for Portable aerosol paper',
   },
@@ -106,6 +107,10 @@ describe('portable research-paper ZIP', () => {
     const restored = readPortableResearchPaperZip(zipSync(files));
 
     expect(restored.metadata.title).toBe('Portable aerosol paper');
+    expect(restored.metadata.titlePageExtraLines).toEqual([
+      'A thesis submitted for the degree of PhD',
+      '2026',
+    ]);
     expect(restored.contributors.authors[1]).toMatchObject({
       name: 'Bob Example',
       affiliationKeys: ['affiliation-2'],
@@ -146,6 +151,10 @@ describe('portable research-paper ZIP', () => {
     expect(portableManuscriptRecordUpdate(restored)).toMatchObject({
       name: 'Portable aerosol paper',
       targetVenue: 'Example Journal',
+      titlePageExtraLines: JSON.stringify([
+        'A thesis submitted for the degree of PhD',
+        '2026',
+      ]),
       coverLetter: 'Please consider this manuscript.',
     });
   });

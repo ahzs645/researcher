@@ -5,6 +5,7 @@ import {
 import { serializeManuscriptExportStyleOverrides } from './manuscriptExportStyleOverrides';
 import { type PortableResearchPaperManifest } from './manuscriptPortableManifest';
 import { type ReferenceDraft } from './manuscriptReferenceImport';
+import { serializeManuscriptTitlePageExtraLines } from './manuscriptTitlePage';
 
 const PORTABLE_ASSET_KINDS = [
   'FIGURE',
@@ -85,6 +86,7 @@ export type PortableManuscriptRecordUpdate = {
   name: string;
   authorLine?: string;
   affiliations?: string;
+  titlePageExtraLines?: string;
   correspondingAuthor?: string;
   manuscriptType?: string;
   status?: string;
@@ -111,6 +113,13 @@ export const portableManuscriptRecordUpdate = (
       : {}),
     ...(metadata.affiliations !== undefined
       ? { affiliations: metadata.affiliations }
+      : {}),
+    ...(metadata.titlePageExtraLines !== undefined
+      ? {
+          titlePageExtraLines: serializeManuscriptTitlePageExtraLines(
+            metadata.titlePageExtraLines,
+          ),
+        }
       : {}),
     ...(metadata.correspondingAuthor !== undefined
       ? { correspondingAuthor: metadata.correspondingAuthor }

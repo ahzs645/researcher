@@ -154,6 +154,7 @@ export type ManuscriptMeta = {
   doi?: string | null;
   authorLine?: string | null;
   affiliations?: string | null;
+  titlePageExtraLines?: string[] | null;
   correspondingAuthor?: string | null;
   supplementTitle?: string | null;
   supplementAuthorLine?: string | null;
@@ -176,6 +177,7 @@ export type ManuscriptBundle = {
     abstract: string;
     keywords: string[];
     affiliations: string;
+    titlePageExtraLines: string[];
     correspondingAuthor: string;
     supplementTitle: string;
     supplementAuthors: string;
@@ -465,6 +467,7 @@ export const buildManuscriptBundle = (
       abstract,
       keywords,
       affiliations: manuscript.affiliations ?? '',
+      titlePageExtraLines: manuscript.titlePageExtraLines ?? [],
       correspondingAuthor: manuscript.correspondingAuthor ?? '',
       supplementTitle: manuscript.supplementTitle?.trim() || '',
       supplementAuthors: manuscript.supplementAuthorLine?.trim() || '',

@@ -238,13 +238,13 @@ const bundleToBlocks = (
       ],
     });
   }
+  const affiliationAlignment =
+    bundle.style.affiliationAlignment === 'CENTER'
+      ? 'center'
+      : bundle.style.affiliationAlignment === 'RIGHT'
+        ? 'right'
+        : 'left';
   if (isNonEmptyString(bundle.metadata.affiliations)) {
-    const affiliationAlignment =
-      bundle.style.affiliationAlignment === 'CENTER'
-        ? 'center'
-        : bundle.style.affiliationAlignment === 'RIGHT'
-          ? 'right'
-          : 'left';
     blocks.push(
       ...bundle.metadata.affiliations
         .split(/\r?\n|[;,]\s*(?=\d+\s)/)
@@ -259,6 +259,18 @@ const bundleToBlocks = (
         ),
     );
   }
+  blocks.push(
+    ...bundle.metadata.titlePageExtraLines
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map(
+        (line): ExportPartialBlock => ({
+          type: 'paragraph',
+          props: { textAlignment: affiliationAlignment },
+          content: line,
+        }),
+      ),
+  );
   if (isNonEmptyString(bundle.metadata.correspondingAuthor)) {
     blocks.push({
       type: 'paragraph',

@@ -24,6 +24,7 @@ export type ManuscriptRecord = {
   doi?: string | null;
   authorLine?: string | null;
   affiliations?: string | null;
+  titlePageExtraLines?: string | null;
   correspondingAuthor?: string | null;
   supplementTitle?: string | null;
   supplementAuthorLine?: string | null;
@@ -48,6 +49,7 @@ export const MANUSCRIPT_GQL = {
   doi: true,
   authorLine: true,
   affiliations: true,
+  titlePageExtraLines: true,
   correspondingAuthor: true,
   supplementTitle: true,
   supplementAuthorLine: true,

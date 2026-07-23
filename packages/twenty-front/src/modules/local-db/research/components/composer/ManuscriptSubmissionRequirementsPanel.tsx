@@ -1,5 +1,5 @@
 import { styled } from '@linaria/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
@@ -8,6 +8,7 @@ import { ManuscriptSubmissionRequirementRow } from '@/local-db/research/componen
 import { ManuscriptSubmissionRequirementPicker } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementPicker';
 import {
   collectSubmissionConflicts,
+  collectSubmissionNotices,
   parseJournalSubmissionRequirements,
   resolveSubmissionRequirementItems,
   serializeJournalSubmissionRequirements,
@@ -23,7 +24,7 @@ type ManuscriptSubmissionRequirementsPanelProps = {
   manuscript: SubmissionRequirementManuscript;
   template?: SubmissionRequirementTemplate & { name?: string | null };
   isExplicitTarget: boolean;
-  onConfirmTargetJournal: () => void;
+  onConfirmTargetJournal: () => Promise<void>;
   onPickTargetJournal: () => void;
   onSaveValues: (values: SubmissionRequirementValues) => Promise<void>;
   onSaveRequirements: (
@@ -99,15 +100,25 @@ export const ManuscriptSubmissionRequirementsPanel = ({
       initialItems.map((item) => [item.definition.key, item.value]),
     ),
   );
+  const [pendingValues, setPendingValues] =
+    useState<SubmissionRequirementValues>({});
   const persistValues = useDebouncedCallback(
-    (nextValues: SubmissionRequirementValues) => {
-      void onSaveValues(nextValues).catch(() =>
+    (changedValues: SubmissionRequirementValues) => {
+      setPendingValues({});
+      void onSaveValues(changedValues).catch(() =>
         enqueueErrorSnackBar({
           message: 'Could not save submission requirement',
         }),
       );
     },
     800,
+  );
+
+  useEffect(
+    () => () => {
+      persistValues.flush();
+    },
+    [persistValues],
   );
 
   if (template === undefined) {
@@ -147,21 +158,25 @@ export const ManuscriptSubmissionRequirementsPanel = ({
     manuscript,
     values: effectiveValues,
   });
+  const notices = collectSubmissionNotices({ manuscript });
   const usedKeys = new Set(requirements.map((requirement) => requirement.key));
   const filledCount = resolvedItems.filter((item) => item.filled).length;
 
   const updateValue = (key: string, value: string, immediate = false) => {
     const nextValues = { ...values, [key]: value };
+    const changedValues = { ...pendingValues, [key]: value };
     setValues(nextValues);
     if (immediate) {
       persistValues.cancel();
-      void onSaveValues(nextValues).catch(() =>
+      setPendingValues({});
+      void onSaveValues(changedValues).catch(() =>
         enqueueErrorSnackBar({
           message: 'Could not resolve submission conflict',
         }),
       );
     } else {
-      persistValues(nextValues);
+      setPendingValues(changedValues);
+      persistValues(changedValues);
     }
   };
   const saveRequirements = async (next: JournalSubmissionRequirement[]) => {
@@ -193,7 +208,13 @@ export const ManuscriptSubmissionRequirementsPanel = ({
               title={`Set ${template.name ?? 'journal'} as target`}
               variant="secondary"
               size="small"
-              onClick={onConfirmTargetJournal}
+              onClick={() =>
+                void onConfirmTargetJournal().catch(() =>
+                  enqueueErrorSnackBar({
+                    message: 'Could not set the target journal',
+                  }),
+                )
+              }
             />
           </div>
         </StyledEmpty>
@@ -204,6 +225,9 @@ export const ManuscriptSubmissionRequirementsPanel = ({
           {conflicts.length === 1 ? '' : 's'} need review.
         </StyledWarning>
       ) : null}
+      {notices.map((notice) => (
+        <StyledWarning key={notice.key}>{notice.message}</StyledWarning>
+      ))}
       {resolvedItems.map((item) => {
         const conflict = conflicts.find(
           ({ key }) => key === item.definition.key,

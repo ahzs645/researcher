@@ -123,15 +123,79 @@ describe('parseMarkdownDocument', () => {
     ]);
   });
 
-  it('keeps third-level headings inside their parent section', () => {
+  it('preserves heading levels as separate section drafts', () => {
     const doc = parseMarkdownDocument(
-      ['## Methods', 'Overview.', '### Study site', 'Downtown station.'].join(
-        '\n',
-      ),
+      [
+        '## Methods',
+        'Overview.',
+        '### Study site',
+        'Downtown station.',
+        '#### Participants',
+        'Twenty volunteers.',
+      ].join('\n'),
     );
-    expect(doc.sections).toHaveLength(1);
-    expect(doc.sections[0].sectionType).toBe('METHODS');
-    expect(doc.sections[0].content).toContain('### Study site');
+    expect(doc.sections).toMatchObject([
+      { name: 'Methods', sectionType: 'METHODS', level: 2 },
+      { name: 'Study site', sectionType: 'OTHER', level: 3 },
+      { name: 'Participants', sectionType: 'OTHER', level: 3 },
+    ]);
+  });
+
+  it('moves short leading OTHER sections before structure into front matter', () => {
+    const longContent = Array.from(
+      { length: 500 },
+      (_, index) => `word${index}`,
+    ).join(' ');
+    const doc = parseMarkdownDocument(
+      [
+        '## by',
+        'Jane Researcher',
+        '## Student # (230235918)',
+        '',
+        '## BHSc., University of Northern British Columbia',
+        Array.from({ length: 22 }, (_, index) => `detail${index}`).join(' '),
+        '## Abstract',
+        'Summary.',
+        '## Short note after abstract',
+        'Keep this in main text.',
+      ].join('\n'),
+    );
+
+    expect(doc.sections).toMatchObject([
+      {
+        name: 'by',
+        sectionType: 'OTHER',
+        placement: 'FRONT_MATTER',
+        wordCount: 2,
+      },
+      {
+        name: 'Student # (230235918)',
+        sectionType: 'OTHER',
+        placement: 'FRONT_MATTER',
+        wordCount: 0,
+      },
+      {
+        name: 'BHSc., University of Northern British Columbia',
+        sectionType: 'OTHER',
+        placement: 'FRONT_MATTER',
+        wordCount: 22,
+      },
+      { name: 'Abstract', sectionType: 'ABSTRACT' },
+      {
+        name: 'Short note after abstract',
+        sectionType: 'OTHER',
+        placement: 'MAIN',
+      },
+    ]);
+
+    const longPreface = parseMarkdownDocument(
+      ['## Long preface', longContent, '## Abstract', 'Summary.'].join('\n'),
+    );
+    expect(longPreface.sections[0]).toMatchObject({
+      sectionType: 'OTHER',
+      placement: 'MAIN',
+      wordCount: 500,
+    });
   });
 
   it('wraps an unstructured document in a single Body section', () => {
@@ -462,11 +526,15 @@ describe('parseWordMlToMarkdown', () => {
       'Keywords',
       'Introduction',
       'Background',
+      'Prior tools',
       'References',
     ]);
-    expect(doc.sections[4].content).toContain('### Prior tools');
-    expect(doc.sections[4].content).not.toContain('2.1 Prior tools');
-    expect(doc.sections[5].sectionType).toBe('REFERENCES');
+    expect(doc.sections[5]).toMatchObject({
+      name: 'Prior tools',
+      level: 2,
+      content: 'Background prose.',
+    });
+    expect(doc.sections[6].sectionType).toBe('REFERENCES');
     expect(doc.affiliations).toBe('1 Institute A\n2 Institute B');
     expect(doc.correspondingAuthor).toBe(
       'Correspondence: Author 1 (author@example.org)',

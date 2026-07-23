@@ -1,8 +1,11 @@
 import {
+  buildSubmissionRequirementValuesUpdate,
   CANONICAL_REQUIREMENT_FIELDS,
   collectSubmissionConflicts,
+  collectSubmissionNotices,
   parseJournalSubmissionRequirements,
   parseManuscriptSubmissionExtras,
+  preserveCorrespondingAuthorContact,
   resolveSubmissionRequirementItems,
   serializeJournalSubmissionRequirements,
   serializeManuscriptSubmissionExtras,
@@ -146,6 +149,40 @@ describe('manuscript submission requirements', () => {
     });
   });
 
+  it('omits submission extras for canonical-only changes', () => {
+    expect(
+      buildSubmissionRequirementValuesUpdate({
+        changedValues: { COVER_LETTER: 'Updated letter' },
+        template: { id: 'journal-id', profileKey: 'journal-key' },
+        latestSubmissionExtras: JSON.stringify({
+          'journal-key': { FUNDING_DECLARATION: 'Newer funding' },
+        }),
+      }),
+    ).toEqual({ coverLetter: 'Updated letter' });
+  });
+
+  it('merges only changed extra keys into the latest journal snapshot', () => {
+    const update = buildSubmissionRequirementValuesUpdate({
+      changedValues: { ARTICLE_TYPE: 'Research article' },
+      template: { id: 'journal-id', profileKey: 'journal-key' },
+      latestSubmissionExtras: JSON.stringify({
+        'journal-key': {
+          FUNDING_DECLARATION: 'Newer funding',
+          ARTICLE_TYPE: 'Old type',
+        },
+        other: { DATA_AVAILABILITY: 'Preserve me' },
+      }),
+    });
+
+    expect(parseManuscriptSubmissionExtras(update.submissionExtras)).toEqual({
+      'journal-key': {
+        FUNDING_DECLARATION: 'Newer funding',
+        ARTICLE_TYPE: 'Research article',
+      },
+      other: { DATA_AVAILABILITY: 'Preserve me' },
+    });
+  });
+
   it('detects the real AECT portal author-order conflict', () => {
     expect(
       collectSubmissionConflicts({
@@ -184,7 +221,7 @@ describe('manuscript submission requirements', () => {
     ).toEqual([]);
   });
 
-  it('detects the AIRQ and ATMENV corresponding-author marker conflict', () => {
+  it('compares the corresponding-author snapshot with the canonical field', () => {
     expect(
       collectSubmissionConflicts({
         manuscript: {
@@ -192,15 +229,62 @@ describe('manuscript submission requirements', () => {
             'Ahmad Jalil; Ann Duong; Mya Schouwenburg; Hossein Kazemian*',
           correspondingAuthor: 'Ahmad Jalil, ajalil@unbc.ca',
         },
-        values: {},
+        values: { CORRESPONDING_AUTHOR: 'Hossein Kazemian*' },
       }),
     ).toContainEqual({
       key: 'CORRESPONDING_AUTHOR',
       message:
-        'Corresponding-author marker differs from the manuscript corresponding author',
+        'Corresponding author for this journal differs from the manuscript corresponding author',
       journalValue: 'Hossein Kazemian*',
       manuscriptValue: 'Ahmad Jalil, ajalil@unbc.ca',
     });
+  });
+
+  it('keeps author-marker mismatches as warning-only notices', () => {
+    const manuscript = {
+      authorLine: 'Ahmad Jalil; Ann Duong; Mya Schouwenburg; Hossein Kazemian*',
+      correspondingAuthor: 'Ahmad Jalil, ajalil@unbc.ca',
+    };
+
+    expect(
+      collectSubmissionConflicts({
+        manuscript,
+        values: { CORRESPONDING_AUTHOR: 'Ahmad Jalil' },
+      }),
+    ).toEqual([]);
+    expect(collectSubmissionNotices({ manuscript })).toEqual([
+      {
+        key: 'CORRESPONDING_AUTHOR_MARKER',
+        message:
+          'The author-line star marker differs from the manuscript corresponding author. Review the author line manually.',
+      },
+    ]);
+  });
+
+  it('does not create a corresponding-author conflict without a checklist snapshot', () => {
+    expect(
+      collectSubmissionConflicts({
+        manuscript: {
+          correspondingAuthor: 'Ahmad Jalil, ajalil@unbc.ca',
+        },
+        values: {},
+      }),
+    ).toEqual([]);
+  });
+
+  it('changes only the corresponding-author name and preserves contact data', () => {
+    expect(
+      preserveCorrespondingAuthorContact(
+        'Ahmad Jalil, ajalil@unbc.ca',
+        'Hossein Kazemian*',
+      ),
+    ).toBe('Hossein Kazemian, ajalil@unbc.ca');
+    expect(
+      preserveCorrespondingAuthorContact(
+        'Ahmad Jalil <ajalil@unbc.ca>',
+        'Hossein Kazemian*',
+      ),
+    ).toBe('Hossein Kazemian <ajalil@unbc.ca>');
   });
 
   it('detects a journal keyword variant using a case-insensitive set comparison', () => {

@@ -1,9 +1,17 @@
 import { styled } from '@linaria/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { IconChevronDown, IconChevronRight } from 'twenty-ui/display';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { type SectionLike } from '@/local-db/research/manuscript/manuscriptTypes';
+import { ManuscriptSectionOutlineRow } from '@/local-db/research/components/composer/ManuscriptSectionOutlineRow';
+import {
+  buildManuscriptSectionOutlineTree,
+  sectionAncestorIds,
+} from '@/local-db/research/components/composer/manuscriptSectionOutlineTree';
+import {
+  type SectionLike,
+  type SectionPlacement,
+} from '@/local-db/research/manuscript/manuscriptTypes';
 
 const StyledOutline = styled.nav`
   align-self: start;
@@ -45,58 +53,6 @@ const StyledCount = styled.span`
   margin-left: auto;
 `;
 
-const StyledOutlineRow = styled.button<{
-  active: boolean;
-  excludedFromExport: boolean;
-}>`
-  background: ${({ active }) =>
-    active ? themeCssVariables.background.transparent.blue : 'transparent'};
-  border: 0;
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[1]};
-  opacity: ${({ excludedFromExport }) => (excludedFromExport ? 0.55 : 1)};
-  padding: ${themeCssVariables.spacing[2]};
-  text-align: left;
-  transition: opacity 100ms ease;
-  width: 100%;
-
-  &:hover {
-    background: ${themeCssVariables.background.transparent.light};
-    opacity: ${({ excludedFromExport }) => (excludedFromExport ? 0.75 : 1)};
-  }
-`;
-
-const StyledOutlineTitle = styled.span`
-  font-size: ${themeCssVariables.font.size.sm};
-  font-weight: ${themeCssVariables.font.weight.medium};
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
-`;
-
-const StyledOutlineMeta = styled.span`
-  align-items: center;
-  color: ${themeCssVariables.font.color.tertiary};
-  display: flex;
-  font-size: ${themeCssVariables.font.size.xs};
-  gap: ${themeCssVariables.spacing[1]};
-`;
-
-const StyledBadge = styled.span`
-  background: ${themeCssVariables.background.transparent.light};
-  border-radius: ${themeCssVariables.border.radius.pill};
-  max-width: 130px;
-  overflow: hidden;
-  padding: 1px ${themeCssVariables.spacing[1]};
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`;
-
 const StyledEmpty = styled.span`
   color: ${themeCssVariables.font.color.tertiary};
   font-size: ${themeCssVariables.font.size.sm};
@@ -124,16 +80,15 @@ const groupIdForSection = (section: SectionLike): OutlineGroupId => {
   return 'main';
 };
 
-const sectionTypeLabel = (sectionType?: string | null) =>
-  (sectionType ?? 'OTHER').toLowerCase().replaceAll('_', ' ');
-
 type ManuscriptSectionOutlineProps = {
+  onChangePlacement: (sectionId: string, placement: SectionPlacement) => void;
   onSelectSection: (sectionId: string) => void;
   sections: SectionLike[];
   selectedSectionId?: string;
 };
 
 export const ManuscriptSectionOutline = ({
+  onChangePlacement,
   onSelectSection,
   sections,
   selectedSectionId,
@@ -151,9 +106,57 @@ export const ManuscriptSectionOutline = ({
     return groups;
   }, [sections]);
   const frontMatterCount = groupedSections.frontMatter.length;
+  const groupedTrees = useMemo(
+    () => ({
+      frontMatter: buildManuscriptSectionOutlineTree(
+        groupedSections.frontMatter,
+      ),
+      main: buildManuscriptSectionOutlineTree(groupedSections.main),
+      backMatter: buildManuscriptSectionOutlineTree(groupedSections.backMatter),
+      supplement: buildManuscriptSectionOutlineTree(groupedSections.supplement),
+    }),
+    [groupedSections],
+  );
   const [collapsedOverrides, setCollapsedOverrides] = useState<
     Partial<Record<OutlineGroupId, boolean>>
   >({});
+  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  useEffect(() => {
+    if (selectedSectionId === undefined) return;
+    const selectedGroup = GROUPS.find((group) =>
+      groupedSections[group.id].some(
+        (section) => section.id === selectedSectionId,
+      ),
+    );
+    if (selectedGroup === undefined) return;
+    const ancestorIds = sectionAncestorIds(
+      groupedTrees[selectedGroup.id],
+      selectedSectionId,
+    );
+    if (ancestorIds === null) return;
+
+    setCollapsedOverrides((previous) => ({
+      ...previous,
+      [selectedGroup.id]: false,
+    }));
+    setExpandedSectionIds((previous) => {
+      const next = new Set(previous);
+      ancestorIds.forEach((ancestorId) => next.add(ancestorId));
+      return next;
+    });
+  }, [groupedSections, groupedTrees, selectedSectionId]);
+
+  const toggleSectionExpanded = (sectionId: string) => {
+    setExpandedSectionIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  };
 
   return (
     <StyledOutline aria-label="Section outline">
@@ -162,6 +165,7 @@ export const ManuscriptSectionOutline = ({
       ) : (
         GROUPS.map((group) => {
           const groupSections = groupedSections[group.id];
+          const groupTree = groupedTrees[group.id];
           if (groupSections.length === 0) return null;
           const defaultCollapsed =
             group.id === 'frontMatter' && frontMatterCount > 1;
@@ -184,24 +188,17 @@ export const ManuscriptSectionOutline = ({
               </StyledGroupHeader>
               {isCollapsed
                 ? null
-                : groupSections.map((section) => (
-                    <StyledOutlineRow
-                      key={section.id}
-                      type="button"
-                      active={section.id === selectedSectionId}
-                      excludedFromExport={section.includeInExport === false}
-                      onClick={() => onSelectSection(section.id)}
-                    >
-                      <StyledOutlineTitle>
-                        {section.name ?? 'Untitled section'}
-                      </StyledOutlineTitle>
-                      <StyledOutlineMeta>
-                        <StyledBadge>
-                          {sectionTypeLabel(section.sectionType)}
-                        </StyledBadge>
-                        <span>{section.wordCount ?? 0} words</span>
-                      </StyledOutlineMeta>
-                    </StyledOutlineRow>
+                : groupTree.map((node) => (
+                    <ManuscriptSectionOutlineRow
+                      key={node.section.id}
+                      node={node}
+                      depth={0}
+                      expandedSectionIds={expandedSectionIds}
+                      selectedSectionId={selectedSectionId}
+                      onChangePlacement={onChangePlacement}
+                      onSelectSection={onSelectSection}
+                      onToggleExpanded={toggleSectionExpanded}
+                    />
                   ))}
             </div>
           );

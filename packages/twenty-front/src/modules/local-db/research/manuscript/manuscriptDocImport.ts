@@ -19,6 +19,7 @@ export type ImportedSectionDraft = {
   placement: string;
   content: string;
   orderIndex: number;
+  level?: number;
   wordCount: number;
   includeInExport: boolean;
   status?: string;
@@ -240,26 +241,11 @@ const splitIntoBlocks = (text: string): Block[] => {
   return blocks;
 };
 
-const appendSubheadingToSection = (
-  section: ImportedSectionDraft,
-  block: Block,
-): ImportedSectionDraft => {
-  const heading = stripHeadingNumbering(block.heading ?? 'Details');
-  const content = [section.content, `### ${heading}`, block.body]
-    .filter((part) => part.trim().length > 0)
-    .join('\n\n');
-
-  return {
-    ...section,
-    content,
-    wordCount: countWords(content),
-  };
-};
-
 const draftFromBlock = (
   heading: string,
   body: string,
   orderIndex: number,
+  level: number,
 ): ImportedSectionDraft => {
   const { sectionType, placement } = classifyHeading(heading);
   return {
@@ -268,9 +254,34 @@ const draftFromBlock = (
     placement,
     content: body,
     orderIndex,
+    level: Math.min(3, Math.max(1, level || 1)),
     wordCount: countWords(body),
     includeInExport: true,
   };
+};
+
+const STRUCTURAL_SECTION_TYPES = new Set([
+  'ABSTRACT',
+  'KEYWORDS',
+  'INTRODUCTION',
+  'TITLE_PAGE',
+]);
+
+export const applyLeadingFrontMatterPlacement = (
+  sections: ImportedSectionDraft[],
+): ImportedSectionDraft[] => {
+  const firstStructuralIndex = sections.findIndex((section) =>
+    STRUCTURAL_SECTION_TYPES.has(section.sectionType),
+  );
+  if (firstStructuralIndex < 0) return sections;
+
+  return sections.map((section, index) =>
+    index < firstStructuralIndex &&
+    section.sectionType === 'OTHER' &&
+    section.wordCount < 40
+      ? { ...section, placement: 'FRONT_MATTER' }
+      : section,
+  );
 };
 
 // Parse a Markdown / plain-text document into a title + ordered section drafts.
@@ -322,35 +333,17 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
   }
 
   const sections: ImportedSectionDraft[] = [];
-  let currentSectionLevel = 0;
   for (let index = startIndex; index < blocks.length; index += 1) {
     const block = blocks[index];
     const heading = block.heading ?? 'Body';
     if (block.body.length === 0 && block.heading === null) continue;
 
-    const blockPlacement = classifyHeading(heading).placement;
-    const currentSection = sections[sections.length - 1];
-    // Preserve the source heading hierarchy inside the owning manuscript
-    // section. This handles both Markdown (## / ###) and Word documents that
-    // correctly use Heading 1 for sections and Heading 2 for subsections.
-    if (
-      sections.length > 0 &&
-      block.level > currentSectionLevel &&
-      currentSection.placement === blockPlacement &&
-      (blockPlacement === 'MAIN' || blockPlacement === 'SUPPLEMENT')
-    ) {
-      sections[sections.length - 1] = appendSubheadingToSection(
-        currentSection,
-        block,
-      );
-      continue;
-    }
-
-    sections.push(draftFromBlock(heading, block.body, sections.length));
-    currentSectionLevel = block.level;
+    sections.push(
+      draftFromBlock(heading, block.body, sections.length, block.level),
+    );
   }
 
-  return { title, sections };
+  return { title, sections: applyLeadingFrontMatterPlacement(sections) };
 };
 
 // ── WordprocessingML (.docx body) → Markdown ────────────────────────────────

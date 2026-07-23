@@ -76,6 +76,7 @@ export const ManuscriptSectionEditor = ({
   const { colorScheme } = useContext(ThemeContext);
   const editor = useCreateBlockNote({ schema: MANUSCRIPT_EDITOR_SCHEMA });
   const citationPickerAnchorRef = useRef<HTMLDivElement>(null);
+  const [mountedOnPersist] = useState(() => onPersist);
   const [isCitationPickerOpen, setIsCitationPickerOpen] = useState(false);
   // Don't persist the (lossy) re-serialization while loading the initial
   // content — only once the user actually edits.
@@ -96,8 +97,15 @@ export const ManuscriptSectionEditor = ({
   }, []);
 
   const persist = useDebouncedCallback(() => {
-    onPersist(manuscriptBlocksToMarkdown(editor, editor.document));
+    mountedOnPersist(manuscriptBlocksToMarkdown(editor, editor.document));
   }, 800);
+
+  useEffect(
+    () => () => {
+      persist.flush();
+    },
+    [persist],
+  );
 
   return (
     <ManuscriptEditorContextProvider

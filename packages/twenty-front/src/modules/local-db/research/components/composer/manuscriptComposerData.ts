@@ -68,6 +68,7 @@ export const SECTION_GQL = {
   placement: true,
   content: true,
   orderIndex: true,
+  level: true,
   wordLimit: true,
   wordCount: true,
   includeInExport: true,

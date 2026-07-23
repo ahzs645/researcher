@@ -1,6 +1,8 @@
 import { zipSync } from 'fflate';
 
 import {
+  buildPortableResearchPaperManifest,
+  parsePortableResearchPaperManifest,
   PORTABLE_MANUSCRIPT_FILENAME,
   type PortableManuscriptSource,
 } from '@/local-db/research/manuscript/manuscriptPortableManifest';
@@ -33,6 +35,7 @@ const source: PortableManuscriptSource = {
       content: 'See [#absorption-plot] and [@smith2024].',
       status: 'IN_REVIEW',
       orderIndex: 0,
+      level: 2,
       wordCount: 3,
       includeInExport: true,
     },
@@ -110,6 +113,7 @@ describe('portable research-paper ZIP', () => {
     });
     expect(restored.sections[0].content).toContain('[#absorption-plot]');
     expect(restored.sections[0].content).toContain('[@smith2024]');
+    expect(restored.sections[0].level).toBe(2);
     expect(restored.figures[0]).toMatchObject({
       refKey: 'absorption-plot',
       sectionKey: 'section-1',
@@ -150,5 +154,24 @@ describe('portable research-paper ZIP', () => {
     expect(() =>
       readPortableResearchPaperZip(zipSync({ 'notes.txt': new Uint8Array() })),
     ).toThrow(`ZIP does not contain ${PORTABLE_MANUSCRIPT_FILENAME}`);
+  });
+
+  it('defaults legacy section levels without changing explicit placements', () => {
+    const manifest = buildPortableResearchPaperManifest(source, {}, {});
+    const legacySections = manifest.sections.map(
+      ({ level: _level, ...section }) => section,
+    );
+    const restored = parsePortableResearchPaperManifest(
+      JSON.stringify({ ...manifest, sections: legacySections }),
+    );
+
+    expect(restored.sections[0]).toMatchObject({
+      level: 1,
+      placement: 'MAIN',
+    });
+    expect(restored.sections[1]).toMatchObject({
+      level: 1,
+      placement: 'SUPPLEMENT',
+    });
   });
 });

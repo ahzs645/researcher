@@ -117,9 +117,7 @@ describe('manuscript editor content', () => {
     expect(manuscriptBlocksToMarkdown(testEditor, blocks)).toBe(
       TOKEN_HEAVY_MARKDOWN,
     );
-    expect(testEditor.tryParseMarkdownToBlocks).toHaveBeenCalledWith(
-      TOKEN_HEAVY_MARKDOWN,
-    );
+    expect(testEditor.tryParseMarkdownToBlocks).toHaveBeenCalledTimes(1);
   });
 
   it('requires non-space inline math boundaries and a same-line closing dollar', () => {
@@ -139,5 +137,96 @@ describe('manuscript editor content', () => {
     ];
 
     expect(manuscriptTokensToNodes(blocks)).toEqual(blocks);
+  });
+
+  it('keeps code, styled, linked, clustered, and escaped tokens lossless', () => {
+    const blocks = [
+      {
+        type: 'paragraph',
+        props: {},
+        content: [
+          {
+            type: 'text',
+            text: '[@literal] and $cash$',
+            styles: { code: true },
+          },
+        ],
+        children: [],
+      },
+      {
+        type: 'paragraph',
+        props: {},
+        content: [{ type: 'text', text: '\\[@escaped] and \\$5', styles: {} }],
+        children: [],
+      },
+      {
+        type: 'paragraph',
+        props: {},
+        content: [
+          { type: 'text', text: 'see [@a] now', styles: { bold: true } },
+          { type: 'text', text: ' [#fig:a]', styles: { italic: true } },
+          { type: 'text', text: ' $x$', styles: { strike: true } },
+        ],
+        children: [],
+      },
+      {
+        type: 'paragraph',
+        props: {},
+        content: [
+          {
+            type: 'link',
+            href: 'https://example.com',
+            content: [
+              { type: 'text', text: 'see [@a] and [#fig:a]', styles: {} },
+            ],
+          },
+        ],
+        children: [],
+      },
+      {
+        type: 'paragraph',
+        props: {},
+        content: [{ type: 'text', text: '[@a; @b][@c; @d]', styles: {} }],
+        children: [],
+      },
+      {
+        type: 'paragraph',
+        props: {},
+        content: [{ type: 'text', text: '[@a][#fig:x]$x$', styles: {} }],
+        children: [],
+      },
+      {
+        type: 'codeBlock',
+        props: { language: 'text' },
+        content: [
+          { type: 'text', text: '[@literal] and $not-math$', styles: {} },
+        ],
+        children: [],
+      },
+    ];
+
+    const converted = manuscriptTokensToNodes(blocks);
+
+    expect(converted.slice(0, 5)).toEqual(blocks.slice(0, 5));
+    expect(converted[5].content).toEqual([
+      { type: 'citation', props: { citationKey: 'a' } },
+      { type: 'crossRef', props: { refKey: 'fig:x' } },
+      { type: 'inlineEquation', props: { latex: 'x' } },
+    ]);
+    expect(converted[6]).toEqual(blocks[6]);
+    expect(manuscriptNodesToTokens(converted)).toEqual(blocks);
+  });
+
+  it('restores escaped citation and dollar literals through the adapter', () => {
+    const markdown = `Escaped \\[@escaped] and \\$5. Keep ${String.fromCodePoint(
+      0x2063,
+    )} too.`;
+
+    expect(
+      manuscriptBlocksToMarkdown(
+        testEditor,
+        markdownToManuscriptBlocks(testEditor, markdown),
+      ),
+    ).toBe(markdown);
   });
 });

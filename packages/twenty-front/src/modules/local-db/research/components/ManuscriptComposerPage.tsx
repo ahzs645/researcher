@@ -163,6 +163,9 @@ export const ManuscriptComposerPage = () => {
             submissionExtras={manuscript.submissionExtras}
             competingInterests={manuscript.competingInterests}
             onSelectSection={composer.selectSection}
+            onChangeSectionPlacement={(sectionId, placement) =>
+              void composer.changeSectionPlacement(sectionId, placement)
+            }
             onPersistSection={composer.persistSection}
             onAddSection={() => void composer.addSection()}
             onScaffoldSections={() => void composer.scaffoldSections()}
@@ -197,17 +200,26 @@ export const ManuscriptComposerPage = () => {
             manuscript={manuscript}
             template={effectiveJournal}
             isExplicitTarget={isDefined(linkedJournal)}
-            onConfirmTargetJournal={() => {
-              if (isDefined(effectiveJournal)) {
-                composer.selectJournal(effectiveJournal.id);
-              }
-            }}
+            onConfirmTargetJournal={() =>
+              isDefined(effectiveJournal)
+                ? composer.selectJournal(effectiveJournal.id)
+                : Promise.reject(new Error('No journal is available'))
+            }
             sections={composer.sections}
             onSave={composer.saveSubmissionDetails}
             onPickTargetJournal={() => setManuscriptComposerTab('export')}
-            onSaveRequirementValues={composer.saveSubmissionRequirementValues}
-            onSaveRequirements={composer.saveJournalSubmissionRequirements}
-            onKeepJournalValue={composer.keepJournalSubmissionValue}
+            onSaveRequirementValues={(values) =>
+              composer.saveSubmissionRequirementValues(values, effectiveJournal)
+            }
+            onSaveRequirements={(requirements) =>
+              composer.saveJournalSubmissionRequirements(
+                requirements,
+                effectiveJournal,
+              )
+            }
+            onKeepJournalValue={(key, value) =>
+              composer.keepJournalSubmissionValue(key, value, effectiveJournal)
+            }
           />
         ) : null}
 

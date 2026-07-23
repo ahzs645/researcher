@@ -280,6 +280,7 @@ export const readImportedDocumentFile = async (
         placement: section.placement,
         content: section.content,
         orderIndex: section.orderIndex,
+        level: section.level ?? 1,
         wordCount: section.wordCount,
         includeInExport: section.includeInExport,
         status: section.status,

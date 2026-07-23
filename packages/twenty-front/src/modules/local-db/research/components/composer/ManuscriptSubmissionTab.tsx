@@ -21,7 +21,7 @@ type ManuscriptSubmissionTabProps = {
   manuscript: ManuscriptRecord;
   template?: JournalRecord;
   isExplicitTarget: boolean;
-  onConfirmTargetJournal: () => void;
+  onConfirmTargetJournal: () => Promise<void>;
   sections: SectionLike[];
   onSave: (values: ManuscriptSubmissionDetails) => Promise<void>;
   onPickTargetJournal: () => void;

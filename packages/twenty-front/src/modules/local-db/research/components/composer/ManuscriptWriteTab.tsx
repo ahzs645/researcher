@@ -17,6 +17,7 @@ import {
   type JournalStyle,
   type ReferenceLike,
   type SectionLike,
+  type SectionPlacement,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 
 type ManuscriptWriteTabProps = {
@@ -32,6 +33,10 @@ type ManuscriptWriteTabProps = {
   submissionExtras?: string | null;
   competingInterests?: string | null;
   onSelectSection: (sectionId: string) => void;
+  onChangeSectionPlacement: (
+    sectionId: string,
+    placement: SectionPlacement,
+  ) => void;
   onPersistSection: (markdown: string) => void;
   onAddSection: () => void;
   onScaffoldSections: () => void;
@@ -124,6 +129,7 @@ export const ManuscriptWriteTab = ({
   submissionExtras,
   competingInterests,
   onSelectSection,
+  onChangeSectionPlacement,
   onPersistSection,
   onAddSection,
   onScaffoldSections,
@@ -184,6 +190,7 @@ export const ManuscriptWriteTab = ({
         <ManuscriptSectionOutline
           sections={sections}
           selectedSectionId={selectedSection?.id}
+          onChangePlacement={onChangeSectionPlacement}
           onSelectSection={onSelectSection}
         />
 

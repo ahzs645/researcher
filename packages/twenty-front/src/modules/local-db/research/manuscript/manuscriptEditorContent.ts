@@ -10,6 +10,11 @@ export type ManuscriptInlineNode =
   | { type: 'citation'; props: { citationKey: string }; content?: undefined }
   | { type: 'crossRef'; props: { refKey: string }; content?: undefined };
 
+// BlockNote removes Markdown escapes while parsing. Keep their provenance in
+// the editable text with an invisible separator, then restore the backslash
+// after serialization so an unrelated edit cannot activate a literal token.
+const ESCAPED_TOKEN_MARKER = '\u2063';
+
 const isJsonRecord = (value: unknown): value is JsonRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -54,6 +59,10 @@ const nextToken = (
   text: string,
   start: number,
 ): { end: number; node: ManuscriptInlineNode } | undefined => {
+  if (!isUnescaped(text, start) || text[start - 1] === ESCAPED_TOKEN_MARKER) {
+    return undefined;
+  }
+
   if (text.startsWith('[@', start)) {
     const match = /^\[@([^\]\s;]+)\]/.exec(text.slice(start));
     if (match !== null) {
@@ -98,6 +107,9 @@ const nextToken = (
 
 const textToInlineNodes = (node: JsonRecord): unknown[] => {
   const text = typeof node.text === 'string' ? node.text : '';
+  if (isJsonRecord(node.styles) && Object.keys(node.styles).length > 0) {
+    return [node];
+  }
   const result: unknown[] = [];
   let plainStart = 0;
   let cursor = 0;
@@ -131,9 +143,8 @@ const toManuscriptInlineContent = (content: unknown): unknown => {
     if (node.type === 'text' && typeof node.text === 'string') {
       return textToInlineNodes(node);
     }
-    if (node.type === 'link') {
-      return [{ ...node, content: toManuscriptInlineContent(node.content) }];
-    }
+    // A custom inline node cannot retain the link or its nested text styles.
+    if (node.type === 'link') return [node];
     return [node];
   });
 };
@@ -216,6 +227,9 @@ const transformBlock = (block: unknown, toManuscript: boolean): unknown => {
     : block.children;
 
   if (toManuscript) {
+    if (block.type === 'codeBlock') {
+      return block;
+    }
     const latex = displayEquationLatex(block);
     if (latex !== undefined) {
       return {
@@ -263,13 +277,62 @@ export const manuscriptTokensToNodes = <TBlock>(blocks: TBlock[]): TBlock[] =>
 export const manuscriptNodesToTokens = <TBlock>(blocks: TBlock[]): TBlock[] =>
   blocks.map((block) => transformBlock(block, false)) as TBlock[];
 
+const startsEscapableToken = (markdown: string, index: number): boolean =>
+  markdown.startsWith('[@', index) ||
+  markdown.startsWith('[#', index) ||
+  markdown[index] === '$';
+
+const protectEscapedTokens = (markdown: string): string => {
+  let protectedMarkdown = '';
+  for (let index = 0; index < markdown.length; index += 1) {
+    if (markdown[index] === ESCAPED_TOKEN_MARKER) {
+      protectedMarkdown += `${ESCAPED_TOKEN_MARKER}${ESCAPED_TOKEN_MARKER}`;
+      continue;
+    }
+    if (
+      markdown[index] === '\\' &&
+      isUnescaped(markdown, index) &&
+      startsEscapableToken(markdown, index + 1)
+    ) {
+      protectedMarkdown += ESCAPED_TOKEN_MARKER;
+    } else {
+      protectedMarkdown += markdown[index];
+    }
+  }
+  return protectedMarkdown;
+};
+
+const restoreEscapedTokens = (markdown: string): string => {
+  let restoredMarkdown = '';
+  for (let index = 0; index < markdown.length; index += 1) {
+    if (markdown[index] !== ESCAPED_TOKEN_MARKER) {
+      restoredMarkdown += markdown[index];
+      continue;
+    }
+    if (markdown[index + 1] === ESCAPED_TOKEN_MARKER) {
+      restoredMarkdown += ESCAPED_TOKEN_MARKER;
+      index += 1;
+      continue;
+    }
+    if (startsEscapableToken(markdown, index + 1)) {
+      restoredMarkdown += '\\';
+    }
+  }
+  return restoredMarkdown;
+};
+
 export const markdownToManuscriptBlocks = <TBlock>(
   editor: MarkdownEditor<TBlock>,
   markdown: string,
 ): TBlock[] =>
-  manuscriptTokensToNodes(editor.tryParseMarkdownToBlocks(markdown));
+  manuscriptTokensToNodes(
+    editor.tryParseMarkdownToBlocks(protectEscapedTokens(markdown)),
+  );
 
 export const manuscriptBlocksToMarkdown = <TBlock>(
   editor: MarkdownEditor<TBlock>,
   document: TBlock[],
-): string => editor.blocksToMarkdownLossy(manuscriptNodesToTokens(document));
+): string =>
+  restoreEscapedTokens(
+    editor.blocksToMarkdownLossy(manuscriptNodesToTokens(document)),
+  );

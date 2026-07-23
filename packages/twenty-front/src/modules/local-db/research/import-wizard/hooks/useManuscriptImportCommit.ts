@@ -122,6 +122,7 @@ export const useManuscriptImportCommit = ({
             placement: section.placement,
             content: section.content,
             orderIndex: existingSectionCount + section.orderIndex,
+            level: section.level ?? 1,
             wordCount: section.wordCount,
             includeInExport:
               section.sectionType === 'REFERENCES' &&

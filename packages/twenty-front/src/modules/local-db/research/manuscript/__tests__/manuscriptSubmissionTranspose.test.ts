@@ -57,6 +57,24 @@ describe('submission declaration transposition', () => {
     expect(update).toEqual({});
   });
 
+  it('uses the funding declaration key declared by the target checklist', () => {
+    const update = buildSubmissionTransposeUpdate({
+      sections: [section('FUNDING', 'Imported funding', 0)],
+      template: {
+        id: 'journal-id',
+        profileKey: 'journal-key',
+        submissionRequirements: JSON.stringify([
+          { key: 'FUNDING_DECLARATION', required: true },
+        ]),
+      },
+      manuscript: {},
+    });
+
+    expect(parseManuscriptSubmissionExtras(update.submissionExtras)).toEqual({
+      'journal-key': { FUNDING_DECLARATION: 'Imported funding' },
+    });
+  });
+
   it('only offers transposition for supported non-empty declarations', () => {
     expect(
       hasTransposableSubmissionDeclarations([

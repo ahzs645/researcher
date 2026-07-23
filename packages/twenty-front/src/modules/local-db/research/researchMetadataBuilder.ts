@@ -217,7 +217,7 @@ const buildBusinessField = (
     isUnique: false,
     createdAt: SEED_TIMESTAMP,
     updatedAt: SEED_TIMESTAMP,
-    defaultValue: null,
+    defaultValue: field.defaultValue ?? null,
     options,
     settings: null,
     isLabelSyncedWithName: false,

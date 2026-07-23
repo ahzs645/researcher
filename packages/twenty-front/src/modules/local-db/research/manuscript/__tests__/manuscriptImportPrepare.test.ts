@@ -26,6 +26,7 @@ const section = (
         : 'MAIN',
   content,
   orderIndex,
+  level: 1,
   wordCount: content.split(/\s+/).filter(Boolean).length,
   includeInExport: true,
 });

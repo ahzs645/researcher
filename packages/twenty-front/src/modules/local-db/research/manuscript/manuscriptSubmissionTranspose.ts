@@ -1,5 +1,6 @@
 import { type ImportedSectionDraft } from './manuscriptDocImport';
 import {
+  parseJournalSubmissionRequirements,
   parseManuscriptSubmissionExtras,
   serializeManuscriptSubmissionExtras,
   submissionJournalKey,
@@ -7,7 +8,6 @@ import {
 } from './manuscriptSubmissionRequirements';
 
 const REQUIREMENT_KEY_BY_SECTION_TYPE: Record<string, string> = {
-  FUNDING: 'FUNDING',
   DATA_AVAILABILITY: 'DATA_AVAILABILITY',
   ETHICS: 'ETHICS_APPROVAL',
   AUTHOR_CONTRIBUTIONS: 'AUTHOR_CONTRIBUTIONS',
@@ -30,6 +30,7 @@ export const hasTransposableSubmissionDeclarations = (
     (section) =>
       section.content.trim().length > 0 &&
       (section.sectionType === 'CONFLICTS' ||
+        section.sectionType === 'FUNDING' ||
         REQUIREMENT_KEY_BY_SECTION_TYPE[section.sectionType] !== undefined),
   );
 
@@ -46,6 +47,11 @@ export const buildSubmissionTransposeUpdate = ({
   const extras = parseManuscriptSubmissionExtras(manuscript.submissionExtras);
   const journalKey = submissionJournalKey(template);
   const journalValues = { ...(extras[journalKey] ?? {}) };
+  const fundingRequirementKey = parseJournalSubmissionRequirements(
+    template.submissionRequirements,
+  ).some(({ key }) => key === 'FUNDING_DECLARATION')
+    ? 'FUNDING_DECLARATION'
+    : 'FUNDING';
   let extrasChanged = false;
 
   for (const section of sections) {
@@ -59,7 +65,10 @@ export const buildSubmissionTransposeUpdate = ({
       }
       continue;
     }
-    const requirementKey = REQUIREMENT_KEY_BY_SECTION_TYPE[section.sectionType];
+    const requirementKey =
+      section.sectionType === 'FUNDING'
+        ? fundingRequirementKey
+        : REQUIREMENT_KEY_BY_SECTION_TYPE[section.sectionType];
     if (
       requirementKey !== undefined &&
       (journalValues[requirementKey] ?? '').trim().length === 0

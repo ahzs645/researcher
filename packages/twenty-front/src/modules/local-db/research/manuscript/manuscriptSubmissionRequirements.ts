@@ -65,6 +65,11 @@ export type SubmissionConflict = {
   manuscriptValue: string;
 };
 
+export type SubmissionNotice = {
+  key: string;
+  message: string;
+};
+
 export const SUBMISSION_REQUIREMENT_CATALOG: SubmissionRequirementDefinition[] =
   [
     {
@@ -396,6 +401,36 @@ export const submissionJournalKey = (
     : template.id;
 };
 
+export const buildSubmissionRequirementValuesUpdate = ({
+  changedValues,
+  template,
+  latestSubmissionExtras,
+}: {
+  changedValues: SubmissionRequirementValues;
+  template: SubmissionRequirementTemplate;
+  latestSubmissionExtras?: string | null;
+}): Record<string, string> => {
+  const update: Record<string, string> = {};
+  const changedExtras: SubmissionRequirementValues = {};
+
+  for (const [key, value] of Object.entries(changedValues)) {
+    const canonicalField = CANONICAL_REQUIREMENT_FIELDS[key];
+    if (canonicalField === undefined) changedExtras[key] = value;
+    else update[canonicalField] = value;
+  }
+
+  if (Object.keys(changedExtras).length === 0) return update;
+
+  const extras = parseManuscriptSubmissionExtras(latestSubmissionExtras);
+  const journalKey = submissionJournalKey(template);
+  extras[journalKey] = {
+    ...(extras[journalKey] ?? {}),
+    ...changedExtras,
+  };
+  update.submissionExtras = serializeManuscriptSubmissionExtras(extras);
+  return update;
+};
+
 const catalogByKey = new Map(
   SUBMISSION_REQUIREMENT_CATALOG.map((definition) => [
     definition.key,
@@ -465,6 +500,44 @@ const normalizeName = (value: string): string =>
     .trim()
     .toLocaleLowerCase();
 
+const correspondingAuthorName = (value: string): string =>
+  value.split(/[,;<\n(]/, 1)[0]?.trim() ?? '';
+
+const correspondingAuthorNamesMatch = (
+  first: string,
+  second: string,
+): boolean =>
+  normalizeName(correspondingAuthorName(first)) ===
+  normalizeName(correspondingAuthorName(second));
+
+export const preserveCorrespondingAuthorContact = (
+  currentValue: string,
+  nextNameValue: string,
+): string => {
+  const nextName = correspondingAuthorName(nextNameValue)
+    .replace(/\*/g, '')
+    .replace(/[\d⁰¹²³⁴⁵⁶⁷⁸⁹]+$/u, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (nextName.length === 0) return currentValue;
+
+  const delimiterIndex = currentValue.search(/[,;<\n(]/);
+  const unseparatedEmailIndex = currentValue.search(
+    /\s+(?=[^\s,;<>]+@[^\s,;<>]+)/,
+  );
+  const remainderIndex =
+    delimiterIndex === -1
+      ? unseparatedEmailIndex
+      : unseparatedEmailIndex === -1
+        ? delimiterIndex
+        : Math.min(delimiterIndex, unseparatedEmailIndex);
+
+  if (remainderIndex === -1) return nextName;
+  const remainder = currentValue.slice(remainderIndex);
+  const separator = /^[<(]/.test(remainder) ? ' ' : '';
+  return `${nextName}${separator}${remainder}`;
+};
+
 const normalizeNameSequence = (value: string): string[] =>
   splitList(value).map(normalizeName);
 
@@ -512,24 +585,25 @@ export const collectSubmissionConflicts = ({
     });
   }
 
-  const markedAuthor = splitList(manuscriptAuthorLine ?? '').find((author) =>
-    author.includes('*'),
-  );
-  const correspondingAuthorName = splitList(
-    manuscript.correspondingAuthor ?? '',
-  )[0];
+  const journalCorrespondingAuthor = values.CORRESPONDING_AUTHOR?.trim();
+  const manuscriptCorrespondingAuthor =
+    manuscript.correspondingAuthor?.trim() ?? '';
 
   if (
-    markedAuthor !== undefined &&
-    correspondingAuthorName !== undefined &&
-    normalizeName(markedAuthor) !== normalizeName(correspondingAuthorName)
+    journalCorrespondingAuthor !== undefined &&
+    (journalCorrespondingAuthor.length > 0 ||
+      manuscriptCorrespondingAuthor.length > 0) &&
+    !correspondingAuthorNamesMatch(
+      journalCorrespondingAuthor,
+      manuscriptCorrespondingAuthor,
+    )
   ) {
     conflicts.push({
       key: 'CORRESPONDING_AUTHOR',
       message:
-        'Corresponding-author marker differs from the manuscript corresponding author',
-      journalValue: values.CORRESPONDING_AUTHOR?.trim() || markedAuthor,
-      manuscriptValue: manuscript.correspondingAuthor?.trim() ?? '',
+        'Corresponding author for this journal differs from the manuscript corresponding author',
+      journalValue: journalCorrespondingAuthor,
+      manuscriptValue: manuscriptCorrespondingAuthor,
     });
   }
 
@@ -557,4 +631,31 @@ export const collectSubmissionConflicts = ({
   }
 
   return conflicts;
+};
+
+export const collectSubmissionNotices = ({
+  manuscript,
+}: {
+  manuscript: SubmissionRequirementManuscript;
+}): SubmissionNotice[] => {
+  const markedAuthor = splitList(manuscript.authorLine ?? '').find((author) =>
+    author.includes('*'),
+  );
+  const correspondingAuthor = manuscript.correspondingAuthor?.trim() ?? '';
+
+  if (
+    markedAuthor === undefined ||
+    correspondingAuthor.length === 0 ||
+    correspondingAuthorNamesMatch(markedAuthor, correspondingAuthor)
+  ) {
+    return [];
+  }
+
+  return [
+    {
+      key: 'CORRESPONDING_AUTHOR_MARKER',
+      message:
+        'The author-line star marker differs from the manuscript corresponding author. Review the author line manually.',
+    },
+  ];
 };

@@ -58,6 +58,7 @@ export type PortableResearchPaperManifest = {
     content: string;
     status: string;
     orderIndex: number;
+    level?: number;
     wordLimit?: number;
     wordCount: number;
     includeInExport: boolean;
@@ -171,6 +172,7 @@ export const buildPortableResearchPaperManifest = (
       content: section.content ?? '',
       status: section.status ?? 'DRAFTING',
       orderIndex: section.orderIndex ?? index,
+      level: section.level ?? 1,
       ...(section.wordLimit !== null && section.wordLimit !== undefined
         ? { wordLimit: section.wordLimit }
         : {}),
@@ -275,5 +277,12 @@ export const parsePortableResearchPaperManifest = (
   ) {
     throw new Error('Unsupported or invalid research-paper manifest');
   }
-  return parsed as PortableResearchPaperManifest;
+  const manifest = parsed as PortableResearchPaperManifest;
+  return {
+    ...manifest,
+    sections: manifest.sections.map((section) => ({
+      ...section,
+      level: section.level ?? 1,
+    })),
+  };
 };

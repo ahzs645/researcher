@@ -48,6 +48,7 @@ export type ResearchFieldSpec = {
   type: ResearchFieldType;
   icon?: string;
   description?: string;
+  defaultValue?: string | number | boolean;
   options?: ResearchSelectOption[];
   // ARRAY/MULTI_SELECT have no inline editor in the bridge record table yet —
   // mark them read-only rather than render a broken input.
@@ -1781,6 +1782,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconSortAscendingNumbers',
       },
       {
+        name: 'level',
+        label: 'Heading level',
+        type: 'NUMBER',
+        icon: 'IconHierarchy2',
+        description: '1 = top-level section, 2-3 = subsection depth',
+        defaultValue: 1,
+      },
+      {
         name: 'wordLimit',
         label: 'Word limit',
         type: 'NUMBER',
@@ -1806,6 +1815,7 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
       'placement',
       'status',
       'orderIndex',
+      'level',
       'wordCount',
     ],
   },

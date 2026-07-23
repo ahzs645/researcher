@@ -28,16 +28,19 @@ import {
 } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import { buildSectionSkeleton } from '@/local-db/research/manuscript/manuscriptScaffold';
-import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
 import {
+  type JournalStyle,
+  type SectionPlacement,
+} from '@/local-db/research/manuscript/manuscriptTypes';
+import {
+  buildSubmissionRequirementValuesUpdate,
   CANONICAL_REQUIREMENT_FIELDS,
-  parseManuscriptSubmissionExtras,
+  preserveCorrespondingAuthorContact,
   serializeJournalSubmissionRequirements,
-  serializeManuscriptSubmissionExtras,
-  submissionJournalKey,
   type JournalSubmissionRequirement,
   type SubmissionRequirementValues,
 } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
+import { getRecordsFromRecordConnection } from '@/object-record/cache/utils/getRecordsFromRecordConnection';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
@@ -82,6 +85,14 @@ export const useManuscriptComposer = () => {
     searchParams.get('section'),
   );
   const [journalId, setJournalId] = useState<string | null>(null);
+  const [enqueueSubmissionSave] = useState(() => {
+    let pendingSave = Promise.resolve();
+    return (operation: () => Promise<void>) => {
+      const queuedSave = pendingSave.then(operation, operation);
+      pendingSave = queuedSave.catch(() => undefined);
+      return queuedSave;
+    };
+  });
   const manuscript =
     manuscripts.find((item) => item.id === manuscriptId) ?? manuscripts[0];
 
@@ -264,6 +275,7 @@ export const useManuscriptComposer = () => {
       sectionType: 'OTHER',
       placement: 'MAIN',
       orderIndex: sections.length,
+      level: 1,
       status: 'NOT_STARTED',
       includeInExport: true,
       content: '',
@@ -284,6 +296,7 @@ export const useManuscriptComposer = () => {
         sectionType: draft.sectionType,
         placement: draft.placement,
         orderIndex: sections.length + draft.orderIndex,
+        level: 1,
         status: 'NOT_STARTED',
         includeInExport: draft.includeInExport,
         content: '',
@@ -310,90 +323,203 @@ export const useManuscriptComposer = () => {
     (journal) => journal.id === manuscript?.targetJournal?.id,
   );
 
-  const saveSubmissionRequirementValues = async (
-    values: SubmissionRequirementValues,
-  ) => {
-    if (!isDefined(manuscript) || !isDefined(linkedJournal)) return;
-    const update: Record<string, string> = {};
-    const extras = parseManuscriptSubmissionExtras(manuscript.submissionExtras);
-    const journalKey = submissionJournalKey(linkedJournal);
-    const journalValues = { ...(extras[journalKey] ?? {}) };
-    for (const [key, value] of Object.entries(values)) {
-      const canonicalField = CANONICAL_REQUIREMENT_FIELDS[key];
-      if (canonicalField === undefined) journalValues[key] = value;
-      else update[canonicalField] = value;
+  const requireSubmissionTarget = (
+    targetJournal: JournalRecord | undefined,
+  ): JournalRecord => {
+    const resolvedTarget = targetJournal ?? linkedJournal;
+    if (!isDefined(resolvedTarget)) {
+      throw new Error('A target journal is required before saving');
     }
-    extras[journalKey] = journalValues;
-    update.submissionExtras = serializeManuscriptSubmissionExtras(extras);
+    return resolvedTarget;
+  };
+
+  const setTargetJournal = async (targetJournal: JournalRecord) => {
+    if (!isDefined(manuscript)) {
+      throw new Error('A manuscript is required before selecting a journal');
+    }
+    setJournalId(targetJournal.id);
+    if (manuscript.targetJournal?.id === targetJournal.id) return;
+
     await updateOneRecord({
       objectNameSingular: 'manuscript',
       idToUpdate: manuscript.id,
-      updateOneRecordInput: update,
-    });
-    await refetchManuscripts();
-  };
-
-  const saveJournalSubmissionRequirements = async (
-    requirements: JournalSubmissionRequirement[],
-  ) => {
-    if (!isDefined(linkedJournal)) return;
-    await updateOneRecord({
-      objectNameSingular: 'journalTemplate',
-      idToUpdate: linkedJournal.id,
       updateOneRecordInput: {
-        submissionRequirements:
-          serializeJournalSubmissionRequirements(requirements),
+        targetJournalId: targetJournal.id,
+        ...(isDefined(targetJournal.name)
+          ? { targetVenue: targetJournal.name }
+          : {}),
       },
     });
-    await refetchJournals();
   };
 
-  const keepJournalSubmissionValue = async (key: string, value: string) => {
-    if (!isDefined(manuscript)) return;
-    if (key === 'KEYWORDS') {
-      const keywordsSection = sections.find(
-        (section) => section.sectionType?.toLocaleUpperCase() === 'KEYWORDS',
-      );
-      if (!isDefined(keywordsSection)) return;
-      await updateOneRecord({
-        objectNameSingular: 'manuscriptSection',
-        idToUpdate: keywordsSection.id,
-        updateOneRecordInput: { content: value, wordCount: countWords(value) },
-      });
-      await refetchSections();
-      return;
+  const refetchCurrentManuscript = async (): Promise<ManuscriptRecord> => {
+    if (!isDefined(manuscript)) {
+      throw new Error('A manuscript is required before saving');
     }
-    const field =
-      key === 'AUTHOR_ORDER'
-        ? 'authorLine'
-        : key === 'CORRESPONDING_AUTHOR'
-          ? 'correspondingAuthor'
-          : undefined;
-    if (field === undefined) return;
-    await updateOneRecord({
-      objectNameSingular: 'manuscript',
-      idToUpdate: manuscript.id,
-      updateOneRecordInput: { [field]: value },
-    });
-    await refetchManuscripts();
+    const result = await refetchManuscripts();
+    if (!isDefined(result.data)) {
+      throw new Error('Could not refresh the manuscript before saving');
+    }
+    const refreshedManuscripts = getRecordsFromRecordConnection({
+      recordConnection: result.data.manuscripts,
+    }) as unknown as ManuscriptRecord[];
+    const refreshedManuscript = refreshedManuscripts.find(
+      ({ id }) => id === manuscript.id,
+    );
+    if (!isDefined(refreshedManuscript)) {
+      throw new Error('Could not refresh the manuscript before saving');
+    }
+    return refreshedManuscript;
   };
 
-  const selectJournal = (nextJournalId: string) => {
-    if (!isDefined(manuscript)) return;
-    setJournalId(nextJournalId);
+  const saveSubmissionRequirementValues = (
+    values: SubmissionRequirementValues,
+    targetJournal?: JournalRecord,
+  ) =>
+    enqueueSubmissionSave(async () => {
+      if (!isDefined(manuscript)) {
+        throw new Error('A manuscript is required before saving');
+      }
+      const resolvedTarget = requireSubmissionTarget(targetJournal);
+      await setTargetJournal(resolvedTarget);
+      const hasExtras = Object.keys(values).some(
+        (key) => CANONICAL_REQUIREMENT_FIELDS[key] === undefined,
+      );
+      const latestManuscript = hasExtras
+        ? await refetchCurrentManuscript()
+        : manuscript;
+      const update = buildSubmissionRequirementValuesUpdate({
+        changedValues: values,
+        template: resolvedTarget,
+        latestSubmissionExtras: latestManuscript.submissionExtras,
+      });
+      if (Object.keys(update).length === 0) return;
+      await updateOneRecord({
+        objectNameSingular: 'manuscript',
+        idToUpdate: manuscript.id,
+        updateOneRecordInput: update,
+      });
+      await refetchManuscripts();
+    });
+
+  const saveJournalSubmissionRequirements = (
+    requirements: JournalSubmissionRequirement[],
+    targetJournal?: JournalRecord,
+  ) =>
+    enqueueSubmissionSave(async () => {
+      const resolvedTarget = requireSubmissionTarget(targetJournal);
+      await setTargetJournal(resolvedTarget);
+      await updateOneRecord({
+        objectNameSingular: 'journalTemplate',
+        idToUpdate: resolvedTarget.id,
+        updateOneRecordInput: {
+          submissionRequirements:
+            serializeJournalSubmissionRequirements(requirements),
+        },
+      });
+      await Promise.all([refetchJournals(), refetchManuscripts()]);
+    });
+
+  const keepJournalSubmissionValue = (
+    key: string,
+    value: string,
+    targetJournal?: JournalRecord,
+  ) =>
+    enqueueSubmissionSave(async () => {
+      if (!isDefined(manuscript)) {
+        throw new Error('A manuscript is required before saving');
+      }
+      const resolvedTarget = requireSubmissionTarget(targetJournal);
+      await setTargetJournal(resolvedTarget);
+      if (key === 'KEYWORDS') {
+        const keywordsSection = sections.find(
+          (section) => section.sectionType?.toLocaleUpperCase() === 'KEYWORDS',
+        );
+        if (!isDefined(keywordsSection)) {
+          throw new Error('The manuscript has no keywords section');
+        }
+        await updateOneRecord({
+          objectNameSingular: 'manuscriptSection',
+          idToUpdate: keywordsSection.id,
+          updateOneRecordInput: {
+            content: value,
+            wordCount: countWords(value),
+          },
+        });
+        await Promise.all([refetchSections(), refetchManuscripts()]);
+        return;
+      }
+      const field =
+        key === 'AUTHOR_ORDER'
+          ? 'authorLine'
+          : key === 'CORRESPONDING_AUTHOR'
+            ? 'correspondingAuthor'
+            : undefined;
+      if (field === undefined) {
+        throw new Error(`Cannot apply journal value for ${key}`);
+      }
+      const latestManuscript =
+        field === 'correspondingAuthor'
+          ? await refetchCurrentManuscript()
+          : manuscript;
+      const nextValue =
+        field === 'correspondingAuthor'
+          ? preserveCorrespondingAuthorContact(
+              latestManuscript.correspondingAuthor ?? '',
+              value,
+            )
+          : value;
+      await updateOneRecord({
+        objectNameSingular: 'manuscript',
+        idToUpdate: manuscript.id,
+        updateOneRecordInput: { [field]: nextValue },
+      });
+      await refetchManuscripts();
+    });
+
+  const selectJournal = async (nextJournalId: string) => {
     const selectedJournal = journals.find(
       (journal) => journal.id === nextJournalId,
     );
-    void updateOneRecord({
-      objectNameSingular: 'manuscript',
-      idToUpdate: manuscript.id,
-      updateOneRecordInput: {
-        targetJournalId: nextJournalId,
-        ...(isDefined(selectedJournal?.name)
-          ? { targetVenue: selectedJournal.name }
-          : {}),
-      },
-    }).then(() => refetchManuscripts());
+    if (!isDefined(selectedJournal)) {
+      throw new Error('Could not find the selected journal');
+    }
+    await setTargetJournal(selectedJournal);
+    await refetchManuscripts();
+  };
+
+  const changeSectionPlacement = async (
+    sectionIdToMove: string,
+    placement: SectionPlacement,
+  ) => {
+    const section = sections.find(({ id }) => id === sectionIdToMove);
+    if (!isDefined(section) || section.placement === placement) return;
+    const nextOrder =
+      Math.max(
+        -1,
+        ...sections
+          .filter((candidate) => candidate.placement === placement)
+          .map((candidate) => candidate.orderIndex ?? -1),
+      ) + 1;
+    const assetPlacement = placement === 'SUPPLEMENT' ? 'SUPPLEMENT' : 'MAIN';
+
+    await Promise.all([
+      updateOneRecord({
+        objectNameSingular: 'manuscriptSection',
+        idToUpdate: section.id,
+        updateOneRecordInput: { placement, orderIndex: nextOrder },
+      }),
+      ...figures
+        .filter((figure) => figure.sectionId === section.id)
+        .map((figure) =>
+          updateOneRecord({
+            objectNameSingular: 'figure',
+            idToUpdate: figure.id,
+            updateOneRecordInput: { placement: assetPlacement },
+          }),
+        ),
+    ]);
+    await Promise.all([refetchSections(), refetchFigures()]);
   };
 
   const saveStyleOverrides = async (
@@ -443,6 +569,7 @@ export const useManuscriptComposer = () => {
     saveJournalSubmissionRequirements,
     keepJournalSubmissionValue,
     selectJournal,
+    changeSectionPlacement,
     saveStyleOverrides,
     refetchImportedRecords,
     refetchSectionsAndFigures: () =>

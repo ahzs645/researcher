@@ -25,6 +25,7 @@ export type SectionLike = {
   content?: string | null;
   status?: string | null;
   orderIndex?: number | null;
+  level?: number | null;
   wordLimit?: number | null;
   wordCount?: number | null;
   includeInExport?: boolean | null;

@@ -1,4 +1,5 @@
 import { styled } from '@linaria/react';
+import { useEffect } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { H1Title } from 'twenty-ui/display';
 import { type SelectOption, TabButton } from 'twenty-ui/input';
@@ -12,6 +13,7 @@ import { ManuscriptTitlePageTab } from '@/local-db/research/components/composer/
 import {
   type ManuscriptComposerTab,
   manuscriptComposerTabState,
+  normalizeManuscriptComposerTab,
 } from '@/local-db/research/components/composer/manuscriptComposerTabState';
 import { ManuscriptWriteTab } from '@/local-db/research/components/composer/ManuscriptWriteTab';
 import { useManuscriptComposer } from '@/local-db/research/components/composer/useManuscriptComposer';
@@ -24,7 +26,7 @@ const COMPOSER_TABS: Array<{
   title: string;
 }> = [
   { id: 'write', title: 'Write' },
-  { id: 'titlePage', title: 'Title page' },
+  { id: 'titlePage', title: 'Front matter' },
   { id: 'figures', title: 'Figures & tables' },
   { id: 'references', title: 'References' },
   { id: 'submission', title: 'Submission' },
@@ -86,6 +88,9 @@ export const ManuscriptComposerPage = () => {
   const [manuscriptComposerTab, setManuscriptComposerTab] = useAtomState(
     manuscriptComposerTabState,
   );
+  const activeManuscriptComposerTab = normalizeManuscriptComposerTab(
+    manuscriptComposerTab,
+  );
   const composer = useManuscriptComposer();
   const manuscriptOptions: SelectOption<string>[] = composer.manuscripts.map(
     (manuscript) => ({
@@ -93,6 +98,16 @@ export const ManuscriptComposerPage = () => {
       label: manuscript.name ?? 'Untitled manuscript',
     }),
   );
+
+  useEffect(() => {
+    if (activeManuscriptComposerTab !== manuscriptComposerTab) {
+      setManuscriptComposerTab('write');
+    }
+  }, [
+    activeManuscriptComposerTab,
+    manuscriptComposerTab,
+    setManuscriptComposerTab,
+  ]);
 
   if (!isDefined(composer.manuscript)) {
     return (
@@ -121,9 +136,14 @@ export const ManuscriptComposerPage = () => {
     MANUSCRIPT_TABLE_STYLES.find(
       (tableStyle) => tableStyle === composer.effectiveStyle.tableStyle,
     ) ?? 'ACADEMIC';
-  const selectFigureSection = (sectionId: string) => {
+  const selectRelatedSection = (sectionId: string) => {
     composer.selectSection(sectionId);
-    setManuscriptComposerTab('write');
+    setManuscriptComposerTab(
+      composer.sections.find((section) => section.id === sectionId)
+        ?.placement === 'FRONT_MATTER'
+        ? 'titlePage'
+        : 'write',
+    );
   };
 
   return (
@@ -145,13 +165,13 @@ export const ManuscriptComposerPage = () => {
               key={tab.id}
               id={`composer-${tab.id}`}
               title={tab.title}
-              active={manuscriptComposerTab === tab.id}
+              active={activeManuscriptComposerTab === tab.id}
               onClick={() => setManuscriptComposerTab(tab.id)}
             />
           ))}
         </StyledTabBar>
 
-        {manuscriptComposerTab === 'write' ? (
+        {activeManuscriptComposerTab === 'write' ? (
           <ManuscriptWriteTab
             manuscriptId={manuscript.id}
             manuscriptName={manuscript.name}
@@ -164,6 +184,7 @@ export const ManuscriptComposerPage = () => {
             targetJournal={linkedJournal}
             submissionExtras={manuscript.submissionExtras}
             competingInterests={manuscript.competingInterests}
+            onEditFrontMatter={() => setManuscriptComposerTab('titlePage')}
             onSelectSection={composer.selectSection}
             onChangeSectionPlacement={(sectionId, placement) =>
               void composer.changeSectionPlacement(sectionId, placement)
@@ -179,30 +200,38 @@ export const ManuscriptComposerPage = () => {
           />
         ) : null}
 
-        {manuscriptComposerTab === 'figures' ? (
+        {activeManuscriptComposerTab === 'figures' ? (
           <ManuscriptFiguresTab
             manuscriptId={manuscript.id}
             figures={composer.figures}
             sections={composer.sections}
             style={composer.effectiveStyle}
             onChanged={() => void composer.refetchFigures()}
-            onSelectSection={selectFigureSection}
+            onSelectSection={selectRelatedSection}
           />
         ) : null}
 
-        {manuscriptComposerTab === 'titlePage' ? (
+        {activeManuscriptComposerTab === 'titlePage' ? (
           <ManuscriptTitlePageTab
             key={`${manuscript.id}-${composer.sections.find((section) => section.sectionType === 'KEYWORDS')?.id ?? 'no-keywords'}`}
             manuscript={manuscript}
             sections={composer.sections}
+            figures={composer.figures}
+            references={composer.references}
+            selectedSectionId={composer.selectedSection?.id}
             style={composer.effectiveStyle}
             onSave={composer.saveTitlePageDetails}
             onAddKeywordsSection={composer.addKeywordsSection}
+            onChangeSectionIncludeInExport={
+              composer.changeSectionIncludeInExport
+            }
+            onChangeSectionPlacement={composer.changeSectionPlacement}
             onDeleteSection={composer.deleteSection}
+            onPersistSection={composer.persistSectionById}
           />
         ) : null}
 
-        {manuscriptComposerTab === 'references' ? (
+        {activeManuscriptComposerTab === 'references' ? (
           <ManuscriptReferencesTab
             manuscriptId={manuscript.id}
             sections={composer.sections}
@@ -214,12 +243,12 @@ export const ManuscriptComposerPage = () => {
             onDeleteReferences={composer.deleteReferences}
             onMergeDuplicateReferences={composer.mergeDuplicateReferences}
             onUpdateReference={composer.updateReference}
-            onSelectSection={selectFigureSection}
+            onSelectSection={selectRelatedSection}
             onGoToExport={() => setManuscriptComposerTab('export')}
           />
         ) : null}
 
-        {manuscriptComposerTab === 'submission' ? (
+        {activeManuscriptComposerTab === 'submission' ? (
           <ManuscriptSubmissionTab
             manuscript={manuscript}
             template={effectiveJournal}
@@ -247,7 +276,7 @@ export const ManuscriptComposerPage = () => {
           />
         ) : null}
 
-        {manuscriptComposerTab === 'export' &&
+        {activeManuscriptComposerTab === 'export' &&
         isDefined(composer.bundle) &&
         isDefined(composer.portableSource) ? (
           <ManuscriptExportTab

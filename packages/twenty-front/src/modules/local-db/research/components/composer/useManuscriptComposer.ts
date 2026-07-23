@@ -282,16 +282,21 @@ export const useManuscriptComposer = () => {
     };
   }, [manuscript, sections, figures, references]);
 
-  const persistSection = (markdown: string) => {
-    if (!isDefined(selectedSection)) return;
+  const persistSectionById = (sectionIdToPersist: string, markdown: string) => {
+    if (!sections.some((section) => section.id === sectionIdToPersist)) return;
     void updateOneRecord({
       objectNameSingular: 'manuscriptSection',
-      idToUpdate: selectedSection.id,
+      idToUpdate: sectionIdToPersist,
       updateOneRecordInput: {
         content: markdown,
         wordCount: countWords(markdown),
       },
     });
+  };
+
+  const persistSection = (markdown: string) => {
+    if (!isDefined(selectedSection)) return;
+    persistSectionById(selectedSection.id, markdown);
   };
 
   const persistCitationLinkedSections = async (
@@ -781,6 +786,19 @@ export const useManuscriptComposer = () => {
     await Promise.all([refetchSections(), refetchFigures()]);
   };
 
+  const changeSectionIncludeInExport = async (
+    sectionIdToUpdate: string,
+    includeInExport: boolean,
+  ) => {
+    if (!sections.some((section) => section.id === sectionIdToUpdate)) return;
+    await updateOneRecord({
+      objectNameSingular: 'manuscriptSection',
+      idToUpdate: sectionIdToUpdate,
+      updateOneRecordInput: { includeInExport },
+    });
+    await refetchSections();
+  };
+
   const saveStyleOverrides = async (
     overrides: ManuscriptExportStyleOverrides,
   ) => {
@@ -821,6 +839,7 @@ export const useManuscriptComposer = () => {
     selectManuscript,
     selectSection,
     persistSection,
+    persistSectionById,
     persistCitationLinkedSections,
     addSection,
     scaffoldSections,
@@ -837,6 +856,7 @@ export const useManuscriptComposer = () => {
     keepJournalSubmissionValue,
     selectJournal,
     changeSectionPlacement,
+    changeSectionIncludeInExport,
     saveStyleOverrides,
     refetchImportedRecords,
     refetchSectionsAndFigures: () =>

@@ -36,13 +36,11 @@ const StyledCard = styled.div`
   gap: ${themeCssVariables.spacing[2]};
   padding: ${themeCssVariables.spacing[3]};
 `;
-
 const StyledTitle = styled.span`
   color: ${themeCssVariables.font.color.primary};
   font-size: ${themeCssVariables.font.size.sm};
   font-weight: ${themeCssVariables.font.weight.medium};
 `;
-
 const StyledInput = styled.input`
   background: ${themeCssVariables.background.primary};
   border: 1px solid ${themeCssVariables.border.color.medium};

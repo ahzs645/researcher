@@ -8,8 +8,25 @@ export type ManuscriptComposerTab =
   | 'submission'
   | 'export';
 
+const MANUSCRIPT_COMPOSER_TABS: ManuscriptComposerTab[] = [
+  'write',
+  'titlePage',
+  'figures',
+  'references',
+  'submission',
+  'export',
+];
+
+export const normalizeManuscriptComposerTab = (
+  value: unknown,
+): ManuscriptComposerTab =>
+  MANUSCRIPT_COMPOSER_TABS.includes(value as ManuscriptComposerTab)
+    ? (value as ManuscriptComposerTab)
+    : 'write';
+
 export const manuscriptComposerTabState =
   createAtomState<ManuscriptComposerTab>({
     key: 'manuscriptComposerTabState',
     defaultValue: 'write',
+    useSessionStorage: true,
   });

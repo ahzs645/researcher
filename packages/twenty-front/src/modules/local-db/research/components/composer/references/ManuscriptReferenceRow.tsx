@@ -4,15 +4,18 @@ import { IconAlertTriangle } from 'twenty-ui/display';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { formatReferenceEntry } from '@/local-db/research/manuscript/manuscriptCitations';
-import {
-  countCitationKeyOccurrences,
-  type ReferenceUsage,
-} from '@/local-db/research/manuscript/manuscriptReferenceUsage';
+import { type ReferenceUsage } from '@/local-db/research/manuscript/manuscriptReferenceUsage';
 import {
   type FigureLike,
   type ReferenceLike,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
+import {
+  missingReferenceFields,
+  referenceSectionUsages,
+} from './manuscriptReferenceRowUtils';
+
+export { missingReferenceFields } from './manuscriptReferenceRowUtils';
 
 type ManuscriptReferenceRowProps = {
   editor?: React.ReactNode;
@@ -174,37 +177,6 @@ const StyledEditor = styled.div`
   padding: ${themeCssVariables.spacing[3]};
 `;
 
-const isMissing = (value: string | null | undefined): boolean =>
-  value === null || value === undefined || value.trim().length === 0;
-
-export const missingReferenceFields = (reference: ReferenceLike): string[] => [
-  ...(reference.year === null || reference.year === undefined ? ['year'] : []),
-  ...(isMissing(reference.authors) ? ['authors'] : []),
-  ...(isMissing(reference.doi) && isMissing(reference.url)
-    ? ['DOI or URL']
-    : []),
-];
-
-const usageInSection = ({
-  citationKey,
-  figures,
-  section,
-}: {
-  citationKey: string;
-  figures: FigureLike[];
-  section: SectionLike;
-}): number =>
-  countCitationKeyOccurrences(section.content, citationKey) +
-  figures
-    .filter((figure) => figure.sectionId === section.id)
-    .reduce(
-      (count, figure) =>
-        count +
-        countCitationKeyOccurrences(figure.caption, citationKey) +
-        countCitationKeyOccurrences(figure.tableData, citationKey),
-      0,
-    );
-
 export const ManuscriptReferenceRow = ({
   editor,
   figures,
@@ -218,16 +190,11 @@ export const ManuscriptReferenceRow = ({
   const [expanded, setExpanded] = useState(false);
   const key = reference.citationKey?.trim() || reference.id;
   const missingFields = missingReferenceFields(reference);
-  const sectionUsages = usage.sectionIds.map((sectionId) => {
-    const section = sections.find(({ id }) => id === sectionId);
-    return {
-      count:
-        section === undefined
-          ? 0
-          : usageInSection({ citationKey: key, figures, section }),
-      id: sectionId,
-      name: section?.name?.trim() || 'Untitled section',
-    };
+  const sectionUsages = referenceSectionUsages({
+    citationKey: key,
+    figures,
+    sections,
+    usage,
   });
   const assignedCount = sectionUsages.reduce(
     (count, sectionUsage) => count + sectionUsage.count,

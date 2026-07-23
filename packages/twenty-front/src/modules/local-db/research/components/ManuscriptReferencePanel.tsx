@@ -2,9 +2,7 @@ import { styled } from '@linaria/react';
 import { useMemo, useState } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import {
-  ManuscriptReferenceEditor,
-} from '@/local-db/research/components/composer/references/ManuscriptReferenceEditor';
+import { ManuscriptReferenceEditor } from '@/local-db/research/components/composer/references/ManuscriptReferenceEditor';
 import {
   ManuscriptReferenceRow,
   missingReferenceFields,

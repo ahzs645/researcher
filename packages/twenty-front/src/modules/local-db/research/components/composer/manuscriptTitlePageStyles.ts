@@ -16,6 +16,16 @@ export const StyledTitlePageFields = styled.div`
   gap: ${themeCssVariables.spacing[3]};
 `;
 
+export const StyledTitlePageColumns = styled.div`
+  display: grid;
+  gap: ${themeCssVariables.spacing[4]};
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
 export const StyledTitlePageField = styled.label`
   color: ${themeCssVariables.font.color.secondary};
   display: flex;

@@ -1,6 +1,7 @@
 import { isNonEmptyString } from '@sniptt/guards';
 
 import { referenceToCslItem } from './manuscriptCiteproc';
+import { cslItemToReferenceDraft } from './manuscriptReferenceImport';
 import { type ReferenceLike } from './manuscriptTypes';
 
 export type ReferenceFormValues = {
@@ -54,10 +55,8 @@ const nullable = (value: string): string | null => {
 const parseCslObject = (text: string): Record<string, unknown> | null => {
   if (text.trim().length === 0) return {};
   const parsed = JSON.parse(text) as unknown;
-  return typeof parsed === 'object' &&
-    parsed !== null &&
-    !Array.isArray(parsed)
-    ? parsed
+  return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
     : null;
 };
 
@@ -89,6 +88,35 @@ export const referenceToFormValues = (
       ? ''
       : String(reference.year),
 });
+
+export const referenceFormValuesWithEditedCsl = (
+  values: ReferenceFormValues,
+  initialCslJson: string,
+  preserveCitationKey = false,
+): ReferenceFormValues => {
+  if (values.cslJson.trim() === initialCslJson.trim()) return values;
+  if (values.cslJson.trim().length === 0) return values;
+  const item = parseCslObject(values.cslJson);
+  if (item === null) return values;
+  const draft = cslItemToReferenceDraft(item);
+  return {
+    ...values,
+    authors: draft.authors ?? '',
+    citationKey:
+      preserveCitationKey || !isNonEmptyString(draft.citationKey)
+        ? values.citationKey
+        : draft.citationKey,
+    containerTitle: draft.containerTitle ?? '',
+    doi: draft.doi ?? '',
+    issue: draft.issue ?? '',
+    name: draft.name ?? '',
+    pages: draft.pages ?? '',
+    url: draft.url ?? '',
+    volume: draft.volume ?? '',
+    year:
+      draft.year === null || draft.year === undefined ? '' : String(draft.year),
+  };
+};
 
 const synchronizedCslJson = (
   values: ReferenceFormValues,

@@ -1,7 +1,7 @@
 import { BlockNoteView } from '@blocknote/mantine';
 import { SuggestionMenuController, useCreateBlockNote } from '@blocknote/react';
 import { styled } from '@linaria/react';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState, type Ref } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
@@ -35,9 +35,12 @@ import 'katex/dist/katex.min.css';
 //
 type ManuscriptSectionEditorProps = {
   citationKeys: string[];
+  containerRef?: Ref<HTMLDivElement>;
   figures: FigureLike[];
   initialMarkdown: string;
+  minimumHeight?: number;
   onPersist: (markdown: string) => void;
+  onReady?: () => void;
   references: ReferenceLike[];
   readonly?: boolean;
   style: JournalStyle;
@@ -47,6 +50,7 @@ const StyledEditorShell = styled.div`
   background: ${themeCssVariables.background.primary};
   border: 1px solid ${themeCssVariables.border.color.medium};
   border-radius: ${themeCssVariables.border.radius.md};
+  box-sizing: border-box;
   min-height: 320px;
   padding: ${themeCssVariables.spacing[2]};
   position: relative;
@@ -66,9 +70,12 @@ const StyledInsertionPopoverAnchor = styled.div`
 
 export const ManuscriptSectionEditor = ({
   citationKeys,
+  containerRef,
   figures,
   initialMarkdown,
+  minimumHeight,
   onPersist,
+  onReady,
   references,
   readonly = false,
   style,
@@ -92,6 +99,8 @@ export const ManuscriptSectionEditor = ({
       editor.replaceBlocks(editor.document, blocks);
     }
     setIsLoaded(true);
+    const animationFrameId = requestAnimationFrame(() => onReady?.());
+    return () => cancelAnimationFrame(animationFrameId);
     // Mount-once: the parent remounts via `key` when the section changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -114,7 +123,12 @@ export const ManuscriptSectionEditor = ({
       references={references}
       style={style}
     >
-      <StyledEditorShell>
+      <StyledEditorShell
+        ref={containerRef}
+        style={
+          minimumHeight === undefined ? undefined : { minHeight: minimumHeight }
+        }
+      >
         <BlockNoteView
           editor={editor}
           editable={!readonly}

@@ -206,6 +206,75 @@ describe('useManuscriptComposer submission persistence', () => {
     });
   });
 
+  it('rewrites cited section and figure tokens when a reference key is edited', async () => {
+    const citedReference = {
+      id: 'reference-id',
+      citationKey: 'smith2024',
+      manuscript: { id: manuscript.id },
+    };
+    const citedSection = {
+      id: 'section-id',
+      name: 'Results',
+      content: 'Evidence [@smith2024].',
+      manuscript: { id: manuscript.id },
+    };
+    const citedFigure = {
+      id: 'figure-id',
+      caption: 'Prior work [@smith2024]',
+      tableData: '| Source |\n| --- |\n| [@smith2024] |',
+      manuscript: { id: manuscript.id },
+    };
+    jest
+      .mocked(useFindManyRecords)
+      .mockImplementation(({ objectNameSingular }) => {
+        if (objectNameSingular === 'manuscript') {
+          return findManyResult([manuscript], manuscriptRefetch);
+        }
+        if (objectNameSingular === 'journalTemplate') {
+          return findManyResult([journal], journalRefetch);
+        }
+        if (objectNameSingular === 'manuscriptSection') {
+          return findManyResult([citedSection], sectionRefetch);
+        }
+        if (objectNameSingular === 'figure') {
+          return findManyResult([citedFigure], figureRefetch);
+        }
+        return findManyResult([citedReference], referenceRefetch);
+      });
+    const { result } = renderHook(() => useManuscriptComposer());
+
+    await act(async () => {
+      await result.current.updateReference(citedReference, {
+        citationKey: 'smith2025',
+      });
+    });
+
+    expect(updateOneRecord).toHaveBeenCalledWith({
+      objectNameSingular: 'reference',
+      idToUpdate: 'reference-id',
+      updateOneRecordInput: { citationKey: 'smith2025' },
+    });
+    expect(updateOneRecord).toHaveBeenCalledWith({
+      objectNameSingular: 'manuscriptSection',
+      idToUpdate: 'section-id',
+      updateOneRecordInput: {
+        content: 'Evidence [@smith2025].',
+        wordCount: 2,
+      },
+    });
+    expect(updateOneRecord).toHaveBeenCalledWith({
+      objectNameSingular: 'figure',
+      idToUpdate: 'figure-id',
+      updateOneRecordInput: {
+        caption: 'Prior work [@smith2025]',
+        tableData: '| Source |\n| --- |\n| [@smith2025] |',
+      },
+    });
+    expect(sectionRefetch).toHaveBeenCalled();
+    expect(figureRefetch).toHaveBeenCalled();
+    expect(referenceRefetch).toHaveBeenCalled();
+  });
+
   it('verifies a merged reference is absent from the refetched connection', async () => {
     const keptReference = {
       id: 'kept-reference-id',

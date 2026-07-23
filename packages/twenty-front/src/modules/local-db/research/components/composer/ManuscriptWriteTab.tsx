@@ -1,19 +1,17 @@
 import { styled } from '@linaria/react';
-import { isDefined } from 'twenty-shared/utils';
+import { useEffect, useRef, useState } from 'react';
 import { H2Title, IconPlus } from 'twenty-ui/display';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptImportPanel } from '@/local-db/research/components/ManuscriptImportPanel';
-import { ManuscriptSectionEditor } from '@/local-db/research/components/ManuscriptSectionEditor';
-import { ManuscriptSectionMetadataPanel } from '@/local-db/research/components/ManuscriptSectionMetadataPanel';
 import { ManuscriptDuplicateSectionReview } from '@/local-db/research/components/composer/ManuscriptDuplicateSectionReview';
 import { ManuscriptSectionOutline } from '@/local-db/research/components/composer/ManuscriptSectionOutline';
+import { ManuscriptWriteEditor } from '@/local-db/research/components/composer/ManuscriptWriteEditor';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { extractCitationKeys } from '@/local-db/research/manuscript/manuscriptCrossReference';
 import { findDuplicateSectionGroups } from '@/local-db/research/manuscript/manuscriptSectionDedupe';
 import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
-import { wordLimitStatus } from '@/local-db/research/manuscript/manuscriptScaffold';
 import {
   type FigureLike,
   type JournalStyle,
@@ -34,6 +32,7 @@ type ManuscriptWriteTabProps = {
   targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
   submissionExtras?: string | null;
   competingInterests?: string | null;
+  onEditFrontMatter: () => void;
   onSelectSection: (sectionId: string) => void;
   onChangeSectionPlacement: (
     sectionId: string,
@@ -83,47 +82,11 @@ const StyledWorkspace = styled.div`
   }
 `;
 
-const StyledEditorColumn = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${themeCssVariables.spacing[3]};
-  min-width: 0;
-`;
-
 const StyledOutlineColumn = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${themeCssVariables.spacing[2]};
   min-width: 0;
-`;
-
-const StyledDetails = styled.details`
-  background: ${themeCssVariables.background.secondary};
-  border: 1px solid ${themeCssVariables.border.color.light};
-  border-radius: ${themeCssVariables.border.radius.sm};
-
-  & > summary {
-    color: ${themeCssVariables.font.color.secondary};
-    cursor: pointer;
-    font-size: ${themeCssVariables.font.size.sm};
-    font-weight: ${themeCssVariables.font.weight.medium};
-    padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]};
-  }
-`;
-
-const StyledLimit = styled.span<{ over: boolean }>`
-  color: ${({ over }) =>
-    over
-      ? themeCssVariables.font.color.danger
-      : themeCssVariables.font.color.tertiary};
-  font-size: ${themeCssVariables.font.size.xs};
-  font-weight: ${({ over }) =>
-    over ? themeCssVariables.font.weight.medium : 'normal'};
-`;
-
-const StyledEmpty = styled.span`
-  color: ${themeCssVariables.font.color.tertiary};
-  font-size: ${themeCssVariables.font.size.sm};
 `;
 
 export const ManuscriptWriteTab = ({
@@ -138,6 +101,7 @@ export const ManuscriptWriteTab = ({
   targetJournal,
   submissionExtras,
   competingInterests,
+  onEditFrontMatter,
   onSelectSection,
   onChangeSectionPlacement,
   onPersistSection,
@@ -147,16 +111,39 @@ export const ManuscriptWriteTab = ({
   onImported,
   onDeleteDuplicateSections,
 }: ManuscriptWriteTabProps) => {
+  const editorShellRef = useRef<HTMLDivElement>(null);
+  const [minimumEditorHeight, setMinimumEditorHeight] = useState<
+    number | undefined
+  >();
   const duplicateSectionGroups = findDuplicateSectionGroups(sections);
+  const firstWritingSectionId = sections.find(
+    (section) => section.placement !== 'FRONT_MATTER',
+  )?.id;
+  const selectedWritingSection =
+    selectedSection?.placement === 'FRONT_MATTER' ? undefined : selectedSection;
   const citationKeys = sections.reduce<string[]>((keys, section) => {
     for (const key of extractCitationKeys(section.content ?? '')) {
       if (!keys.includes(key)) keys.push(key);
     }
     return keys;
   }, []);
-  const wordStatus = isDefined(selectedSection)
-    ? wordLimitStatus(selectedSection.wordCount, selectedSection.wordLimit)
-    : undefined;
+
+  useEffect(() => {
+    if (
+      selectedSection?.placement === 'FRONT_MATTER' &&
+      firstWritingSectionId !== undefined
+    ) {
+      onSelectSection(firstWritingSectionId);
+    }
+  }, [firstWritingSectionId, onSelectSection, selectedSection?.placement]);
+
+  const selectSection = (sectionId: string) => {
+    if (sectionId === selectedWritingSection?.id) return;
+    const currentHeight =
+      editorShellRef.current?.getBoundingClientRect().height;
+    if (currentHeight !== undefined) setMinimumEditorHeight(currentHeight);
+    onSelectSection(sectionId);
+  };
 
   return (
     <StyledTab>
@@ -207,50 +194,26 @@ export const ManuscriptWriteTab = ({
           />
           <ManuscriptSectionOutline
             sections={sections}
-            selectedSectionId={selectedSection?.id}
+            selectedSectionId={selectedWritingSection?.id}
             onChangePlacement={onChangeSectionPlacement}
-            onSelectSection={onSelectSection}
+            onEditFrontMatter={onEditFrontMatter}
+            onSelectSection={selectSection}
           />
         </StyledOutlineColumn>
 
-        <StyledEditorColumn>
-          {isDefined(selectedSection) ? (
-            <>
-              <StyledDetails>
-                <summary>
-                  Details · {selectedSection.name ?? 'Untitled section'}
-                </summary>
-                <ManuscriptSectionMetadataPanel
-                  key={`section-metadata-${selectedSection.id}`}
-                  section={selectedSection}
-                  sections={sections}
-                  figures={figures}
-                  onChanged={onSectionMetadataChanged}
-                />
-              </StyledDetails>
-              <ManuscriptSectionEditor
-                key={selectedSection.id}
-                citationKeys={citationKeys}
-                figures={figures}
-                initialMarkdown={selectedSection.content ?? ''}
-                onPersist={onPersistSection}
-                references={references}
-                style={style}
-              />
-              {isDefined(wordStatus) ? (
-                <StyledLimit over={wordStatus.over}>
-                  {wordStatus.wordLimit === null
-                    ? `${wordStatus.wordCount} words`
-                    : wordStatus.over
-                      ? `${wordStatus.wordCount} / ${wordStatus.wordLimit} words · ${Math.abs(wordStatus.remaining ?? 0)} over limit`
-                      : `${wordStatus.wordCount} / ${wordStatus.wordLimit} words · ${wordStatus.remaining} left`}
-                </StyledLimit>
-              ) : null}
-            </>
-          ) : (
-            <StyledEmpty>Add a section to start writing.</StyledEmpty>
-          )}
-        </StyledEditorColumn>
+        <ManuscriptWriteEditor
+          citationKeys={citationKeys}
+          editorShellRef={editorShellRef}
+          figures={figures}
+          minimumEditorHeight={minimumEditorHeight}
+          onEditorReady={() => setMinimumEditorHeight(undefined)}
+          onPersistSection={onPersistSection}
+          onSectionMetadataChanged={onSectionMetadataChanged}
+          references={references}
+          section={selectedWritingSection}
+          sections={sections}
+          style={style}
+        />
       </StyledWorkspace>
     </StyledTab>
   );

@@ -21,6 +21,10 @@ const StyledOutline = styled.nav`
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 180px);
+  /* The nav must never exceed its grid column — intrinsic row width used to
+     push it over the editor column's footer. */
+  max-width: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: ${themeCssVariables.spacing[1]};
   position: sticky;
@@ -53,30 +57,33 @@ const StyledCount = styled.span`
   margin-left: auto;
 `;
 
+const StyledFrontMatterHint = styled.button`
+  background: ${themeCssVariables.background.transparent.blue};
+  border: 0;
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.secondary};
+  cursor: pointer;
+  font-size: ${themeCssVariables.font.size.xs};
+  margin-bottom: ${themeCssVariables.spacing[1]};
+  padding: ${themeCssVariables.spacing[2]};
+  text-align: left;
+`;
+
 const StyledEmpty = styled.span`
   color: ${themeCssVariables.font.color.tertiary};
   font-size: ${themeCssVariables.font.size.sm};
   padding: ${themeCssVariables.spacing[2]};
 `;
 
-type OutlineGroupId = 'frontMatter' | 'main' | 'backMatter' | 'supplement';
+type OutlineGroupId = 'main' | 'backMatter' | 'supplement';
 
 const GROUPS: { id: OutlineGroupId; label: string }[] = [
-  // Cover-page identity content (title, authors, thesis lines) lives in the
-  // Title page tab — this group holds front-matter CONTENT sections only.
-  { id: 'frontMatter', label: 'Front matter' },
   { id: 'main', label: 'Main text' },
   { id: 'backMatter', label: 'Back matter' },
   { id: 'supplement', label: 'Supplement' },
 ];
 
 const groupIdForSection = (section: SectionLike): OutlineGroupId => {
-  if (
-    section.sectionType?.toLocaleUpperCase() === 'TITLE_PAGE' ||
-    section.placement === 'FRONT_MATTER'
-  ) {
-    return 'frontMatter';
-  }
   if (section.placement === 'BACK_MATTER') return 'backMatter';
   if (section.placement === 'SUPPLEMENT') return 'supplement';
   return 'main';
@@ -84,6 +91,7 @@ const groupIdForSection = (section: SectionLike): OutlineGroupId => {
 
 type ManuscriptSectionOutlineProps = {
   onChangePlacement: (sectionId: string, placement: SectionPlacement) => void;
+  onEditFrontMatter: () => void;
   onSelectSection: (sectionId: string) => void;
   sections: SectionLike[];
   selectedSectionId?: string;
@@ -91,28 +99,31 @@ type ManuscriptSectionOutlineProps = {
 
 export const ManuscriptSectionOutline = ({
   onChangePlacement,
+  onEditFrontMatter,
   onSelectSection,
   sections,
   selectedSectionId,
 }: ManuscriptSectionOutlineProps) => {
+  const frontMatterCount = sections.filter(
+    (section) => section.placement === 'FRONT_MATTER',
+  ).length;
   const groupedSections = useMemo(() => {
     const groups: Record<OutlineGroupId, SectionLike[]> = {
-      frontMatter: [],
       main: [],
       backMatter: [],
       supplement: [],
     };
-    sections.forEach((section) =>
-      groups[groupIdForSection(section)].push(section),
-    );
+    sections
+      .filter((section) => section.placement !== 'FRONT_MATTER')
+      .forEach((section) => groups[groupIdForSection(section)].push(section));
     return groups;
   }, [sections]);
-  const frontMatterCount = groupedSections.frontMatter.length;
+  const writingSectionCount = Object.values(groupedSections).reduce(
+    (count, groupSections) => count + groupSections.length,
+    0,
+  );
   const groupedTrees = useMemo(
     () => ({
-      frontMatter: buildManuscriptSectionOutlineTree(
-        groupedSections.frontMatter,
-      ),
       main: buildManuscriptSectionOutlineTree(groupedSections.main),
       backMatter: buildManuscriptSectionOutlineTree(groupedSections.backMatter),
       supplement: buildManuscriptSectionOutlineTree(groupedSections.supplement),
@@ -162,16 +173,21 @@ export const ManuscriptSectionOutline = ({
 
   return (
     <StyledOutline aria-label="Section outline">
-      {sections.length === 0 ? (
-        <StyledEmpty>No sections yet.</StyledEmpty>
+      {frontMatterCount > 0 ? (
+        <StyledFrontMatterHint type="button" onClick={onEditFrontMatter}>
+          {frontMatterCount} front-matter{' '}
+          {frontMatterCount === 1 ? 'section' : 'sections'} — edit in the Front
+          matter tab
+        </StyledFrontMatterHint>
+      ) : null}
+      {writingSectionCount === 0 ? (
+        <StyledEmpty>No writing sections yet.</StyledEmpty>
       ) : (
         GROUPS.map((group) => {
           const groupSections = groupedSections[group.id];
           const groupTree = groupedTrees[group.id];
           if (groupSections.length === 0) return null;
-          const defaultCollapsed =
-            group.id === 'frontMatter' && frontMatterCount > 1;
-          const isCollapsed = collapsedOverrides[group.id] ?? defaultCollapsed;
+          const isCollapsed = collapsedOverrides[group.id] ?? false;
           return (
             <div key={group.id}>
               <StyledGroupHeader

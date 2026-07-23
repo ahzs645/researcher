@@ -140,11 +140,11 @@ describe('useDialogManager', () => {
       expect(dialogInternal.queue).toEqual(expectReturn);
     });
 
-    it('Should enqueueDialog with 3 options and drop the first option from the queue.', () => {
+    it('keeps the active queue stable when another dialog is enqueued at capacity', () => {
       const result = renderHooks();
 
       const expectReturn = expectedReturnFromEnqueue([
-        dialogOptionsArray[1],
+        dialogOptionsArray[0],
         dialogOptionsArray[2],
       ]);
 

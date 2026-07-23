@@ -4,6 +4,7 @@ import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
+  referenceFormValuesWithEditedCsl,
   type ReferenceFormValues,
   validateReferenceCslJson,
 } from '@/local-db/research/manuscript/manuscriptReferenceForm';
@@ -93,12 +94,13 @@ const StyledActions = styled.div`
 `;
 
 const TEXT_FIELDS: Array<{
-  key: Exclude<keyof ReferenceFormValues, 'cslJson' | 'year'>;
+  key: Exclude<keyof ReferenceFormValues, 'cslJson'>;
   label: string;
   placeholder?: string;
 }> = [
   { key: 'citationKey', label: 'Citation key' },
   { key: 'authors', label: 'Authors', placeholder: 'Family, Given; …' },
+  { key: 'year', label: 'Year' },
   { key: 'name', label: 'Title/name' },
   { key: 'containerTitle', label: 'Container title' },
   { key: 'volume', label: 'Volume' },
@@ -128,9 +130,14 @@ export const ManuscriptReferenceEditor = ({
     const nextCslError = validateReferenceCslJson(values.cslJson);
     setCslError(nextCslError);
     if (nextCslError !== null || isSaving) return;
+    const valuesToSave = referenceFormValuesWithEditedCsl(
+      values,
+      initialValues.cslJson,
+      isCitationKeyGenerated,
+    );
     setIsSaving(true);
     try {
-      await onSave(values);
+      await onSave(valuesToSave);
     } finally {
       setIsSaving(false);
     }
@@ -149,30 +156,23 @@ export const ManuscriptReferenceEditor = ({
             {field.label}
             <StyledInput
               disabled={field.key === 'citationKey' && isCitationKeyGenerated}
+              inputMode={field.key === 'year' ? 'numeric' : undefined}
               placeholder={
                 field.key === 'citationKey' && isCitationKeyGenerated
                   ? 'Generated from author and year'
                   : field.placeholder
               }
               value={values[field.key]}
-              onChange={(event) =>
-                updateValue(field.key, event.target.value)
-              }
+              type={field.key === 'year' ? 'number' : undefined}
+              onChange={(event) => updateValue(field.key, event.target.value)}
             />
             {field.key === 'citationKey' && isCitationKeyGenerated ? (
-              <StyledHint>Generated uniquely when the reference is added.</StyledHint>
+              <StyledHint>
+                Generated uniquely when the reference is added.
+              </StyledHint>
             ) : null}
           </StyledField>
         ))}
-        <StyledField>
-          Year
-          <StyledInput
-            inputMode="numeric"
-            type="number"
-            value={values.year}
-            onChange={(event) => updateValue('year', event.target.value)}
-          />
-        </StyledField>
       </StyledGrid>
       <StyledAdvanced open={cslError !== null}>
         <summary>CSL-JSON (advanced)</summary>
@@ -191,6 +191,7 @@ export const ManuscriptReferenceEditor = ({
           title="Cancel"
           variant="secondary"
           size="small"
+          type="button"
           onClick={onCancel}
         />
         <Button

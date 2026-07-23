@@ -1,38 +1,27 @@
 import { styled } from '@linaria/react';
 import { useState } from 'react';
 import { H2Title } from 'twenty-ui/display';
-import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
   type ManuscriptRecord,
   type SectionRecord,
 } from '@/local-db/research/components/composer/manuscriptComposerData';
+import { ManuscriptFrontMatterSections } from '@/local-db/research/components/composer/ManuscriptFrontMatterSections';
+import { parseManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';
 import {
-  moveManuscriptTitlePageLine,
-  parseManuscriptTitlePageExtraLines,
-} from '@/local-db/research/manuscript/manuscriptTitlePage';
-import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
+  type FigureLike,
+  type JournalStyle,
+  type ReferenceLike,
+  type SectionPlacement,
+} from '@/local-db/research/manuscript/manuscriptTypes';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
-import {
-  ManuscriptContributorsEditor,
-  type ManuscriptContributorValues,
-} from './ManuscriptContributorsEditor';
+import { type ManuscriptContributorValues } from './ManuscriptContributorsEditor';
+import { ManuscriptTitlePageFields } from './ManuscriptTitlePageFields';
 import { ManuscriptTitlePageFragments } from './ManuscriptTitlePageFragments';
 import { ManuscriptTitlePagePreview } from './ManuscriptTitlePagePreview';
-import {
-  StyledTitlePageCard,
-  StyledTitlePageExtraLineRow,
-  StyledTitlePageField,
-  StyledTitlePageFields,
-  StyledTitlePageHeading,
-  StyledTitlePageHint,
-  StyledTitlePageInput,
-  StyledTitlePageRowActions,
-  StyledTitlePageSmallButton,
-  StyledTitlePageTextarea,
-} from './manuscriptTitlePageStyles';
+import { StyledTitlePageColumns } from './manuscriptTitlePageStyles';
 
 export type ManuscriptTitlePageDetails = ManuscriptContributorValues & {
   name: string;
@@ -44,10 +33,22 @@ export type ManuscriptTitlePageDetails = ManuscriptContributorValues & {
 type ManuscriptTitlePageTabProps = {
   manuscript: ManuscriptRecord;
   sections: SectionRecord[];
+  figures: FigureLike[];
+  references: ReferenceLike[];
+  selectedSectionId?: string;
   style: JournalStyle;
   onSave: (values: ManuscriptTitlePageDetails) => Promise<void>;
   onAddKeywordsSection: () => Promise<void>;
+  onChangeSectionIncludeInExport: (
+    sectionId: string,
+    includeInExport: boolean,
+  ) => Promise<void>;
+  onChangeSectionPlacement: (
+    sectionId: string,
+    placement: SectionPlacement,
+  ) => Promise<void>;
   onDeleteSection: (sectionId: string) => Promise<void>;
+  onPersistSection: (sectionId: string, markdown: string) => void;
 };
 
 const StyledTab = styled.div`
@@ -60,23 +61,19 @@ const StyledTab = styled.div`
   }
 `;
 
-const StyledColumns = styled.div`
-  display: grid;
-  gap: ${themeCssVariables.spacing[4]};
-  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
 export const ManuscriptTitlePageTab = ({
   manuscript,
   sections,
+  figures,
+  references,
+  selectedSectionId,
   style,
   onSave,
   onAddKeywordsSection,
+  onChangeSectionIncludeInExport,
+  onChangeSectionPlacement,
   onDeleteSection,
+  onPersistSection,
 }: ManuscriptTitlePageTabProps) => {
   const keywordsSection = sections.find(
     (section) => section.sectionType?.toUpperCase() === 'KEYWORDS',
@@ -120,10 +117,10 @@ export const ManuscriptTitlePageTab = ({
     setIsSaving(true);
     try {
       await onSave(values);
-      enqueueSuccessSnackBar({ message: 'Title page saved' });
+      enqueueSuccessSnackBar({ message: 'Front matter saved' });
       return true;
     } catch {
-      enqueueErrorSnackBar({ message: 'Could not save title page' });
+      enqueueErrorSnackBar({ message: 'Could not save front matter' });
       return false;
     } finally {
       setIsSaving(false);
@@ -132,143 +129,22 @@ export const ManuscriptTitlePageTab = ({
 
   return (
     <StyledTab>
-      <H2Title title="Title page" />
-      <StyledColumns>
-        <StyledTitlePageFields>
-          <StyledTitlePageCard>
-            <StyledTitlePageField>
-              Manuscript title
-              <StyledTitlePageInput
-                aria-label="Manuscript title"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-              <StyledTitlePageHint>
-                This is the manuscript record&apos;s name — it appears in the
-                manuscript list, exports, and the submission checklist.
-              </StyledTitlePageHint>
-            </StyledTitlePageField>
-          </StyledTitlePageCard>
-          <StyledTitlePageCard>
-            <ManuscriptContributorsEditor
-              initialValues={contributors}
-              onChange={setContributors}
-            />
-          </StyledTitlePageCard>
-          <StyledTitlePageCard>
-            <StyledTitlePageHeading>
-              Keywords
-              {keywordsSection === undefined ? (
-                <StyledTitlePageSmallButton
-                  type="button"
-                  onClick={() =>
-                    void onAddKeywordsSection().catch(() =>
-                      enqueueErrorSnackBar({
-                        message: 'Could not add keywords section',
-                      }),
-                    )
-                  }
-                >
-                  Add keywords section
-                </StyledTitlePageSmallButton>
-              ) : null}
-            </StyledTitlePageHeading>
-            {keywordsSection === undefined ? (
-              <StyledTitlePageHint>
-                Add a real keywords section to edit and export keywords here.
-              </StyledTitlePageHint>
-            ) : (
-              <>
-                <StyledTitlePageTextarea
-                  aria-label="Keywords"
-                  value={keywords}
-                  onChange={(event) => setKeywords(event.target.value)}
-                />
-                <StyledTitlePageHint>
-                  Edits the Keywords section — the same content shown in the
-                  Write outline.
-                </StyledTitlePageHint>
-              </>
-            )}
-          </StyledTitlePageCard>
-          <StyledTitlePageCard>
-            <StyledTitlePageHeading>
-              Extra title-page lines
-              <StyledTitlePageSmallButton
-                type="button"
-                onClick={() => setExtraLines((current) => [...current, ''])}
-              >
-                Add line
-              </StyledTitlePageSmallButton>
-            </StyledTitlePageHeading>
-            <StyledTitlePageHint>
-              Thesis, degree, institution, and date lines appear after
-              affiliations.
-            </StyledTitlePageHint>
-            {extraLines.map((line, index) => (
-              <StyledTitlePageExtraLineRow key={index}>
-                <StyledTitlePageInput
-                  aria-label={`Extra title-page line ${index + 1}`}
-                  value={line}
-                  onChange={(event) =>
-                    setExtraLines((current) =>
-                      current.map((entry, entryIndex) =>
-                        entryIndex === index ? event.target.value : entry,
-                      ),
-                    )
-                  }
-                />
-                <StyledTitlePageRowActions>
-                  <StyledTitlePageSmallButton
-                    type="button"
-                    aria-label={`Move extra line ${index + 1} up`}
-                    disabled={index === 0}
-                    onClick={() =>
-                      setExtraLines((current) =>
-                        moveManuscriptTitlePageLine(current, index, -1),
-                      )
-                    }
-                  >
-                    ↑
-                  </StyledTitlePageSmallButton>
-                  <StyledTitlePageSmallButton
-                    type="button"
-                    aria-label={`Move extra line ${index + 1} down`}
-                    disabled={index === extraLines.length - 1}
-                    onClick={() =>
-                      setExtraLines((current) =>
-                        moveManuscriptTitlePageLine(current, index, 1),
-                      )
-                    }
-                  >
-                    ↓
-                  </StyledTitlePageSmallButton>
-                  <StyledTitlePageSmallButton
-                    type="button"
-                    aria-label={`Remove extra line ${index + 1}`}
-                    onClick={() =>
-                      setExtraLines((current) =>
-                        current.filter(
-                          (_entry, entryIndex) => entryIndex !== index,
-                        ),
-                      )
-                    }
-                  >
-                    Remove
-                  </StyledTitlePageSmallButton>
-                </StyledTitlePageRowActions>
-              </StyledTitlePageExtraLineRow>
-            ))}
-          </StyledTitlePageCard>
-          <Button
-            title={isSaving ? 'Saving…' : 'Save title page'}
-            variant="primary"
-            accent="blue"
-            size="small"
-            disabled={isSaving}
-            onClick={() => void save()}
-          />
-        </StyledTitlePageFields>
+      <H2Title title="Front matter" />
+      <StyledTitlePageColumns>
+        <ManuscriptTitlePageFields
+          contributors={contributors}
+          extraLines={extraLines}
+          hasKeywordsSection={keywordsSection !== undefined}
+          isSaving={isSaving}
+          keywords={keywords}
+          name={name}
+          onAddKeywordsSection={onAddKeywordsSection}
+          onChangeContributors={setContributors}
+          onChangeExtraLines={setExtraLines}
+          onChangeKeywords={setKeywords}
+          onChangeName={setName}
+          onSave={() => void save()}
+        />
         <ManuscriptTitlePagePreview
           title={name}
           authorLine={contributors.authorLine}
@@ -278,7 +154,17 @@ export const ManuscriptTitlePageTab = ({
           keywords={keywords}
           style={style}
         />
-      </StyledColumns>
+      </StyledTitlePageColumns>
+      <ManuscriptFrontMatterSections
+        figures={figures}
+        onChangeIncludeInExport={onChangeSectionIncludeInExport}
+        onChangePlacement={onChangeSectionPlacement}
+        onPersistSection={onPersistSection}
+        references={references}
+        sections={sections}
+        selectedSectionId={selectedSectionId}
+        style={style}
+      />
       <ManuscriptTitlePageFragments
         sections={fragments}
         onAbsorb={async (section, text) => {

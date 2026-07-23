@@ -45,9 +45,11 @@ export const useDialogManager = () => {
         }),
         (prev) => {
           if (prev.queue.length >= prev.maxQueue) {
+            // Never evict the visible queue head: abrupt replacement can strand
+            // a closing/initial animation and its global focus listeners.
             return {
               ...prev,
-              queue: [...prev.queue.slice(1), newValue],
+              queue: [prev.queue[0], newValue],
             };
           }
 

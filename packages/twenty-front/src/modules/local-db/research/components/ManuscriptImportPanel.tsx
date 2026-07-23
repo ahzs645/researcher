@@ -6,6 +6,7 @@ import { ManuscriptImportWizardRoot } from '@/local-db/research/import-wizard/co
 import { useOpenManuscriptImportWizard } from '@/local-db/research/import-wizard/hooks/useOpenManuscriptImportWizard';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { type ExistingImportReference } from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import { type ExistingSectionShape } from '@/local-db/research/manuscript/manuscriptSectionDedupe';
 import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 
 type ManuscriptImportPanelProps = {
@@ -13,6 +14,7 @@ type ManuscriptImportPanelProps = {
   manuscriptId: string;
   manuscriptName?: string | null;
   existingSectionCount: number;
+  existingSections: ExistingSectionShape[];
   existingReferences: ExistingImportReference[];
   existingFigureRefKeys: string[];
   onChanged: () => void;
@@ -38,6 +40,7 @@ export const ManuscriptImportPanel = ({
   manuscriptId,
   manuscriptName,
   existingSectionCount,
+  existingSections,
   existingReferences,
   existingFigureRefKeys,
   onChanged,
@@ -66,6 +69,7 @@ export const ManuscriptImportPanel = ({
             manuscriptId,
             manuscriptName,
             existingSectionCount,
+            existingSections,
             existingReferences,
             existingFigureRefKeys,
             onChanged,

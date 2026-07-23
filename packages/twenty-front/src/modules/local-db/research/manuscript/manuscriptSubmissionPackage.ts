@@ -33,6 +33,12 @@ export type SubmissionPackage = {
   includedFiles: string[];
 };
 
+export type PortableResearchPackage = {
+  filename: string;
+  blob: Blob;
+  includedFiles: string[];
+};
+
 const blobToBytes = async (blob: Blob): Promise<Uint8Array> => {
   if (typeof blob.arrayBuffer === 'function') {
     return new Uint8Array(await blob.arrayBuffer());
@@ -96,6 +102,23 @@ const zipFiles = async (files: Zippable): Promise<Uint8Array> =>
       resolve(data);
     });
   });
+
+export const createPortableResearchPackage = async (
+  bundle: ManuscriptBundle,
+  materials: SubmissionMaterials,
+  portableSource: PortableManuscriptSource,
+): Promise<PortableResearchPackage> => {
+  const files: Zippable = {};
+  addPortableResearchPaperFiles(files, portableSource, bundle.style, materials);
+  const zipped = await zipFiles(files);
+  return {
+    filename: `${slugifyTitle(bundle.metadata.title)}-portable-research.zip`,
+    blob: new Blob([new Uint8Array(zipped).buffer], {
+      type: 'application/zip',
+    }),
+    includedFiles: Object.keys(files).sort(),
+  };
+};
 
 const addFigures = (files: Zippable, bundle: ManuscriptBundle) => {
   const linkedFigures: string[] = [];

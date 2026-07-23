@@ -98,6 +98,7 @@ export const FIGURE_GQL = {
 
 export const REFERENCE_GQL = {
   id: true,
+  createdAt: true,
   name: true,
   citationKey: true,
   cslType: true,

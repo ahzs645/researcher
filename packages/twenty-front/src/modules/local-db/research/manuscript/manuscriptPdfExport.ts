@@ -7,6 +7,7 @@ import { createElement } from 'react';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import { buildBlockNoteDocument } from './manuscriptBlocks';
+import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 
 // PDF export from the *same* BlockNote block model the DOCX exporter builds —
@@ -18,6 +19,7 @@ import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 export const exportManuscriptToPdfBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
+  bundle = await prepareManuscriptBundleWithCsl(bundle);
   const { editor, blocks } = buildBlockNoteDocument(bundle);
   const fontFamily = /times/i.test(bundle.style.fontFamily ?? '')
     ? 'Times-Roman'

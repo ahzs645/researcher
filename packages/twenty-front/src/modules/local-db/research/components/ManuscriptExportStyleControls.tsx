@@ -1,47 +1,59 @@
 import { styled } from '@linaria/react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { MANUSCRIPT_STYLE_CONTROL_GROUPS } from '@/local-db/research/manuscript/manuscriptExportStyleControlDefinitions';
-import { type ManuscriptExportStyleOverrides } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
+import {
+  MANUSCRIPT_STYLE_CONTROL_GROUPS,
+  type ManuscriptStyleControlGroup,
+} from '@/local-db/research/manuscript/manuscriptExportStyleControlDefinitions';
+import {
+  type ManuscriptExportStyleOverrideKey,
+  type ManuscriptExportStyleOverrides,
+} from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
 import { Select } from '@/ui/input/components/Select';
 
 type ManuscriptExportStyleControlsProps = {
   style: JournalStyle;
+  styleOverrides: ManuscriptExportStyleOverrides;
   onChange: (updates: ManuscriptExportStyleOverrides) => void;
 };
 
 const StyledSections = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${themeCssVariables.spacing[4]};
-`;
-
-const StyledSection = styled.section`
-  display: flex;
-  flex-direction: column;
   gap: ${themeCssVariables.spacing[2]};
 `;
 
-const StyledSectionTitle = styled.div`
-  color: ${themeCssVariables.font.color.primary};
-  font-size: ${themeCssVariables.font.size.sm};
-  font-weight: ${themeCssVariables.font.weight.semiBold};
+const StyledSection = styled.details`
+  background: ${themeCssVariables.background.primary};
+  border: 1px solid ${themeCssVariables.border.color.light};
+  border-radius: ${themeCssVariables.border.radius.sm};
+
+  & > summary {
+    color: ${themeCssVariables.font.color.secondary};
+    cursor: pointer;
+    font-size: ${themeCssVariables.font.size.sm};
+    font-weight: ${themeCssVariables.font.weight.medium};
+    padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]};
+  }
+`;
+
+const StyledGrid = styled.div`
+  border-top: 1px solid ${themeCssVariables.border.color.light};
+  display: grid;
+  gap: ${themeCssVariables.spacing[2]};
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: ${themeCssVariables.spacing[3]};
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const StyledDescription = styled.div`
   color: ${themeCssVariables.font.color.tertiary};
   font-size: ${themeCssVariables.font.size.xs};
-`;
-
-const StyledGrid = styled.div`
-  display: grid;
-  gap: ${themeCssVariables.spacing[2]};
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
+  grid-column: 1 / -1;
 `;
 
 const StyledField = styled.label`
@@ -64,7 +76,7 @@ const StyledInput = styled.input`
 
 const selectValue = (
   style: JournalStyle,
-  field: keyof ManuscriptExportStyleOverrides,
+  field: ManuscriptExportStyleOverrideKey,
   defaultValue: string,
 ): string => {
   const value = style[field];
@@ -85,18 +97,30 @@ const selectValue = (
   return value === null || value === undefined ? defaultValue : String(value);
 };
 
+const customizedCount = (
+  group: ManuscriptStyleControlGroup,
+  styleOverrides: ManuscriptExportStyleOverrides,
+): number =>
+  [...group.texts, ...group.selects].filter(
+    (control) => styleOverrides[control.field] !== undefined,
+  ).length;
+
 export const ManuscriptExportStyleControls = ({
   style,
+  styleOverrides,
   onChange,
 }: ManuscriptExportStyleControlsProps) => (
   <StyledSections>
     {MANUSCRIPT_STYLE_CONTROL_GROUPS.map((group) => (
       <StyledSection key={group.id}>
-        <div>
-          <StyledSectionTitle>{group.title}</StyledSectionTitle>
-          <StyledDescription>{group.description}</StyledDescription>
-        </div>
+        <summary>
+          {group.title}
+          {customizedCount(group, styleOverrides) > 0
+            ? ` · ${customizedCount(group, styleOverrides)} customized`
+            : ''}
+        </summary>
         <StyledGrid>
+          <StyledDescription>{group.description}</StyledDescription>
           {group.texts.map((control) => (
             <StyledField key={control.id}>
               {control.label}
@@ -112,27 +136,29 @@ export const ManuscriptExportStyleControls = ({
               />
             </StyledField>
           ))}
-          {group.selects.map((control) => (
-            <Select
-              key={control.id}
-              dropdownId={control.id}
-              label={control.label}
-              fullWidth
-              options={control.options}
-              value={selectValue(style, control.field, control.defaultValue)}
-              onChange={(value) => {
-                const parsedValue =
-                  control.valueType === 'NUMBER'
-                    ? Number(value)
-                    : control.valueType === 'BOOLEAN'
-                      ? value === 'true'
-                      : value;
-                onChange({
-                  [control.field]: parsedValue,
-                } as ManuscriptExportStyleOverrides);
-              }}
-            />
-          ))}
+          {group.selects
+            .filter((control) => control.field !== 'citationMode')
+            .map((control) => (
+              <Select
+                key={control.id}
+                dropdownId={control.id}
+                label={control.label}
+                fullWidth
+                options={control.options}
+                value={selectValue(style, control.field, control.defaultValue)}
+                onChange={(value) => {
+                  const parsedValue =
+                    control.valueType === 'NUMBER'
+                      ? Number(value)
+                      : control.valueType === 'BOOLEAN'
+                        ? value === 'true'
+                        : value;
+                  onChange({
+                    [control.field]: parsedValue,
+                  } as ManuscriptExportStyleOverrides);
+                }}
+              />
+            ))}
         </StyledGrid>
       </StyledSection>
     ))}

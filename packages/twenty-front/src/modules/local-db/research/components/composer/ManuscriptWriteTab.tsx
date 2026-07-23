@@ -7,9 +7,11 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { ManuscriptImportPanel } from '@/local-db/research/components/ManuscriptImportPanel';
 import { ManuscriptSectionEditor } from '@/local-db/research/components/ManuscriptSectionEditor';
 import { ManuscriptSectionMetadataPanel } from '@/local-db/research/components/ManuscriptSectionMetadataPanel';
+import { ManuscriptDuplicateSectionReview } from '@/local-db/research/components/composer/ManuscriptDuplicateSectionReview';
 import { ManuscriptSectionOutline } from '@/local-db/research/components/composer/ManuscriptSectionOutline';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { extractCitationKeys } from '@/local-db/research/manuscript/manuscriptCrossReference';
+import { findDuplicateSectionGroups } from '@/local-db/research/manuscript/manuscriptSectionDedupe';
 import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 import { wordLimitStatus } from '@/local-db/research/manuscript/manuscriptScaffold';
 import {
@@ -42,6 +44,7 @@ type ManuscriptWriteTabProps = {
   onScaffoldSections: () => void;
   onSectionMetadataChanged: () => void;
   onImported: () => void;
+  onDeleteDuplicateSections: (sectionIds: string[]) => Promise<void>;
 };
 
 const StyledTab = styled.div`
@@ -84,6 +87,13 @@ const StyledEditorColumn = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${themeCssVariables.spacing[3]};
+  min-width: 0;
+`;
+
+const StyledOutlineColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
   min-width: 0;
 `;
 
@@ -135,7 +145,9 @@ export const ManuscriptWriteTab = ({
   onScaffoldSections,
   onSectionMetadataChanged,
   onImported,
+  onDeleteDuplicateSections,
 }: ManuscriptWriteTabProps) => {
+  const duplicateSectionGroups = findDuplicateSectionGroups(sections);
   const citationKeys = sections.reduce<string[]>((keys, section) => {
     for (const key of extractCitationKeys(section.content ?? '')) {
       if (!keys.includes(key)) keys.push(key);
@@ -156,6 +168,7 @@ export const ManuscriptWriteTab = ({
             manuscriptId={manuscriptId}
             manuscriptName={manuscriptName}
             existingSectionCount={sections.length}
+            existingSections={sections}
             existingReferences={references}
             existingFigureRefKeys={figures
               .map(({ refKey }) => refKey)
@@ -187,12 +200,18 @@ export const ManuscriptWriteTab = ({
       </StyledHeader>
 
       <StyledWorkspace>
-        <ManuscriptSectionOutline
-          sections={sections}
-          selectedSectionId={selectedSection?.id}
-          onChangePlacement={onChangeSectionPlacement}
-          onSelectSection={onSelectSection}
-        />
+        <StyledOutlineColumn>
+          <ManuscriptDuplicateSectionReview
+            groups={duplicateSectionGroups}
+            onDeleteSections={onDeleteDuplicateSections}
+          />
+          <ManuscriptSectionOutline
+            sections={sections}
+            selectedSectionId={selectedSection?.id}
+            onChangePlacement={onChangeSectionPlacement}
+            onSelectSection={onSelectSection}
+          />
+        </StyledOutlineColumn>
 
         <StyledEditorColumn>
           {isDefined(selectedSection) ? (

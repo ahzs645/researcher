@@ -1,9 +1,8 @@
 import { styled } from '@linaria/react';
-import { H2Title } from 'twenty-ui/display';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { ManuscriptCslBibliography } from '@/local-db/research/components/ManuscriptCslBibliography';
 import { ManuscriptExportPanel } from '@/local-db/research/components/ManuscriptExportPanel';
+import { ManuscriptBibliographyPreview } from '@/local-db/research/components/composer/export/ManuscriptBibliographyPreview';
 import {
   type JournalRecord,
   type ManuscriptRecord,
@@ -31,10 +30,6 @@ const StyledTab = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${themeCssVariables.spacing[3]};
-
-  & h2 {
-    margin-bottom: 0;
-  }
 `;
 
 export const ManuscriptExportTab = ({
@@ -49,7 +44,6 @@ export const ManuscriptExportTab = ({
   onSaveStyleOverrides,
 }: ManuscriptExportTabProps) => (
   <StyledTab>
-    <H2Title title="Export" />
     <ManuscriptExportPanel
       key={`manuscript-export-${manuscript.id}`}
       bundle={bundle}
@@ -70,11 +64,11 @@ export const ManuscriptExportTab = ({
       }}
       portableSource={portableSource}
     />
-    <ManuscriptCslBibliography
-      cslItems={bundle.cslJson}
-      citedKeys={bundle.citedKeys}
+    <ManuscriptBibliographyPreview
+      citationKeys={bundle.citedKeys}
       styleId={style.citationStyleId ?? ''}
       fallback={bundle.bibliography}
+      references={bundle.sourceInput.references}
     />
   </StyledTab>
 );

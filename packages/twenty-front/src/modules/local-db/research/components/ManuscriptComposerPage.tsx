@@ -175,6 +175,7 @@ export const ManuscriptComposerPage = () => {
               void composer.refetchSectionsAndFigures()
             }
             onImported={() => void composer.refetchImportedRecords()}
+            onDeleteDuplicateSections={composer.deleteSections}
           />
         ) : null}
 
@@ -204,8 +205,16 @@ export const ManuscriptComposerPage = () => {
         {manuscriptComposerTab === 'references' ? (
           <ManuscriptReferencesTab
             manuscriptId={manuscript.id}
+            sections={composer.sections}
+            figures={composer.figures}
             references={composer.references}
             onChanged={() => void composer.refetchReferences()}
+            style={composer.effectiveStyle}
+            onApplyCitationLinks={composer.persistCitationLinkedSections}
+            onDeleteReferences={composer.deleteReferences}
+            onMergeDuplicateReferences={composer.mergeDuplicateReferences}
+            onSelectSection={selectFigureSection}
+            onGoToExport={() => setManuscriptComposerTab('export')}
           />
         ) : null}
 
@@ -246,7 +255,7 @@ export const ManuscriptComposerPage = () => {
             portableSource={composer.portableSource}
             journals={composer.journals}
             selectedJournalId={composer.journalId}
-            style={composer.style}
+            style={composer.effectiveStyle}
             styleOverrides={composer.styleOverrides}
             onSelectJournal={composer.selectJournal}
             onSaveStyleOverrides={composer.saveStyleOverrides}

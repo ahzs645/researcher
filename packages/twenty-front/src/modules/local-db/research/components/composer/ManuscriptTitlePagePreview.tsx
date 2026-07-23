@@ -96,11 +96,11 @@ const StyledScaledArea = styled.div`
 // A literal white sheet at US-letter proportions — paper is white in the
 // exported document regardless of app theme.
 const StyledPaper = styled.div`
-  background: #ffffff;
+  background: ${themeCssVariables.grayScale.gray1};
   border: 1px solid ${themeCssVariables.border.color.medium};
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  box-shadow: ${themeCssVariables.boxShadow.strong};
   box-sizing: border-box;
-  color: #1a1a1a;
+  color: ${themeCssVariables.grayScale.gray12};
   display: flex;
   flex-direction: column;
   font-family: 'Times New Roman', serif;

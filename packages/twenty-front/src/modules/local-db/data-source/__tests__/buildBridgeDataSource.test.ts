@@ -172,4 +172,53 @@ describe('buildBridgeDataSource', () => {
     expect(refreshed?.fontFamily).toBe('Times New Roman');
     expect(refreshed?.lineSpacing).toBe(2);
   });
+
+  it('soft-deletes a collision-suffixed imported reference and excludes it from refetch', async () => {
+    setUrl('/');
+    window.sessionStorage.clear();
+    const dataSource = getBridgeDataSource();
+    const keptReferenceId = '46b56faf-1458-4b68-a7cd-ed744c64c9c3';
+    const removedReferenceId = '56e17e5f-290f-4b85-8841-62d530646129';
+    await dataSource.reset({
+      reference: [
+        {
+          id: keptReferenceId,
+          name: 'Assessment of air quality',
+          citationKey: 'abrahim2008',
+          cslJson: JSON.stringify({ id: 'tmp', type: 'article-journal' }),
+          createdAt: '2026-07-22T00:00:00.000Z',
+          updatedAt: '2026-07-22T00:00:00.000Z',
+          deletedAt: null,
+        },
+        {
+          id: removedReferenceId,
+          name: 'Assessment of air quality',
+          citationKey: 'abrahim2008assessment',
+          cslJson: JSON.stringify({
+            id: 'tmp',
+            type: 'article-journal',
+            'researcher:rawReference':
+              'Abrahim et al. (2008). Assessment of air quality.',
+          }),
+          createdAt: '2026-07-22T00:00:01.000Z',
+          updatedAt: '2026-07-22T00:00:01.000Z',
+          deletedAt: null,
+        },
+      ],
+    });
+
+    await dataSource.deleteOne('reference', removedReferenceId, {});
+
+    const refetched = await dataSource.findMany(
+      'reference',
+      { first: 100 },
+      {},
+    );
+    expect(refetched.records.map(({ id }) => id)).toEqual([keptReferenceId]);
+    await expect(
+      dataSource.db.table('reference').get(removedReferenceId),
+    ).resolves.toEqual(
+      expect.objectContaining({ deletedAt: expect.any(String) }),
+    );
+  });
 });

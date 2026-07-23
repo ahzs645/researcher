@@ -51,6 +51,8 @@ export type FigureLike = {
 
 export type ReferenceLike = {
   id: string;
+  createdAt?: string | null;
+  orderIndex?: number | null;
   name?: string | null; // title
   citationKey?: string | null;
   cslType?: string | null;

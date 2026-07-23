@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { ManuscriptImportReviewSectionRow } from '@/local-db/research/import-wizard/components/ManuscriptImportReviewSectionRow';
 import { useManuscriptImportCommit } from '@/local-db/research/import-wizard/hooks/useManuscriptImportCommit';
 import { type ManuscriptImportWizardOptions } from '@/local-db/research/import-wizard/states/manuscriptImportWizardState';
 import {
@@ -10,6 +11,7 @@ import {
   type ImportedSectionDraft,
 } from '@/local-db/research/manuscript/manuscriptDocImport';
 import { prepareManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
+import { findExistingSectionMatch } from '@/local-db/research/manuscript/manuscriptSectionDedupe';
 import {
   buildSubmissionTransposeUpdate,
   hasTransposableSubmissionDeclarations,
@@ -23,42 +25,6 @@ type ManuscriptImportReviewStepProps = {
   onClose: () => void;
   registerCommitState: (isCommitting: boolean) => void;
 };
-
-const SECTION_TYPES = [
-  'TITLE_PAGE',
-  'ABSTRACT',
-  'KEYWORDS',
-  'INTRODUCTION',
-  'BACKGROUND',
-  'METHODS',
-  'RESULTS',
-  'DISCUSSION',
-  'CONCLUSION',
-  'ACKNOWLEDGMENTS',
-  'AUTHOR_CONTRIBUTIONS',
-  'FUNDING',
-  'CONFLICTS',
-  'DATA_AVAILABILITY',
-  'ETHICS',
-  'REFERENCES',
-  'APPENDIX',
-  'SUPPLEMENT',
-  'OTHER',
-] as const;
-
-const SECTION_PLACEMENTS = [
-  'FRONT_MATTER',
-  'MAIN',
-  'BACK_MATTER',
-  'SUPPLEMENT',
-] as const;
-
-const optionLabel = (value: string): string =>
-  value
-    .toLowerCase()
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
 
 const StyledContainer = styled.div`
   display: flex;
@@ -116,52 +82,6 @@ const StyledSectionList = styled.div`
   overflow-y: auto;
 `;
 
-const StyledSectionRow = styled.div`
-  background: ${themeCssVariables.background.secondary};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  display: grid;
-  gap: ${themeCssVariables.spacing[2]};
-  grid-template-columns:
-    minmax(180px, 1fr) minmax(140px, 0.7fr) minmax(140px, 0.7fr)
-    auto;
-  padding: ${themeCssVariables.spacing[2]};
-`;
-
-const StyledInput = styled.input`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  min-width: 0;
-  padding: ${themeCssVariables.spacing[2]};
-`;
-
-const StyledSelect = styled.select`
-  background: ${themeCssVariables.background.primary};
-  border: 1px solid ${themeCssVariables.border.color.medium};
-  border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${themeCssVariables.font.color.primary};
-  min-width: 0;
-  padding: ${themeCssVariables.spacing[2]};
-`;
-
-const StyledInclude = styled.label`
-  align-items: center;
-  color: ${themeCssVariables.font.color.secondary};
-  display: flex;
-  font-size: ${themeCssVariables.font.size.xs};
-  gap: ${themeCssVariables.spacing[1]};
-`;
-
-const StyledPreview = styled.span`
-  color: ${themeCssVariables.font.color.tertiary};
-  font-size: ${themeCssVariables.font.size.xs};
-  grid-column: 1 / -1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`;
-
 const StyledFooter = styled.div`
   align-items: center;
   border-top: 1px solid ${themeCssVariables.border.color.medium};
@@ -185,7 +105,10 @@ export const ManuscriptImportReviewStep = ({
 }: ManuscriptImportReviewStepProps) => {
   const [document, setDocument] = useState(initialDocument);
   const [transposeDeclarations, setTransposeDeclarations] = useState(true);
-  const preparedImport = useMemo(
+  const [importAnywaySectionIndexes, setImportAnywaySectionIndexes] = useState(
+    () => new Set<number>(),
+  );
+  const basePreparedImport = useMemo(
     () =>
       prepareManuscriptImport(document, reconcile, {
         existingReferences: options.existingReferences,
@@ -197,6 +120,30 @@ export const ManuscriptImportReviewStep = ({
       options.existingReferences,
       reconcile,
     ],
+  );
+  const existingMatches = useMemo(
+    () =>
+      basePreparedImport.sections.map((section) =>
+        findExistingSectionMatch(section, options.existingSections),
+      ),
+    [basePreparedImport.sections, options.existingSections],
+  );
+  const preparedImport = useMemo(
+    () => ({
+      ...basePreparedImport,
+      sections: basePreparedImport.sections
+        .map((section, sectionIndex) =>
+          existingMatches[sectionIndex]?.similarity === 'identical'
+            ? { ...section, includeInExport: false }
+            : section,
+        )
+        .filter(
+          (_, sectionIndex) =>
+            existingMatches[sectionIndex]?.similarity !== 'identical' ||
+            importAnywaySectionIndexes.has(sectionIndex),
+        ),
+    }),
+    [basePreparedImport, existingMatches, importAnywaySectionIndexes],
   );
   const { commitImport, isCommitting, failed, createdCounts } =
     useManuscriptImportCommit({
@@ -221,6 +168,15 @@ export const ManuscriptImportReviewStep = ({
         currentIndex === sectionIndex ? { ...section, ...update } : section,
       ),
     }));
+  };
+
+  const setImportAnyway = (sectionIndex: number, importAnyway: boolean) => {
+    setImportAnywaySectionIndexes((current) => {
+      const next = new Set(current);
+      if (importAnyway) next.add(sectionIndex);
+      else next.delete(sectionIndex);
+      return next;
+    });
   };
 
   const handleConfirm = async () => {
@@ -284,62 +240,17 @@ export const ManuscriptImportReviewStep = ({
           </StyledTranspose>
         ) : null}
         {document.sections.map((section, sectionIndex) => (
-          <StyledSectionRow key={`${section.orderIndex}-${sectionIndex}`}>
-            <StyledInput
-              aria-label={`Section ${sectionIndex + 1} name`}
-              value={section.name}
-              onChange={(event) =>
-                updateSection(sectionIndex, { name: event.target.value })
-              }
-            />
-            <StyledSelect
-              aria-label={`Section ${sectionIndex + 1} type`}
-              value={section.sectionType}
-              onChange={(event) =>
-                updateSection(sectionIndex, {
-                  sectionType: event.target.value,
-                })
-              }
-            >
-              {SECTION_TYPES.map((sectionType) => (
-                <option key={sectionType} value={sectionType}>
-                  {optionLabel(sectionType)}
-                </option>
-              ))}
-            </StyledSelect>
-            <StyledSelect
-              aria-label={`Section ${sectionIndex + 1} placement`}
-              value={section.placement}
-              onChange={(event) =>
-                updateSection(sectionIndex, {
-                  placement: event.target.value,
-                })
-              }
-            >
-              {SECTION_PLACEMENTS.map((placement) => (
-                <option key={placement} value={placement}>
-                  {optionLabel(placement)}
-                </option>
-              ))}
-            </StyledSelect>
-            <StyledInclude>
-              <input
-                type="checkbox"
-                checked={section.includeInExport}
-                onChange={(event) =>
-                  updateSection(sectionIndex, {
-                    includeInExport: event.target.checked,
-                  })
-                }
-              />
-              Export
-            </StyledInclude>
-            <StyledPreview>
-              {section.wordCount} words ·{' '}
-              {section.content.replace(/\s+/g, ' ').slice(0, 180) ||
-                'Empty section'}
-            </StyledPreview>
-          </StyledSectionRow>
+          <ManuscriptImportReviewSectionRow
+            key={`${section.orderIndex}-${sectionIndex}`}
+            section={section}
+            sectionIndex={sectionIndex}
+            existingMatch={existingMatches[sectionIndex]}
+            importAnyway={importAnywaySectionIndexes.has(sectionIndex)}
+            onChange={(update) => updateSection(sectionIndex, update)}
+            onChangeImportAnyway={(importAnyway) =>
+              setImportAnyway(sectionIndex, importAnyway)
+            }
+          />
         ))}
       </StyledSectionList>
 

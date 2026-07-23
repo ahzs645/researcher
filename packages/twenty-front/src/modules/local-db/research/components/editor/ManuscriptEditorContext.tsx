@@ -1,9 +1,21 @@
-import { createContext, type ReactNode, useContext, useMemo } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
 import {
   buildCitationContext,
   type CitationContext,
 } from '@/local-db/research/manuscript/manuscriptCitations';
+import {
+  createCiteprocEngine,
+  formatCslCitations,
+  isVendoredCslStyleId,
+} from '@/local-db/research/manuscript/manuscriptCiteproc';
 import {
   buildAssetLookup,
   numberAssets,
@@ -18,7 +30,9 @@ import {
 type ManuscriptEditorContextValue = {
   assetLookup: Map<string, NumberedFigure>;
   citationContext: CitationContext;
+  citationLabelsByKey: Map<string, string>;
   figures: NumberedFigure[];
+  isCitationStyleLoading: boolean;
   references: ReferenceLike[];
 };
 
@@ -44,7 +58,11 @@ export const ManuscriptEditorContextProvider = ({
   references,
   style,
 }: ManuscriptEditorContextProviderProps) => {
-  const value = useMemo<ManuscriptEditorContextValue>(() => {
+  const [citationLabelsByKey, setCitationLabelsByKey] = useState(
+    new Map<string, string>(),
+  );
+  const [isCitationStyleLoading, setIsCitationStyleLoading] = useState(false);
+  const coreValue = useMemo(() => {
     const referencesByKey = new Map<string, ReferenceLike>();
     references.forEach((reference) =>
       referencesByKey.set(referenceKey(reference), reference),
@@ -71,6 +89,62 @@ export const ManuscriptEditorContextProvider = ({
       references,
     };
   }, [citationKeys, figures, references, style]);
+  const citationStyleId = style.citationStyleId;
+  const referenceSignature = references
+    .map((reference) => `${reference.id}:${reference.cslJson ?? ''}`)
+    .join('|');
+  const citationSignature = citationKeys.join('|');
+
+  useEffect(() => {
+    if (!isVendoredCslStyleId(citationStyleId)) {
+      setCitationLabelsByKey(new Map());
+      setIsCitationStyleLoading(false);
+      return;
+    }
+    let isActive = true;
+    setCitationLabelsByKey(new Map());
+    setIsCitationStyleLoading(true);
+    void createCiteprocEngine({ styleId: citationStyleId, references })
+      .then((engine) => {
+        if (!isActive || engine === null) return;
+        const labels = formatCslCitations(
+          engine,
+          citationKeys.map((citationKey) => [citationKey]),
+        );
+        setCitationLabelsByKey(
+          new Map(
+            citationKeys.map((citationKey, index) => [
+              citationKey,
+              labels[index],
+            ]),
+          ),
+        );
+      })
+      .catch(() => {
+        if (isActive) setCitationLabelsByKey(new Map());
+      })
+      .finally(() => {
+        if (isActive) setIsCitationStyleLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [
+    citationSignature,
+    citationStyleId,
+    referenceSignature,
+    references,
+    citationKeys,
+  ]);
+
+  const value = useMemo<ManuscriptEditorContextValue>(
+    () => ({
+      ...coreValue,
+      citationLabelsByKey,
+      isCitationStyleLoading,
+    }),
+    [citationLabelsByKey, coreValue, isCitationStyleLoading],
+  );
 
   return (
     <ManuscriptEditorContext.Provider value={value}>

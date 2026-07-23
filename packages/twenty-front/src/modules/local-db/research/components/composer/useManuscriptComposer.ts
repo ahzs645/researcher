@@ -22,6 +22,7 @@ import {
   buildManuscriptBundle,
   countWords,
 } from '@/local-db/research/manuscript/manuscriptAssembly';
+import { rewriteCitationKeys } from '@/local-db/research/manuscript/manuscriptCitationKeyRewrite';
 import {
   parseManuscriptExportStyleOverrides,
   serializeManuscriptExportStyleOverrides,
@@ -35,6 +36,8 @@ import {
 import { buildSectionSkeleton } from '@/local-db/research/manuscript/manuscriptScaffold';
 import {
   type JournalStyle,
+  type ReferenceLike,
+  type SectionLike,
   type SectionPlacement,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 import {
@@ -82,6 +85,9 @@ export const useManuscriptComposer = () => {
   });
   const { deleteOneRecord: deleteSectionRecord } = useDeleteOneRecord({
     objectNameSingular: 'manuscriptSection',
+  });
+  const { deleteOneRecord: deleteReferenceRecord } = useDeleteOneRecord({
+    objectNameSingular: 'reference',
   });
   const { updateOneRecord } = useUpdateOneRecord();
   const manuscripts = manuscriptRecords as unknown as ManuscriptRecord[];
@@ -287,6 +293,24 @@ export const useManuscriptComposer = () => {
     });
   };
 
+  const persistCitationLinkedSections = async (
+    changedSections: SectionLike[],
+  ) => {
+    await Promise.all(
+      changedSections.map((section) =>
+        updateOneRecord({
+          objectNameSingular: 'manuscriptSection',
+          idToUpdate: section.id,
+          updateOneRecordInput: {
+            content: section.content ?? '',
+            wordCount: countWords(section.content ?? ''),
+          },
+        }),
+      ),
+    );
+    await refetchSections();
+  };
+
   const addSection = async () => {
     if (!isDefined(manuscript)) return;
     const created = await createSection({
@@ -399,6 +423,93 @@ export const useManuscriptComposer = () => {
   const deleteSection = async (sectionIdToDelete: string) => {
     await deleteSectionRecord(sectionIdToDelete);
     await refetchSections();
+  };
+
+  const deleteSections = async (sectionIdsToDelete: string[]) => {
+    await Promise.all(sectionIdsToDelete.map(deleteSectionRecord));
+    await refetchSections();
+  };
+
+  const refetchReferencesAndVerifyDeleted = async (
+    referenceIdsToDelete: string[],
+  ) => {
+    const result = await refetchReferences();
+    if (!isDefined(result.data?.references)) {
+      throw new Error('Could not verify deleted references');
+    }
+    const deletedReferenceIds = new Set(referenceIdsToDelete);
+    const survivingReferenceIds = getRecordsFromRecordConnection({
+      recordConnection: result.data.references,
+    })
+      .map(({ id }) => id)
+      .filter((id) => deletedReferenceIds.has(id));
+    if (survivingReferenceIds.length > 0) {
+      throw new Error(
+        `Reference deletion did not persist for: ${survivingReferenceIds.join(', ')}`,
+      );
+    }
+  };
+
+  const deleteReferences = async (referenceIdsToDelete: string[]) => {
+    await Promise.all(
+      referenceIdsToDelete.map((referenceId) =>
+        deleteReferenceRecord(referenceId),
+      ),
+    );
+    await refetchReferencesAndVerifyDeleted(referenceIdsToDelete);
+  };
+
+  const mergeDuplicateReferences = async (
+    keptReference: ReferenceLike,
+    removedReferences: ReferenceLike[],
+  ) => {
+    const keptKey = keptReference.citationKey?.trim() || keptReference.id;
+    const replacements = new Map(
+      removedReferences.map((reference) => [
+        reference.citationKey?.trim() || reference.id,
+        keptKey,
+      ]),
+    );
+    const changedSections = sections.flatMap((section) => {
+      const content = rewriteCitationKeys(section.content ?? '', replacements);
+      return content === (section.content ?? '') ? [] : [{ section, content }];
+    });
+    const changedFigures = figures.flatMap((figure) => {
+      const caption = rewriteCitationKeys(figure.caption ?? '', replacements);
+      const tableData = rewriteCitationKeys(
+        figure.tableData ?? '',
+        replacements,
+      );
+      if (
+        caption === (figure.caption ?? '') &&
+        tableData === (figure.tableData ?? '')
+      ) {
+        return [];
+      }
+      return [{ figure, caption, tableData }];
+    });
+
+    await Promise.all([
+      ...changedSections.map(({ section, content }) =>
+        updateOneRecord({
+          objectNameSingular: 'manuscriptSection',
+          idToUpdate: section.id,
+          updateOneRecordInput: {
+            content,
+            wordCount: countWords(content),
+          },
+        }),
+      ),
+      ...changedFigures.map(({ figure, caption, tableData }) =>
+        updateOneRecord({
+          objectNameSingular: 'figure',
+          idToUpdate: figure.id,
+          updateOneRecordInput: { caption, tableData },
+        }),
+      ),
+    ]);
+    await deleteReferences(removedReferences.map(({ id }) => id));
+    await Promise.all([refetchSections(), refetchFigures()]);
   };
 
   const linkedJournal = journals.find(
@@ -644,12 +755,16 @@ export const useManuscriptComposer = () => {
     selectManuscript,
     selectSection,
     persistSection,
+    persistCitationLinkedSections,
     addSection,
     scaffoldSections,
     saveSubmissionDetails,
     saveTitlePageDetails,
     addKeywordsSection,
     deleteSection,
+    deleteSections,
+    deleteReferences,
+    mergeDuplicateReferences,
     saveSubmissionRequirementValues,
     saveJournalSubmissionRequirements,
     keepJournalSubmissionValue,

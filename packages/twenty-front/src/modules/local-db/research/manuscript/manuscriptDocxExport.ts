@@ -18,6 +18,7 @@ import {
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import { buildBlockNoteDocument } from './manuscriptBlocks';
+import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { manuscriptAuthorLineSegments } from './manuscriptContributors';
 import { latexToMathComponents } from './manuscriptDocxMath';
 import {
@@ -363,6 +364,8 @@ const createManuscriptDocxMappings = ({
 export const exportManuscriptToDocxBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
+  const formattedBundle = await prepareManuscriptBundleWithCsl(bundle);
+  bundle = formattedBundle;
   const { editor, blocks } = buildBlockNoteDocument(bundle);
   const fontFamily = bundle.style.fontFamily?.trim() || 'Times New Roman';
   const bodyFontSize = bundle.style.bodyFontSize ?? 12;

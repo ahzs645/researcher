@@ -67,13 +67,15 @@ const manuscriptRefetch = jest.fn(async () => ({
 const journalRefetch = jest.fn(async () => undefined);
 const sectionRefetch = jest.fn(async () => undefined);
 const figureRefetch = jest.fn(async () => undefined);
-const referenceRefetch = jest.fn(async () => undefined);
+const referenceRefetch = jest.fn();
 type UpdateCall = {
   objectNameSingular: string;
   idToUpdate: string;
   updateOneRecordInput: Record<string, string>;
 };
 const updateOneRecord = jest.fn(async (_input: UpdateCall) => undefined);
+const deleteSectionRecord = jest.fn(async (_id: string) => undefined);
+const deleteReferenceRecord = jest.fn(async (_id: string) => undefined);
 
 const findManyResult = (records: unknown[], refetch: jest.Mock) =>
   ({ records, refetch }) as unknown as ReturnType<typeof useFindManyRecords>;
@@ -107,9 +109,14 @@ describe('useManuscriptComposer submission persistence', () => {
     jest.mocked(useCreateOneRecord).mockReturnValue({
       createOneRecord: jest.fn(),
     } as unknown as ReturnType<typeof useCreateOneRecord>);
-    jest.mocked(useDeleteOneRecord).mockReturnValue({
-      deleteOneRecord: jest.fn(),
-    } as unknown as ReturnType<typeof useDeleteOneRecord>);
+    jest
+      .mocked(useDeleteOneRecord)
+      .mockImplementation(({ objectNameSingular }) => ({
+        deleteOneRecord:
+          objectNameSingular === 'reference'
+            ? deleteReferenceRecord
+            : deleteSectionRecord,
+      }));
     jest.mocked(useUpdateOneRecord).mockReturnValue({
       updateOneRecord,
     } as unknown as ReturnType<typeof useUpdateOneRecord>);
@@ -196,6 +203,114 @@ describe('useManuscriptComposer submission persistence', () => {
       updateOneRecordInput: {
         correspondingAuthor: 'Hossein Kazemian, ajalil@unbc.ca',
       },
+    });
+  });
+
+  it('verifies a merged reference is absent from the refetched connection', async () => {
+    const keptReference = {
+      id: 'kept-reference-id',
+      name: 'Assessment of air quality',
+      citationKey: 'abrahim2008',
+      manuscript: { id: manuscript.id },
+    };
+    const removedReference = {
+      id: 'removed-reference-id',
+      name: 'Assessment of air quality',
+      citationKey: 'abrahim2008assessment',
+      manuscript: { id: manuscript.id },
+    };
+    jest
+      .mocked(useFindManyRecords)
+      .mockImplementation(({ objectNameSingular }) => {
+        if (objectNameSingular === 'manuscript') {
+          return findManyResult([manuscript], manuscriptRefetch);
+        }
+        if (objectNameSingular === 'journalTemplate') {
+          return findManyResult([journal], journalRefetch);
+        }
+        if (objectNameSingular === 'manuscriptSection') {
+          return findManyResult([], sectionRefetch);
+        }
+        if (objectNameSingular === 'figure') {
+          return findManyResult([], figureRefetch);
+        }
+        return findManyResult(
+          [keptReference, removedReference],
+          referenceRefetch,
+        );
+      });
+    referenceRefetch.mockResolvedValue({
+      data: {
+        references: {
+          edges: [{ node: { ...keptReference, __typename: 'Reference' } }],
+        },
+      },
+    });
+    const { result } = renderHook(() => useManuscriptComposer());
+
+    await act(async () => {
+      await result.current.mergeDuplicateReferences(keptReference, [
+        removedReference,
+      ]);
+    });
+
+    expect(deleteReferenceRecord).toHaveBeenCalledWith(removedReference.id);
+    expect(referenceRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a merge when a deleted reference survives the refetch', async () => {
+    const keptReference = {
+      id: 'kept-reference-id',
+      name: 'Assessment of air quality',
+      citationKey: 'abrahim2008',
+      manuscript: { id: manuscript.id },
+    };
+    const removedReference = {
+      id: 'removed-reference-id',
+      name: 'Assessment of air quality',
+      citationKey: 'abrahim2008assessment',
+      manuscript: { id: manuscript.id },
+    };
+    jest
+      .mocked(useFindManyRecords)
+      .mockImplementation(({ objectNameSingular }) => {
+        if (objectNameSingular === 'manuscript') {
+          return findManyResult([manuscript], manuscriptRefetch);
+        }
+        if (objectNameSingular === 'journalTemplate') {
+          return findManyResult([journal], journalRefetch);
+        }
+        if (objectNameSingular === 'manuscriptSection') {
+          return findManyResult([], sectionRefetch);
+        }
+        if (objectNameSingular === 'figure') {
+          return findManyResult([], figureRefetch);
+        }
+        return findManyResult(
+          [keptReference, removedReference],
+          referenceRefetch,
+        );
+      });
+    referenceRefetch.mockResolvedValue({
+      data: {
+        references: {
+          edges: [
+            { node: { ...keptReference, __typename: 'Reference' } },
+            { node: { ...removedReference, __typename: 'Reference' } },
+          ],
+        },
+      },
+    });
+    const { result } = renderHook(() => useManuscriptComposer());
+
+    await act(async () => {
+      await expect(
+        result.current.mergeDuplicateReferences(keptReference, [
+          removedReference,
+        ]),
+      ).rejects.toThrow(
+        'Reference deletion did not persist for: removed-reference-id',
+      );
     });
   });
 });

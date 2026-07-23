@@ -1188,8 +1188,8 @@ const ATMOSPHERIC_ENVIRONMENT_SUBMISSION_REQUIREMENTS =
 
 // The starter format library. Ships in BOTH blank and demo workspaces (a format
 // is scaffolding, not demo content), so a fresh workspace can format a paper
-// without hand-building a template first. Every `citationStyleId` is one of the
-// CSL styles bundled under `public/csl/` so the bibliography renders **offline**.
+// without hand-building a template first. Supported journal profiles point to
+// CSL styles vendored with the manuscript composer for offline formatting.
 const journalTemplateRecords = (): SeedRecord[] => [
   makeRecord('journalTemplate', 'nature', 0, {
     name: 'Nature (numeric, superscript)',
@@ -1366,7 +1366,7 @@ const journalTemplateRecords = (): SeedRecord[] => [
     name: 'Air Quality, Atmosphere & Health',
     profileKey: 'springer-air-quality-atmosphere-health',
     citationMode: 'AUTHOR_DATE',
-    citationStyleId: 'springer-basic-author-date',
+    citationStyleId: 'air-quality-atmosphere-and-health',
     figureLabelFormat: 'Fig. {n}',
     tableLabelFormat: 'Table {n}',
     supplementPrefix: 'S',
@@ -1406,7 +1406,7 @@ const journalTemplateRecords = (): SeedRecord[] => [
       name: 'Environmental Science and Pollution Research',
       profileKey: 'springer-environmental-science-pollution-research',
       citationMode: 'AUTHOR_DATE',
-      citationStyleId: 'springer-basic-author-date',
+      citationStyleId: 'environmental-science-and-pollution-research',
       figureLabelFormat: 'Fig. {n}',
       tableLabelFormat: 'Table {n}',
       supplementPrefix: 'S',
@@ -1445,7 +1445,7 @@ const journalTemplateRecords = (): SeedRecord[] => [
     name: 'Archives of Environmental Contamination and Toxicology',
     profileKey: 'springer-archives-environmental-contamination',
     citationMode: 'AUTHOR_DATE',
-    citationStyleId: 'springer-basic-author-date',
+    citationStyleId: 'archives-of-environmental-contamination-and-toxicology',
     figureLabelFormat: 'Fig. {n}',
     tableLabelFormat: 'Table {n}',
     supplementPrefix: 'S',
@@ -1480,7 +1480,7 @@ const journalTemplateRecords = (): SeedRecord[] => [
     name: 'Atmospheric Environment',
     profileKey: 'elsevier-atmospheric-environment',
     citationMode: 'NUMERIC',
-    citationStyleId: 'elsevier-with-titles',
+    citationStyleId: 'atmospheric-environment',
     figureLabelFormat: 'Fig. {n}',
     tableLabelFormat: 'Table {n}',
     supplementPrefix: 'S',

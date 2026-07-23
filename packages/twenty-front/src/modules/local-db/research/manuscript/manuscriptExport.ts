@@ -1,4 +1,5 @@
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
+import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { blocknoteDocxExporter } from './manuscriptDocxExport';
 import { blocknotePdfExporter } from './manuscriptPdfExport';
 
@@ -56,10 +57,13 @@ export const markdownBundleExporter: ManuscriptExporter = {
   formats: ['MARKDOWN', 'JSON'],
   offline: true,
   export: async (bundle) => {
-    const base = slugifyTitle(bundle.metadata.title);
-    const document = [buildFrontMatter(bundle), '', bundle.fullMarkdown].join(
-      '\n',
-    );
+    const formattedBundle = await prepareManuscriptBundleWithCsl(bundle);
+    const base = slugifyTitle(formattedBundle.metadata.title);
+    const document = [
+      buildFrontMatter(formattedBundle),
+      '',
+      formattedBundle.fullMarkdown,
+    ].join('\n');
     const files: ExportFile[] = [
       {
         filename: `${base}.md`,
@@ -69,7 +73,7 @@ export const markdownBundleExporter: ManuscriptExporter = {
       {
         filename: 'references.json',
         mimeType: 'application/json',
-        content: JSON.stringify(bundle.cslJson, null, 2),
+        content: JSON.stringify(formattedBundle.cslJson, null, 2),
       },
     ];
     return files;

@@ -158,12 +158,16 @@ type CitationNodeProps = {
 };
 
 const CitationNode = ({ citationKey, onRemove, onSave }: CitationNodeProps) => {
-  const { citationContext } = useManuscriptEditorContext();
+  const { citationContext, citationLabelsByKey, isCitationStyleLoading } =
+    useManuscriptEditorContext();
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const resolved = citationContext.referencesByKey.has(citationKey);
   const label = resolved
-    ? formatInTextCitation([citationKey], citationContext)
+    ? (citationLabelsByKey.get(citationKey) ??
+      (isCitationStyleLoading
+        ? '…'
+        : formatInTextCitation([citationKey], citationContext)))
     : `[@${citationKey}]`;
   return (
     <StyledInlineAnchor ref={anchorRef} contentEditable={false}>

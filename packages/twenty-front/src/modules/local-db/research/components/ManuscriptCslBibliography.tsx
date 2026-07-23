@@ -2,22 +2,21 @@ import { styled } from '@linaria/react';
 import { useEffect, useState } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { type FormattedBibliographyEntry } from '@/local-db/research/manuscript/manuscriptCitations';
 import {
-  renderCslBibliography,
+  createCiteprocEngine,
   type CslBibliographyEntry,
-} from '@/local-db/research/manuscript/manuscriptCsl';
-
-// Live "formatted references" preview rendered with full CSL (citeproc-js) in
-// the journal's actual style, fetched on demand. Falls back to the built-in
-// deterministic bibliography when CSL can't be loaded (offline / unknown style),
-// so it always shows something.
+  formatCslBibliography,
+  formatCslCitations,
+  isVendoredCslStyleId,
+} from '@/local-db/research/manuscript/manuscriptCiteproc';
+import { type FormattedBibliographyEntry } from '@/local-db/research/manuscript/manuscriptCitations';
+import { type ReferenceLike } from '@/local-db/research/manuscript/manuscriptTypes';
 
 type ManuscriptCslBibliographyProps = {
-  cslItems: Record<string, unknown>[];
-  citedKeys: string[];
-  styleId: string;
+  citationKeys: string[];
   fallback: FormattedBibliographyEntry[];
+  references: ReferenceLike[];
+  styleId: string;
 };
 
 const StyledPanel = styled.div`
@@ -54,47 +53,61 @@ const StyledEntry = styled.div`
 `;
 
 export const ManuscriptCslBibliography = ({
-  cslItems,
-  citedKeys,
-  styleId,
+  citationKeys,
   fallback,
+  references,
+  styleId,
 }: ManuscriptCslBibliographyProps) => {
   const [entries, setEntries] = useState<CslBibliographyEntry[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  const citedKey = citedKeys.join('|');
-  const refsKey = cslItems.map((item) => String(item.id)).join('|');
+  const citationSignature = citationKeys.join('|');
+  const referenceSignature = references
+    .map((reference) => `${reference.id}:${reference.cslJson ?? ''}`)
+    .join('|');
 
   useEffect(() => {
-    if (citedKeys.length === 0) {
+    if (!isVendoredCslStyleId(styleId) || references.length === 0) {
       setEntries(null);
+      setIsLoading(false);
       return;
     }
     let isActive = true;
     setIsLoading(true);
-    void renderCslBibliography(cslItems, citedKeys, styleId).then((result) => {
-      if (!isActive) return;
-      setEntries(result);
-      setIsLoading(false);
-    });
+    void createCiteprocEngine({ styleId, references })
+      .then((engine) => {
+        if (!isActive || engine === null) return;
+        formatCslCitations(
+          engine,
+          citationKeys.map((citationKey) => [citationKey]),
+        );
+        setEntries(formatCslBibliography(engine));
+      })
+      .catch(() => {
+        if (isActive) setEntries(null);
+      })
+      .finally(() => {
+        if (isActive) setIsLoading(false);
+      });
     return () => {
       isActive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [styleId, citedKey, refsKey]);
+  }, [
+    citationKeys,
+    citationSignature,
+    referenceSignature,
+    references,
+    styleId,
+  ]);
 
-  if (citedKeys.length === 0) return null;
+  if (references.length === 0) return null;
 
   const usingCsl = entries !== null && entries.length > 0;
-  const shown = usingCsl
-    ? entries.map((entry) => ({ key: entry.id, text: entry.text }))
-    : fallback.map((entry) => ({ key: entry.key, text: entry.text }));
-
+  const shown = usingCsl ? entries : fallback;
   const source = isLoading
-    ? `loading ${styleId || 'csl'} style…`
+    ? `Loading ${styleId}…`
     : usingCsl
-      ? `citeproc-js · ${styleId}.csl`
-      : 'built-in formatter';
+      ? `citeproc-js · ${styleId}`
+      : 'Built-in formatter';
 
   return (
     <StyledPanel>

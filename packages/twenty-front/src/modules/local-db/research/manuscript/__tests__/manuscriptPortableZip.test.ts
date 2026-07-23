@@ -1,5 +1,6 @@
 import { zipSync } from 'fflate';
 
+import { buildManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
 import {
   buildPortableResearchPaperManifest,
   parsePortableResearchPaperManifest,
@@ -14,6 +15,12 @@ import {
   addPortableResearchPaperFiles,
   readPortableResearchPaperZip,
 } from '@/local-db/research/manuscript/manuscriptPortableZip';
+import { createPortableResearchPackage } from '@/local-db/research/manuscript/manuscriptSubmissionPackage';
+
+jest.mock('@/local-db/research/manuscript/manuscriptDocxExport', () => ({
+  exportManuscriptToDocxBlob: jest.fn(),
+  exportStandaloneMarkdownToDocxBlob: jest.fn(),
+}));
 
 const source: PortableManuscriptSource = {
   manuscript: {
@@ -84,6 +91,43 @@ const source: PortableManuscriptSource = {
 };
 
 describe('portable research-paper ZIP', () => {
+  it('creates a standalone portable download from the export bundle', async () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: {
+        id: 'paper-1',
+        name: source.manuscript.title,
+      },
+      sections: source.sections,
+      figures: source.figures,
+      references: source.references,
+      style: { citationMode: 'AUTHOR_DATE' },
+    });
+    const portablePackage = await createPortableResearchPackage(
+      bundle,
+      { coverLetter: 'Please consider this manuscript.' },
+      source,
+    );
+    const packageBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.readAsArrayBuffer(portablePackage.blob);
+    });
+    const restored = readPortableResearchPaperZip(
+      new Uint8Array(packageBuffer),
+    );
+
+    expect(portablePackage.filename).toBe(
+      'portable-aerosol-paper-portable-research.zip',
+    );
+    expect(portablePackage.includedFiles).toEqual([
+      'portable-assets/absorption-plot.png',
+      'research-paper.json',
+    ]);
+    expect(restored.metadata.title).toBe('Portable aerosol paper');
+    expect(restored.exportStyle.citationMode).toBe('AUTHOR_DATE');
+  });
+
   it('round-trips structure, links, contributors, assets, and export settings', () => {
     const files: Record<string, Uint8Array> = {};
     addPortableResearchPaperFiles(

@@ -62,7 +62,9 @@ const StyledEmpty = styled.span`
 type OutlineGroupId = 'frontMatter' | 'main' | 'backMatter' | 'supplement';
 
 const GROUPS: { id: OutlineGroupId; label: string }[] = [
-  { id: 'frontMatter', label: 'Cover page & front matter' },
+  // Cover-page identity content (title, authors, thesis lines) lives in the
+  // Title page tab — this group holds front-matter CONTENT sections only.
+  { id: 'frontMatter', label: 'Front matter' },
   { id: 'main', label: 'Main text' },
   { id: 'backMatter', label: 'Back matter' },
   { id: 'supplement', label: 'Supplement' },

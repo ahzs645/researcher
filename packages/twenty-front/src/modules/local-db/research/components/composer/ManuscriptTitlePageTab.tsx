@@ -143,6 +143,10 @@ export const ManuscriptTitlePageTab = ({
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
+              <StyledTitlePageHint>
+                This is the manuscript record&apos;s name — it appears in the
+                manuscript list, exports, and the submission checklist.
+              </StyledTitlePageHint>
             </StyledTitlePageField>
           </StyledTitlePageCard>
           <StyledTitlePageCard>
@@ -174,11 +178,17 @@ export const ManuscriptTitlePageTab = ({
                 Add a real keywords section to edit and export keywords here.
               </StyledTitlePageHint>
             ) : (
-              <StyledTitlePageTextarea
-                aria-label="Keywords"
-                value={keywords}
-                onChange={(event) => setKeywords(event.target.value)}
-              />
+              <>
+                <StyledTitlePageTextarea
+                  aria-label="Keywords"
+                  value={keywords}
+                  onChange={(event) => setKeywords(event.target.value)}
+                />
+                <StyledTitlePageHint>
+                  Edits the Keywords section — the same content shown in the
+                  Write outline.
+                </StyledTitlePageHint>
+              </>
             )}
           </StyledTitlePageCard>
           <StyledTitlePageCard>

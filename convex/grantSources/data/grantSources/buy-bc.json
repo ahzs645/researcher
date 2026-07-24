@@ -12,28 +12,26 @@
     "producers",
     "processors"
   ],
-  "topicTags": [
-    "marketing",
-    "buy-bc",
-    "partnership"
-  ],
+  "topicTags": ["marketing", "buy-bc", "partnership"],
   "scrapeCadence": "monthly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official Buy BC source for producers, processors, and industry association funding references.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "a[href*='buy-bc-logo-licensing-'], a[href*='buybcpartnershipprogram.ca']",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "contextHeadingText",
+      "funder": "constant:Government of British Columbia",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "source-verified-detail-structure-pending",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [],
     "listPageNotes": "",
-    "detailPageNotes": "Open representative program/detail pages for this source before promoting the profile beyond manual_mapping."
+    "detailPageNotes": "The live membership page is extracted by its official licensing and partnership application links."
   }
 }

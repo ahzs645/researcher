@@ -5,12 +5,7 @@
   "sourceType": "government_portal",
   "jurisdiction": "British Columbia",
   "funderType": "government",
-  "eligibilityTags": [
-    "business",
-    "nonprofit",
-    "regional",
-    "scale-up"
-  ],
+  "eligibilityTags": ["business", "nonprofit", "regional", "scale-up"],
   "topicTags": [
     "business-scale-up-productivity",
     "regional-innovation-ecosystems",
@@ -22,16 +17,19 @@
   "status": "active",
   "notes": "Official PacifiCan funding source for BSP, RIE, RAII, RHII, and related regional economic development programs.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "main .col-md-4:has(.label-success) > a[href*='/funding/']",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "linkText",
+      "funder": "constant:Pacific Economic Development Canada",
+      "eligibility": "contextText",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "representative-detail-page-reviewed",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [
       "https://www.canada.ca/en/pacific-economic-development/services/funding/business-scale-up-productivity/program-applicant-guide.html",
       "https://www.canada.ca/en/pacific-economic-development/services/funding/regional-innovation-ecosystems.html"

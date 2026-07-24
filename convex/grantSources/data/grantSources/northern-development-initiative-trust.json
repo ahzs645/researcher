@@ -11,28 +11,27 @@
     "nonprofit",
     "local-government"
   ],
-  "topicTags": [
-    "consulting-rebate",
-    "innovation",
-    "economic-development"
-  ],
+  "topicTags": ["consulting-rebate", "innovation", "economic-development"],
   "scrapeCadence": "monthly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official Northern Development funding program source for regional business and community development supports.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": ".funding_program-list > li > a.program-button[href]",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "contextHeadingText",
+      "funder": "constant:Northern Development Initiative Trust",
+      "amount": "contextText",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "source-verified-detail-structure-pending",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [],
     "listPageNotes": "",
-    "detailPageNotes": "Open representative program/detail pages for this source before promoting the profile beyond manual_mapping."
+    "detailPageNotes": "The live funding cards expose stable detail links, headings, maximum amounts, audiences, and intake status."
   }
 }

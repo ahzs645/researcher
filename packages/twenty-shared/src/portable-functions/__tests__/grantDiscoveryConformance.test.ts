@@ -178,6 +178,33 @@ describe('grantDiscovery portable conformance', () => {
     }
   });
 
+  it('should preserve a precomputed server score while retaining portable upsert behavior', async () => {
+    for (const { runtime, dump } of makeRuntimes()) {
+      const profile = await runtime.runQuery<TeamProfile>(
+        'grantDiscovery:teamProfile',
+      );
+      await runtime.runMutation('grantDiscovery:upsertOpportunities', {
+        profile,
+        candidates: [
+          {
+            ...CANDIDATES[1],
+            fitScore: 4.6,
+            matchedInterests: ['semantic materials match'],
+            topicTags: undefined,
+          },
+        ],
+        now: FIXED_NOW,
+      });
+
+      const inserted = (await dump()).find(
+        (row) => row.opportunityUrl === 'https://grants.example/quantum',
+      );
+      expect(inserted?.fitScore).toBe(5);
+      expect(inserted?.confidence).toBe('HIGH');
+      expect(inserted?.topicTags).toEqual(['semantic materials match']);
+    }
+  });
+
   it('should reject unregistered functions with a loud error', async () => {
     const [{ runtime }] = makeRuntimes();
     await expect(runtime.runQuery('nope:missing')).rejects.toThrow(

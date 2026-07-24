@@ -39,6 +39,8 @@ export type GrantOpportunityCandidate = {
   description?: string;
   topicTags?: string[];
   sourceId?: string;
+  fitScore?: number;
+  matchedInterests?: string[];
 };
 
 export type UpsertOpportunitiesArgs = {
@@ -58,8 +60,8 @@ export type UpsertOpportunitiesResult = {
 export const teamProfilePortable = async (
   context: PortableQueryContext,
 ): Promise<TeamProfile> => {
-  const teams = await context.db.query('researchTeam').collect();
-  const grants = await context.db.query('grant').collect();
+  const teams = await context.db.query('researchTeam').take(5_000);
+  const grants = await context.db.query('grant').take(5_000);
   return buildTeamProfileFromRecords(
     teams as { focusAreas?: string[] | null }[],
     grants as { funder?: string | null }[],
@@ -72,7 +74,7 @@ export const upsertOpportunitiesPortable = async (
   args: UpsertOpportunitiesArgs,
 ): Promise<UpsertOpportunitiesResult> => {
   const nowIso = args.now ?? new Date().toISOString();
-  const existing = await context.db.query('grantOpportunity').collect();
+  const existing = await context.db.query('grantOpportunity').take(5_000);
   const existingIdByUrl = new Map<string, string>();
   for (const row of existing) {
     if (typeof row.opportunityUrl === 'string' && row.opportunityUrl) {
@@ -83,7 +85,14 @@ export const upsertOpportunitiesPortable = async (
   let inserted = 0;
   let updated = 0;
   for (const candidate of args.candidates) {
-    const match = scoreOpportunity(candidate, args.profile);
+    const heuristicMatch = scoreOpportunity(candidate, args.profile);
+    const fitScore =
+      typeof candidate.fitScore === 'number' &&
+      Number.isFinite(candidate.fitScore)
+        ? Math.max(1, Math.min(5, Math.round(candidate.fitScore)))
+        : heuristicMatch.fitScore;
+    const matchedInterests =
+      candidate.matchedInterests ?? heuristicMatch.matchedInterests;
     const record: Record<string, unknown> = {
       name: candidate.title,
       funder: candidate.funder,
@@ -95,10 +104,10 @@ export const upsertOpportunitiesPortable = async (
       amountText: candidate.amountText,
       eligibility: candidate.eligibility,
       description: candidate.description,
-      topicTags: candidate.topicTags ?? match.matchedInterests,
+      topicTags: candidate.topicTags ?? matchedInterests,
       sourceId: candidate.sourceId,
-      fitScore: match.fitScore,
-      confidence: confidenceFromFitScore(match.fitScore),
+      fitScore,
+      confidence: confidenceFromFitScore(fitScore),
       status: 'NEW',
       updatedAt: nowIso,
     };

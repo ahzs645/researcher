@@ -11,29 +11,26 @@
     "national",
     "industry-partnership"
   ],
-  "topicTags": [
-    "aerospace",
-    "automotive",
-    "research-centres",
-    "collaboration"
-  ],
+  "topicTags": ["aerospace", "automotive", "research-centres", "collaboration"],
   "scrapeCadence": "monthly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official NRC source for research collaboration opportunities and research centre partnership pages.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "main section.col-lg-4 h3 > a[href]",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "linkText",
+      "funder": "constant:National Research Council Canada",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "source-verified-detail-structure-pending",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [],
     "listPageNotes": "",
-    "detailPageNotes": "Open representative program/detail pages for this source before promoting the profile beyond manual_mapping."
+    "detailPageNotes": "The live collaboration hub is extracted from its official opportunity cards; detail enrichment remains optional."
   }
 }

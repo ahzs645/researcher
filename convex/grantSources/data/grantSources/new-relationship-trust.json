@@ -22,16 +22,18 @@
   "status": "active",
   "notes": "Official New Relationship Trust funding overview source for First Nations funding programs.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "article.card > a.block.reset[href]",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "linkText",
+      "funder": "constant:New Relationship Trust",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "representative-detail-page-reviewed",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [
       "https://newrelationshiptrust.ca/apply-for-funding/funding-overview/overview-of-funding-programs/"
     ],

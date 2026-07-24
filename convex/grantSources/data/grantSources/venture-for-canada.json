@@ -5,35 +5,27 @@
   "sourceType": "funder_site",
   "jurisdiction": "Canada",
   "funderType": "nonprofit",
-  "eligibilityTags": [
-    "startup",
-    "small-business",
-    "students",
-    "hiring"
-  ],
-  "topicTags": [
-    "internship",
-    "workforce",
-    "wage-subsidy",
-    "entrepreneurship"
-  ],
+  "eligibilityTags": ["startup", "small-business", "students", "hiring"],
+  "topicTags": ["internship", "workforce", "wage-subsidy", "entrepreneurship"],
   "scrapeCadence": "monthly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official Venture for Canada programs source for internships and entrepreneur workforce supports.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "a[href*='/programs/']:has(> span.highlight)",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "highlightText",
+      "funder": "constant:Venture for Canada",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "source-verified-detail-structure-pending",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [],
     "listPageNotes": "",
-    "detailPageNotes": "Open representative program/detail pages for this source before promoting the profile beyond manual_mapping."
+    "detailPageNotes": "The live program cards expose stable program links, titles, and summaries."
   }
 }

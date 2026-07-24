@@ -5,32 +5,25 @@
   "sourceType": "funder_site",
   "jurisdiction": "British Columbia",
   "funderType": "nonprofit",
-  "eligibilityTags": [
-    "women-owned",
-    "small-business",
-    "startup",
-    "growth"
-  ],
-  "topicTags": [
-    "business-loans",
-    "skills-development",
-    "weoc"
-  ],
+  "eligibilityTags": ["women-owned", "small-business", "startup", "growth"],
+  "topicTags": ["business-loans", "skills-development", "weoc"],
   "scrapeCadence": "monthly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official WeBC source for business loans and related entrepreneur supports.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "single_page",
+    "itemSelector": "h1:not(.icon-logo)",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "itemText",
+      "funder": "constant:WeBC",
+      "applicationUrl": "pageUrl",
+      "description": "pageDescription"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "representative-detail-page-reviewed",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [
       "https://we-bc.ca/what-we-offer/financing/business-loans-for-women/"
     ],

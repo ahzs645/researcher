@@ -5,34 +5,27 @@
   "sourceType": "government_portal",
   "jurisdiction": "Surrey, British Columbia",
   "funderType": "government",
-  "eligibilityTags": [
-    "nonprofit",
-    "arts",
-    "culture",
-    "regional"
-  ],
-  "topicTags": [
-    "surrey",
-    "cultural-grants",
-    "community"
-  ],
+  "eligibilityTags": ["nonprofit", "arts", "culture", "regional"],
+  "topicTags": ["surrey", "cultural-grants", "community"],
   "scrapeCadence": "monthly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official City of Surrey cultural grants source; separate from older third-party ACS card references.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "single_page",
+    "itemSelector": ".page-title h1",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "itemText",
+      "funder": "constant:City of Surrey",
+      "applicationUrl": "pageUrl",
+      "description": "pageDescription"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "source-verified-detail-structure-pending",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [],
     "listPageNotes": "",
-    "detailPageNotes": "Open representative program/detail pages for this source before promoting the profile beyond manual_mapping."
+    "detailPageNotes": "The dedicated cultural-grants page is extracted as one canonical opportunity with its live page metadata."
   }
 }

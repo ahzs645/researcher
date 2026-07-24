@@ -15,10 +15,22 @@ provider with one or more actions. Actions run in two modes:
 Existing connectors (`wave`, `bc-registry`, `gcos`) are strictly read-only: they
 extract and download, they never write to the portal.
 
+## Grant opportunity extraction
+
+`POST /runs/extract-opportunities` opens a registered source page and returns
+normalized opportunity rows for `html_selectors` catalog profiles and
+`single_page` dedicated-program profiles. Requests use the same
+`CONNECTOR_RUNNER_SECRET` authentication as other runner actions.
+
+All 24 built-in sources have automated baseline profiles. The extractor
+supports link, item, surrounding-card, page metadata, and table-column
+mappings; results are bounded to 250 rows and URL-deduplicated. See
+`docs/CONVEX_LIVE_DISCOVERY.md` for the full Convex and frontend flow.
+
 ## Application autofill (`application-autofill`)
 
 Assisted autofill for grant and scholarship application portals. This is the
-first connector that *writes* into a page — but it stops at pre-filling fields
+first connector that _writes_ into a page — but it stops at pre-filling fields
 for a human to review. **It never clicks submit and never calls `form.submit()`.**
 
 Two actions:
@@ -78,7 +90,7 @@ The pieces from the design that are now in place: the **action layer**
 of the existing **BlitzBrowser session auth**. Remaining work toward the full
 feature:
 
-1. **Profile builder** — *done (front-end):* `buildApplicantProfile` in
+1. **Profile builder** — _done (front-end):_ `buildApplicantProfile` in
    `packages/twenty-front/src/modules/local-db/research/researchApplicationProfile.ts`
    maps the canonical `applicantProfile` + researcher/team/application/project
    records into this `ApplicantProfile` shape. Still to do: POST it to `fillForm`

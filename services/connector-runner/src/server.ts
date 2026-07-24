@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import net from "node:net";
 import type { IncomingMessage } from "node:http";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { z } from "zod";
 import { createBrowserBackend } from "./browserBackend.js";
 import {
@@ -16,6 +16,7 @@ import {
   runConnectorAction,
   verifyConnectorAuth,
 } from "./connectors.js";
+import { extractGrantOpportunityRows } from "./grantOpportunityExtraction.js";
 
 const port = Number(process.env.CONNECTOR_RUNNER_PORT ?? 8890);
 const runnerSecret = process.env.CONNECTOR_RUNNER_SECRET;
@@ -71,7 +72,14 @@ const profilePageSchema = z.object({
   browserVersion: z.string().optional(),
   proxyUrl: z.string().url().optional(),
 });
-type ProfilePageInput = z.infer<typeof profilePageSchema>;
+
+const grantOpportunityExtractionSchema = profilePageSchema.extend({
+  profile: z.object({
+    profileKind: z.string(),
+    itemSelector: z.string().optional(),
+    fieldMappings: z.record(z.string(), z.string()),
+  }),
+});
 
 const sessionPasteSchema = z.object({
   text: z.string().min(1).max(20_000),
@@ -748,6 +756,48 @@ app.post("/runs/open-page", asyncRoute(async (req, res) => {
   }
 }));
 
+app.post("/runs/extract-opportunities", asyncRoute(async (req, res) => {
+  const input = grantOpportunityExtractionSchema.parse(req.body);
+  if (!["html_selectors", "single_page"].includes(input.profile.profileKind)) {
+    throw new ConnectorActionError(
+      422,
+      "GRANT_SOURCE_EXTRACTOR_NOT_IMPLEMENTED",
+      `Grant source profile "${input.profile.profileKind}" does not have an automated extractor yet.`,
+    );
+  }
+
+  const browserInput = mergeBrowserDefaults(input);
+  const browserSession = await backend.createSession({
+    profileKey: browserInput.profileKey,
+    persist: true,
+    liveView: browserInput.liveView,
+    readOnly: browserInput.readOnly,
+    timezone: browserInput.timezone,
+    locale: browserInput.locale,
+    viewport: browserInput.viewport,
+    browserVersion: browserInput.browserVersion,
+    proxyUrl: browserInput.proxyUrl,
+  });
+
+  const { browser, context, page } = await connectSession(browserSession.cdpUrl);
+  try {
+    await applyBrowserSessionDefaults(context, page, browserInput);
+    await page.goto(browserInput.url, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    const rows = await extractGrantOpportunityRows(page, input.profile);
+
+    res.json({
+      profileKey: browserSession.profileKey,
+      currentUrl: page.url(),
+      rows,
+    });
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}));
+
 app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
   if (error instanceof z.ZodError) {
     res.status(400).json({ error: "Invalid request body.", issues: error.issues });
@@ -762,7 +812,7 @@ app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
 
 const vncWebSocketServer = new WebSocketServer({ noServer: true });
 
-function toBuffer(data: WebSocket.RawData) {
+function toBuffer(data: RawData) {
   if (Buffer.isBuffer(data)) return data;
   if (data instanceof ArrayBuffer) return Buffer.from(data);
   if (Array.isArray(data)) return Buffer.concat(data);

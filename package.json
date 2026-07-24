@@ -75,5 +75,13 @@
     "singleQuote": true,
     "trailingComma": "all",
     "endOfLine": "lf"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "3.0.72",
+    "@ai-sdk/provider-utils": "4.0.40",
+    "@convex-dev/agent": "^0.6.4",
+    "ai": "6.0.97",
+    "convex-helpers": "0.1.120",
+    "zod": "4.1.11"
   }
 }

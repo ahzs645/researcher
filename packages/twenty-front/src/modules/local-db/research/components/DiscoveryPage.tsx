@@ -17,6 +17,9 @@ import {
   type ResearchProfile,
 } from '@/local-db/research/researchRelevance';
 import { buildApplicationPlan } from '@/local-db/research/researchStartApplication';
+import { getTwentyBridgeSecret } from '@/local-db/twenty-local/getTwentyBridgeSecret';
+import { getTwentyConvexHttpUrl } from '@/local-db/twenty-local/getTwentyConvexHttpUrl';
+import { getTwentyConvexUrl } from '@/local-db/twenty-local/getTwentyConvexUrl';
 import { getTwentyDataBridgeConfig } from '@/local-db/twenty-local/getTwentyDataBridgeConfig';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
@@ -56,6 +59,28 @@ type OpportunityRecord = {
   relevanceReason?: string | null;
   topicTags?: string[] | null;
 };
+
+type PullSourceResult = {
+  libraryKey: string;
+  found: number;
+  inserted: number;
+  updated: number;
+  scoredBy: 'heuristic' | 'llm' | 'mixed';
+};
+
+const LIBRARY_KEY_BY_URL = new Map(
+  RESEARCH_GRANT_SOURCE_SEEDS.map((seed) => [seed.url, seed.libraryKey]),
+);
+const LIBRARY_KEY_BY_NAME = new Map(
+  RESEARCH_GRANT_SOURCE_SEEDS.map((seed) => [seed.name, seed.libraryKey]),
+);
+
+const resolveLibraryKey = (
+  name: string,
+  url: string | null | undefined,
+): string | undefined =>
+  (isDefined(url) ? LIBRARY_KEY_BY_URL.get(url) : undefined) ??
+  LIBRARY_KEY_BY_NAME.get(name);
 
 const StyledPage = styled.div`
   box-sizing: border-box;
@@ -251,10 +276,11 @@ export const DiscoveryPage = () => {
     objectNameSingular: 'grant',
     recordGqlFields: { id: true, funder: true },
   });
-  const { records: opportunityRecords } = useFindManyRecords({
-    objectNameSingular: 'grantOpportunity',
-    recordGqlFields: OPPORTUNITY_GQL_FIELDS,
-  });
+  const { records: opportunityRecords, refetch: refetchOpportunityRecords } =
+    useFindManyRecords({
+      objectNameSingular: 'grantOpportunity',
+      recordGqlFields: OPPORTUNITY_GQL_FIELDS,
+    });
 
   const { createOneRecord: createOpportunityRecord } = useCreateOneRecord({
     objectNameSingular: 'grantOpportunity',
@@ -269,7 +295,8 @@ export const DiscoveryPage = () => {
     objectNameSingular: 'applicationSection',
   });
   const { updateOneRecord } = useUpdateOneRecord();
-  const { enqueueSuccessSnackBar } = useSnackBar();
+  const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
+  const convexUrl = getTwentyConvexUrl();
 
   const teams = teamRecords as unknown as TeamRecord[];
   const grants = grantRecords as unknown as GrantRecord[];
@@ -287,16 +314,21 @@ export const DiscoveryPage = () => {
   const sources: DiscoverySource[] = useMemo(() => {
     const records = sourceRecords as unknown as SourceRecord[];
     if (records.length > 0) {
-      return records.map((record) => ({
-        id: record.id,
-        name: record.name ?? 'Untitled source',
-        url: record.url,
-        funder: record.funder,
-        funderType: record.funderType,
-        opportunityKind: record.opportunityKind,
-        topicTags: record.topicTags,
-        eligibilityTags: record.eligibilityTags,
-      }));
+      return records.map((record) => {
+        const name = record.name ?? 'Untitled source';
+
+        return {
+          id: record.id,
+          libraryKey: resolveLibraryKey(name, record.url),
+          name,
+          url: record.url,
+          funder: record.funder,
+          funderType: record.funderType,
+          opportunityKind: record.opportunityKind,
+          topicTags: record.topicTags,
+          eligibilityTags: record.eligibilityTags,
+        };
+      });
     }
     return RESEARCH_GRANT_SOURCE_SEEDS.map((seed) => ({
       libraryKey: seed.libraryKey,
@@ -369,10 +401,96 @@ export const DiscoveryPage = () => {
     });
   };
 
+  const pullSourceViaConvex = async (
+    libraryKey: string,
+  ): Promise<PullSourceResult> => {
+    if (!convexUrl) {
+      throw new Error('Convex bridge URL is not configured');
+    }
+
+    const bridgeSecret = getTwentyBridgeSecret();
+    const response = await fetch(
+      `${getTwentyConvexHttpUrl(convexUrl)}/grant-discovery/pull-source`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(bridgeSecret ? { 'X-Bridge-Token': bridgeSecret } : {}),
+        },
+        body: JSON.stringify({ libraryKey }),
+      },
+    );
+
+    if (!response.ok) {
+      const detail = (await response.text()).trim();
+      throw new Error(
+        detail || `Live discovery failed with status ${response.status}`,
+      );
+    }
+
+    return (await response.json()) as PullSourceResult;
+  };
+
+  const scanViaConvex = async (
+    sourcesToScan: DiscoverySource[],
+  ): Promise<{
+    found: number;
+    pulled: number;
+    failed: number;
+    scoringModes: Set<PullSourceResult['scoredBy']>;
+  }> => {
+    let found = 0;
+    let pulled = 0;
+    let failed = 0;
+    const scoringModes = new Set<PullSourceResult['scoredBy']>();
+    let firstError: Error | undefined;
+
+    for (const source of sourcesToScan) {
+      if (!source.libraryKey) {
+        failed += 1;
+        firstError ??= new Error(
+          `No live source profile is registered for ${source.name}`,
+        );
+        continue;
+      }
+
+      try {
+        const result = await pullSourceViaConvex(source.libraryKey);
+        found += result.found;
+        pulled += 1;
+        scoringModes.add(result.scoredBy);
+      } catch (error) {
+        failed += 1;
+        firstError ??=
+          error instanceof Error ? error : new Error('Live discovery failed');
+      }
+    }
+
+    await refetchOpportunityRecords();
+
+    if (pulled === 0 && firstError) {
+      throw firstError;
+    }
+
+    return { found, pulled, failed, scoringModes };
+  };
+
   const scanAll = async () => {
     if (isScanning) return;
     setIsScanning(true);
     try {
+      if (isConvexMode) {
+        const result = await scanViaConvex(sources);
+        const scoringLabel =
+          result.scoringModes.size === 1
+            ? ` using ${[...result.scoringModes][0]} scoring`
+            : '';
+        enqueueSuccessSnackBar({
+          message: `Found ${result.found} opportunit${result.found === 1 ? 'y' : 'ies'} from ${result.pulled} source${result.pulled === 1 ? '' : 's'}${scoringLabel}${result.failed > 0 ? `; ${result.failed} source${result.failed === 1 ? '' : 's'} still need extraction support` : ''}`,
+        });
+        return;
+      }
+
       const seen = new Set(existingUrls);
       let created = 0;
       for (const source of sources) {
@@ -386,6 +504,11 @@ export const DiscoveryPage = () => {
       enqueueSuccessSnackBar({
         message: `Found ${created} new opportunit${created === 1 ? 'y' : 'ies'} across ${sources.length} sources`,
       });
+    } catch (error) {
+      enqueueErrorSnackBar({
+        message:
+          error instanceof Error ? error.message : 'Could not scan sources',
+      });
     } finally {
       setIsScanning(false);
     }
@@ -395,12 +518,27 @@ export const DiscoveryPage = () => {
     if (isScanning) return;
     setIsScanning(true);
     try {
+      if (isConvexMode) {
+        const result = await scanViaConvex([source]);
+        enqueueSuccessSnackBar({
+          message: `Found ${result.found} opportunit${result.found === 1 ? 'y' : 'ies'} from ${source.name}`,
+        });
+        return;
+      }
+
       const drafts = scanSourceToOpportunities(source, profile, existingUrls);
       for (const draft of drafts) {
         await createOpportunityFromDraft(draft);
       }
       enqueueSuccessSnackBar({
         message: `Found ${drafts.length} opportunit${drafts.length === 1 ? 'y' : 'ies'} from ${source.name}`,
+      });
+    } catch (error) {
+      enqueueErrorSnackBar({
+        message:
+          error instanceof Error
+            ? error.message
+            : `Could not scan ${source.name}`,
       });
     } finally {
       setIsScanning(false);

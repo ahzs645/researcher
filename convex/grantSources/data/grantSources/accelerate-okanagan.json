@@ -5,36 +5,28 @@
   "sourceType": "funder_site",
   "jurisdiction": "British Columbia",
   "funderType": "nonprofit",
-  "eligibilityTags": [
-    "startup",
-    "early-stage",
-    "growth",
-    "okanagan"
-  ],
-  "topicTags": [
-    "accelerator",
-    "mentorship",
-    "startup-basics",
-    "revup"
-  ],
+  "eligibilityTags": ["startup", "early-stage", "growth", "okanagan"],
+  "topicTags": ["accelerator", "mentorship", "startup-basics", "revup"],
   "scrapeCadence": "monthly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official Accelerate Okanagan programs source for RevUp, Startup Basics, and related startup support programs.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "a[href*='accelerateokanagan.com/entrepreneurs/']:not([href*='general-programs-application-form']), a[href*='accelerateokanagan.com/leveluplocal/']",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "linkText",
+      "funder": "constant:Accelerate Okanagan",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false,
     "notes": "Program pages may need per-program selectors before automated scraping."
   },
   "extractionPlan": {
-    "status": "source-verified-detail-structure-pending",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [],
     "listPageNotes": "",
-    "detailPageNotes": "Open representative program/detail pages for this source before promoting the profile beyond manual_mapping."
+    "detailPageNotes": "The live programs navigation is extracted with URL deduplication; representative detail enrichment remains optional."
   }
 }

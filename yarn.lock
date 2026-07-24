@@ -140,6 +140,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@ai-sdk/provider-utils@npm:4.0.40":
+  version: 4.0.40
+  resolution: "@ai-sdk/provider-utils@npm:4.0.40"
+  dependencies:
+    "@ai-sdk/provider": "npm:3.0.14"
+    "@standard-schema/spec": "npm:^1.1.0"
+    eventsource-parser: "npm:^3.0.8"
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 10c0/fcf8863864866ac7131e191f1e6cf42a064e697eaa4d0a28c4256ff7796a2ed58e8783ac2d572d5612c5761f5b6b437f67390b049771d9be87c0d642b7cd31f3
+  languageName: node
+  linkType: hard
+
+"@ai-sdk/provider@npm:3.0.14":
+  version: 3.0.14
+  resolution: "@ai-sdk/provider@npm:3.0.14"
+  dependencies:
+    json-schema: "npm:^0.4.0"
+  checksum: 10c0/4a533f0c7e98c3f7a3b75119b3f1855fd1ae759d696f7ee9c07b9bd4feaed57716f3e0d81586333e621a501dc0b99d3a103def3e063a45970a653ab027a8f163
+  languageName: node
+  linkType: hard
+
 "@ai-sdk/provider@npm:3.0.8":
   version: 3.0.8
   resolution: "@ai-sdk/provider@npm:3.0.8"
@@ -3971,6 +3993,27 @@ __metadata:
   peerDependencies:
     "@bufbuild/protobuf": ^2.2.0
   checksum: 10c0/96de3d73df3eca3681a026b3396d0344b2237ed6ea8f7e09e0f913a03fba3f5e07538c82ee13daa2257e7e0b158929b7cc60d49a946b57d94404efd1944af581
+  languageName: node
+  linkType: hard
+
+"@convex-dev/agent@npm:^0.6.4":
+  version: 0.6.4
+  resolution: "@convex-dev/agent@npm:0.6.4"
+  dependencies:
+    "@ungap/structured-clone": "npm:^1.3.0"
+  peerDependencies:
+    "@ai-sdk/provider-utils": ^4.0.6
+    ai: ^6.0.35
+    convex: ^1.24.8
+    convex-helpers: ^0.1.103
+    react: ^18.3.1 || ^19.0.0
+  dependenciesMeta:
+    "@ungap/structured-clone":
+      optional: true
+  peerDependenciesMeta:
+    react:
+      optional: true
+  checksum: 10c0/8aed637a00fa33bbf8e646aa916eba1d4e0dc3d2d72037c3698776aa8b82981eb3882e4cc4329036d28eda78211b5b0e292ccd7f324797e1713c7a2edc00a9c1
   languageName: node
   linkType: hard
 
@@ -29813,6 +29856,33 @@ __metadata:
   languageName: node
   linkType: hard
 
+"convex-helpers@npm:0.1.120":
+  version: 0.1.120
+  resolution: "convex-helpers@npm:0.1.120"
+  peerDependencies:
+    "@standard-schema/spec": ^1.0.0
+    convex: ^1.32.0
+    hono: ^4.0.5
+    react: ^17.0.2 || ^18.0.0 || ^19.0.0
+    typescript: ^5.5 || ^6.0.0
+    zod: ^3.25.0 || ^4.0.0
+  peerDependenciesMeta:
+    "@standard-schema/spec":
+      optional: true
+    hono:
+      optional: true
+    react:
+      optional: true
+    typescript:
+      optional: true
+    zod:
+      optional: true
+  bin:
+    convex-helpers: bin.cjs
+  checksum: 10c0/b85632af1cb12fa6d53498bd8b7c4b66a46488e62e67709297269854708cd072923fc68874028271b9b254ee3c8f8f7adb0b682a8c5ae238d1455828eff48619
+  languageName: node
+  linkType: hard
+
 "convex@npm:^1.38.0":
   version: 1.38.0
   resolution: "convex@npm:1.38.0"
@@ -54806,6 +54876,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "twenty@workspace:."
   dependencies:
+    "@ai-sdk/anthropic": "npm:3.0.72"
+    "@ai-sdk/provider-utils": "npm:4.0.40"
+    "@convex-dev/agent": "npm:^0.6.4"
     "@nx/jest": "npm:22.5.4"
     "@nx/js": "npm:22.5.4"
     "@nx/react": "npm:22.5.4"
@@ -54815,12 +54888,15 @@ __metadata:
     "@types/react": "npm:^18.2.39"
     "@types/react-dom": "npm:^18.2.15"
     "@yarnpkg/types": "npm:^4.0.0"
+    ai: "npm:6.0.97"
     concurrently: "npm:^8.2.2"
     convex: "npm:^1.38.0"
+    convex-helpers: "npm:0.1.120"
     http-server: "npm:^14.1.1"
     nx: "npm:22.5.4"
     tsx: "npm:^4.17.0"
     verdaccio: "npm:^6.3.1"
+    zod: "npm:4.1.11"
   languageName: unknown
   linkType: soft
 
@@ -58310,17 +58386,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"zod@npm:4.1.11, zod@npm:^4.1.11":
+  version: 4.1.11
+  resolution: "zod@npm:4.1.11"
+  checksum: 10c0/ce6a4c4acfbf51d7dd0f2669c82f207d62a1f00264eef608994b94eb99d86a74c99f59b0dd3e61ef82909ee136631378b709e0908f0a02a2d5c21d0c497de5db
+  languageName: node
+  linkType: hard
+
 "zod@npm:^3.20.6, zod@npm:^3.22.0, zod@npm:^3.23.8, zod@npm:^3.25.76":
   version: 3.25.76
   resolution: "zod@npm:3.25.76"
   checksum: 10c0/5718ec35e3c40b600316c5b4c5e4976f7fee68151bc8f8d90ec18a469be9571f072e1bbaace10f1e85cf8892ea12d90821b200e980ab46916a6166a4260a983c
-  languageName: node
-  linkType: hard
-
-"zod@npm:^4.1.11":
-  version: 4.1.11
-  resolution: "zod@npm:4.1.11"
-  checksum: 10c0/ce6a4c4acfbf51d7dd0f2669c82f207d62a1f00264eef608994b94eb99d86a74c99f59b0dd3e61ef82909ee136631378b709e0908f0a02a2d5c21d0c497de5db
   languageName: node
   linkType: hard
 

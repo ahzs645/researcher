@@ -5,33 +5,25 @@
   "sourceType": "government_portal",
   "jurisdiction": "British Columbia",
   "funderType": "government",
-  "eligibilityTags": [
-    "arts",
-    "culture",
-    "nonprofit",
-    "collectives"
-  ],
-  "topicTags": [
-    "arts-impact",
-    "project-assistance",
-    "creative-industries"
-  ],
+  "eligibilityTags": ["arts", "culture", "nonprofit", "collectives"],
+  "topicTags": ["arts-impact", "project-assistance", "creative-industries"],
   "scrapeCadence": "weekly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official BC Arts Council program source, including Arts Impact Grant and related arts funding.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": ".list-table-title a[href*='/program/']",
     "fieldMappings": {
-      "title": "programTitle",
-      "applicationDeadline": "deadline",
-      "applicationUrl": "url",
-      "description": "description"
+      "title": "linkText",
+      "funder": "constant:BC Arts Council",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "representative-detail-page-reviewed",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [
       "https://www.bcartscouncil.ca/program/arts-impact-grant/"
     ],

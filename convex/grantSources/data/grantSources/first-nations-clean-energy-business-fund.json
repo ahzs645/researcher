@@ -22,17 +22,18 @@
   "status": "active",
   "notes": "Official B.C. source for FNCEBF capacity funding, equity funding, and revenue sharing.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "single_page",
+    "itemSelector": "h1",
     "fieldMappings": {
-      "title": "programName",
-      "applicationDeadline": "deadline",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "itemText",
+      "funder": "constant:Government of British Columbia",
+      "applicationUrl": "pageUrl",
+      "description": "pageDescription"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "representative-detail-page-reviewed",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [
       "https://www2.gov.bc.ca/gov/content/environment/natural-resource-stewardship/consulting-with-first-nations/first-nations-clean-energy-business-fund"
     ],

@@ -11,29 +11,25 @@
     "small-business",
     "large-business"
   ],
-  "topicTags": [
-    "workbc",
-    "skills-training",
-    "workforce-development"
-  ],
+  "topicTags": ["workbc", "skills-training", "workforce-development"],
   "scrapeCadence": "weekly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official WorkBC source for the B.C. Employer Training Grant.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "single_page",
+    "itemSelector": "h1.hero-title",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "itemText",
+      "funder": "constant:Government of British Columbia",
+      "applicationUrl": "pageUrl",
+      "description": "pageDescription"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "representative-detail-page-reviewed",
-    "detailPagesReviewed": [
-      "https://www.workbc.ca/ETG"
-    ],
+    "status": "automated-profile-live-validated",
+    "detailPagesReviewed": ["https://www.workbc.ca/ETG"],
     "listPageNotes": "Dedicated program page rather than source list.",
     "detailPageNotes": "Detail page has narrative sections plus resources cards for portal, eligibility, FAQ, claims, and guides."
   }

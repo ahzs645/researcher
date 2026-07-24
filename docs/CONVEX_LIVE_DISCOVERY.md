@@ -1,67 +1,103 @@
-# Convex live grant discovery (#3)
+# Convex live grant discovery
 
-Live source-pulls + opportunity scoring for **Convex mode** (the local-first
-Dexie bridge ships the seeded source library + matcher; this adds *live*
-fetching). Ported/scaffolded from the societyer stack.
+Live discovery is the Convex-mode counterpart to the deterministic local demo
+scanner. The Discovery page asks Convex to pull a registered grant source,
+optionally score the extracted opportunities with a configured model, and
+upsert them through the same portable mutation used by the local runtime.
 
-> Status: scaffold. It needs a deployed Convex backend and — for HTML/portal
-> sources — a running connector-runner. It is wired against this repo's generic
-> record store, but has not been executed end-to-end in CI.
+> Status: automated baseline complete. All 24 built-in sources now have
+> selector-based or single-page extraction profiles. CIHR and every source
+> profile have been exercised against their live public pages.
 
-## Pieces
+## Flow
 
-| Path | What it is |
-| --- | --- |
-| `convex/grantSources/` | The built-in grant-source library (24 curated sources) + their scrape **profiles** (selectors + field mappings), ported from societyer. `data/grantSources/*.json` are the source definitions; `grantSourceLibrary.ts` is the typed registry. |
-| `convex/lib/opportunityMatching.ts` | Server copy of the `scoreOpportunity` matcher (kept in sync with the frontend one). |
-| `convex/grantDiscovery.ts` | Convex functions: `library` (catalogue), `teamProfile` (interests + known funders from records), `pullSource` (fetch → score → upsert `grantOpportunity`), `upsertOpportunities` (dedup by URL). |
-| `services/connector-runner/` | The browser/auth service (Express + Playwright) that fetches HTML and authenticated-portal pages and returns extracted rows. |
+1. `DiscoveryPage` posts `{ libraryKey }` to
+   `/grant-discovery/pull-source`.
+2. The HTTP action verifies the bridge origin/shared secret and invokes the
+   internal `grantDiscovery.pullSource` action.
+3. Convex fetches a JSON feed directly or calls the connector runner for an
+   HTML source.
+4. Candidates receive deterministic fit scores. When both
+   `ANTHROPIC_API_KEY` and `GRANT_MATCHER_MODEL` are configured, the action
+   uses the Convex Agent component for stateless structured model judgements,
+   replacing valid scores and falling back per batch or per missing result.
+   Agent messages are not persisted.
+5. `upsertOpportunitiesPortable` deduplicates by opportunity URL and writes
+   `grantOpportunity` records.
+6. The frontend refetches the review queue.
 
-## How a pull works
+The pull result reports `scoredBy` as `heuristic`, `llm`, or `mixed`; it does
+not claim model scoring when the provider failed and fallback was used.
 
-`pullSource({ libraryKey, connectorRunnerUrl? })`:
+## Current extraction support
 
-1. Builds the **team profile** from existing `researchTeam.focusAreas` + `grant.funder`.
-2. **Fetches candidates** for the source:
-   - `json_feed` profiles are fetched and field-mapped inline (no extra infra).
-   - HTML / authenticated-portal profiles are delegated to the connector-runner
-     (`POST /runs/open-page` with the source profile), which returns rows.
-3. **Scores** each candidate (`scoreOpportunity`) → fit score + confidence.
-4. **Upserts** them as `grantOpportunity` records (dedup by `opportunityUrl`).
+The source library contains 24 automated profiles:
 
-The upserted records are the same `grantOpportunity` objects the Twenty frontend
-renders, so discovered opportunities show up in the Opportunities table with a
-fit score and `status: NEW`.
+- 18 `html_selectors` profiles extract program/catalog links and their
+  surrounding metadata.
+- 6 `single_page` profiles represent dedicated program pages as one canonical
+  opportunity.
+- The backend also supports `json_feed` profiles, but the current library
+  contains none.
 
-## Running it
+The CIHR live validation on July 24, 2026 extracted 16 current opportunities,
+including registration and application deadlines from the public ResearchNet
+table. The profile targets `vwOpprtntyDtls.do` links, which is the path used by
+the live site.
+
+The connector runner endpoint is
+`POST /runs/extract-opportunities`. It accepts a server-controlled source URL,
+profile key, and extraction profile, and returns normalized `{ rows }`.
+
+## Configuration
+
+Start the connector runner:
 
 ```bash
-# 1. Generate the Convex record schema (includes the research tables)
-npx tsx packages/twenty-front/scripts/generate-convex-schema.ts
-
-# 2. Deploy Convex (generates convex/_generated, pushes schema + functions)
-npx convex dev            # or: npx convex deploy
-
-# 3. (HTML / portal sources only) run the connector-runner
-cd services/connector-runner && npm install && npm start   # serves on :PORT
-
-# 4. Trigger a pull (e.g. from the Convex dashboard or a cron)
-#    json_feed source — no connector needed:
-npx convex run grantDiscovery:pullSource '{"libraryKey":"<feed-source-key>"}'
-#    portal source — point at the connector:
-npx convex run grantDiscovery:pullSource \
-  '{"libraryKey":"cihr-researchnet","connectorRunnerUrl":"http://localhost:8080"}'
+cd services/connector-runner
+npm install
+CONNECTOR_RUNNER_SECRET=<shared-secret> npm start
 ```
 
-To pull on a schedule, add a `crons.ts` entry calling `grantDiscovery:pullSource`
-for each active source.
+Configure the Convex deployment:
 
-## Notes / follow-ups
+```bash
+npx convex env set BRIDGE_SHARED_SECRET <bridge-secret>
+npx convex env set CONNECTOR_RUNNER_URL http://127.0.0.1:8890
+npx convex env set CONNECTOR_RUNNER_SECRET <shared-secret>
+```
 
-- The frontend bridge and `convex/lib/opportunityMatching.ts` hold two copies of
-  the scorer — keep them in sync (or hoist to `twenty-shared`).
-- `pullSource` links opportunities to a `grantSource` record by URL today; wire a
-  `sourceId` join once sources are seeded as records in Convex.
-- HTML extraction relies on the connector-runner returning `{ rows: [...] }`
-  shaped to the profile's `fieldMappings`; societyer's profile engine is the
-  reference implementation.
+Optional semantic scoring requires both values. There is deliberately no
+hard-coded model identifier:
+
+```bash
+npx convex env set ANTHROPIC_API_KEY <provider-key>
+npx convex env set GRANT_MATCHER_MODEL <supported-model-id>
+```
+
+Run Convex and the frontend with the same bridge URL/token configuration used
+by the rest of the local Convex bridge. The Discovery page automatically uses
+the live path when the bridge mode is `convex`; local mode continues to use
+seeded deterministic opportunities.
+
+## Security boundaries
+
+- The browser cannot supply a connector-runner URL.
+- The live pull is an internal Convex action reachable through the
+  bridge-authenticated HTTP route.
+- Runner credentials stay in Convex environment variables.
+- Source URLs come from the built-in source catalogue.
+- Model input is bounded and opportunity text is explicitly treated as
+  untrusted content.
+
+## Next enrichment work
+
+The automated baseline intentionally extracts only metadata available on each
+catalog or canonical program page. Future enrichment can visit detail pages to
+capture normalized deadlines, eligibility, award amounts, and application
+status. Keep list extraction bounded and URL-deduplicated, and add recorded
+fixtures before relying on detail-page fields for workflow automation.
+
+LLM score reasons are returned internally by the scorer but are not yet stored
+on `grantOpportunity`; add a dedicated provenance/reason field before exposing
+them in the UI.

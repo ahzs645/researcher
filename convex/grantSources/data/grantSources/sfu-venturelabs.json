@@ -5,37 +5,27 @@
   "sourceType": "funder_site",
   "jurisdiction": "British Columbia",
   "funderType": "university",
-  "eligibilityTags": [
-    "startup",
-    "scale-up",
-    "deeptech",
-    "life-sciences"
-  ],
-  "topicTags": [
-    "accelerator",
-    "perago",
-    "venturelabs",
-    "commercialization"
-  ],
+  "eligibilityTags": ["startup", "scale-up", "deeptech", "life-sciences"],
+  "topicTags": ["accelerator", "perago", "venturelabs", "commercialization"],
   "scrapeCadence": "monthly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official SFU VentureLabs source for accelerator and venture support programs.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "a[href*='venturelabs.ca/programs-services/']:not([href='https://venturelabs.ca/programs-services/'])",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "linkText",
+      "funder": "constant:SFU VentureLabs",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "representative-detail-page-reviewed",
-    "detailPagesReviewed": [
-      "https://venturelabs.ca/programs-services/perago/"
-    ],
+    "status": "automated-profile-live-validated",
+    "detailPagesReviewed": ["https://venturelabs.ca/programs-services/perago/"],
     "listPageNotes": "Program/service pages are individual marketing/detail pages.",
-    "detailPageNotes": "Detail pages vary by program and include eligibility/application calls to action; profile should stay manual until more samples are reviewed."
+    "detailPageNotes": "The live program navigation is extracted and URL-deduplicated; detail pages remain available for future eligibility enrichment."
   }
 }

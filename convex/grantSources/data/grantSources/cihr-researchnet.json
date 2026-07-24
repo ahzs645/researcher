@@ -11,12 +11,7 @@
     "canada",
     "institutional-applicants"
   ],
-  "topicTags": [
-    "cihr",
-    "researchnet",
-    "health",
-    "grants"
-  ],
+  "topicTags": ["cihr", "researchnet", "health", "grants"],
   "scrapeCadence": "weekly",
   "trustLevel": "official",
   "status": "active",
@@ -24,14 +19,14 @@
   "profile": {
     "profileKind": "html_selectors",
     "listSelector": "section, main, body",
-    "itemSelector": "a[href*='OpportunityDetails'], a[href*='FundingOpportunity'], a[href*='Opportunity']",
+    "itemSelector": "a[href*='vwOpprtntyDtls.do']",
     "detailUrlPattern": "/rnr16/vwOpprtntyDtls.do?prog={programId}&view=currentOpps&org=CIHR&type=EXACT&resultCount=25&sort=program&all=1&masterList=true&language=E",
     "fieldMappings": {
       "title": "linkText",
       "funder": "constant:Canadian Institutes of Health Research",
       "program": "linkTextPrefixBeforeColon",
-      "registrationDeadline": "followingText:Registration/LOI Deadline",
-      "applicationDeadline": "followingText:Application Deadline",
+      "registrationDeadline": "tableCell:Registration/LOI Deadline",
+      "applicationDeadline": "tableCell:Application Deadline",
       "applicationUrl": "href",
       "description": "nearestRowText"
     },
@@ -69,9 +64,9 @@
     "notes": "Use public-page extraction for the opportunity list. Use an authenticated browser connector only for signed-in application records or organization-specific project data."
   },
   "extractionPlan": {
-    "status": "list-and-detail-profile-started",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [],
     "listPageNotes": "",
-    "detailPageNotes": "Open representative program/detail pages for this source before promoting the profile beyond manual_mapping."
+    "detailPageNotes": "The public ResearchNet table is live-validated; detail-page enrichment remains optional."
   }
 }

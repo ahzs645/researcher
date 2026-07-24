@@ -1,6 +1,7 @@
 import { httpAction } from './_generated/server';
 import { httpRouter } from 'convex/server';
 import { preflightResponse } from './bridgeAuth';
+import { pullSourceHttpAction } from './grantDiscovery';
 
 import {
   aggregateAction,
@@ -98,6 +99,12 @@ http.route({
   handler: searchAction,
 });
 
+http.route({
+  path: '/grant-discovery/pull-source',
+  method: 'POST',
+  handler: pullSourceHttpAction,
+});
+
 // --- System source routes (Apollo metadata client) ---
 
 const systemRoutes: Array<[string, typeof seedAction]> = [
@@ -154,6 +161,7 @@ const corsPaths = [
   '/data-source/restoreMany',
   '/data-source/aggregate',
   '/data-source/search',
+  '/grant-discovery/pull-source',
   ...systemRoutes.map(([path]) => path),
 ];
 

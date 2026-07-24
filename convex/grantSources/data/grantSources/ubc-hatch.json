@@ -5,33 +5,25 @@
   "sourceType": "funder_site",
   "jurisdiction": "University of British Columbia",
   "funderType": "university",
-  "eligibilityTags": [
-    "startup",
-    "university",
-    "research",
-    "social-impact"
-  ],
-  "topicTags": [
-    "hatch",
-    "concept-fund",
-    "venture-builder",
-    "incubator"
-  ],
+  "eligibilityTags": ["startup", "university", "research", "social-impact"],
+  "topicTags": ["hatch", "concept-fund", "venture-builder", "incubator"],
   "scrapeCadence": "monthly",
   "trustLevel": "official",
   "status": "active",
   "notes": "Official UBC HATCH source for venture-building support and related funding opportunities.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "a[href*='/hatch/funding-opportunities/'], a[href*='/hatch/apsc-summer-tech-development-entrepreneurship-program/'], a[href*='/hatch/apply-to-hatch/']",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "linkText",
+      "funder": "constant:UBC HATCH Venture Builder",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "representative-detail-page-reviewed",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [
       "https://icics.ubc.ca/hatch/",
       "https://icics.ubc.ca/hatch/funding-opportunities/"

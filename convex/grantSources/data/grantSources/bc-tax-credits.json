@@ -5,11 +5,7 @@
   "sourceType": "government_portal",
   "jurisdiction": "British Columbia",
   "funderType": "government",
-  "eligibilityTags": [
-    "business",
-    "tax-credit",
-    "provincial"
-  ],
+  "eligibilityTags": ["business", "tax-credit", "provincial"],
   "topicTags": [
     "sr-ed",
     "book-publishing",
@@ -21,18 +17,20 @@
   "status": "active",
   "notes": "Official B.C. corporate income tax credits source for several incentive-style programs.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "a[href*='/gov/content/taxes/income-taxes/corporate/credits/']",
     "fieldMappings": {
-      "title": "creditName",
-      "applicationUrl": "url",
-      "description": "description"
+      "title": "linkText",
+      "funder": "constant:Government of British Columbia",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "source-verified-detail-structure-pending",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [],
     "listPageNotes": "",
-    "detailPageNotes": "Open representative program/detail pages for this source before promoting the profile beyond manual_mapping."
+    "detailPageNotes": "The official corporate-credit index is extracted from stable government credit paths; detail enrichment remains optional."
   }
 }

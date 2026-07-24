@@ -22,20 +22,19 @@
   "status": "active",
   "notes": "Official B.C. Manufacturing Jobs Fund page for Project Readiness and Capital Investment streams.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "single_page",
+    "itemSelector": "h1",
     "fieldMappings": {
-      "title": "programName",
-      "applicationDeadline": "intakeStatus",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "itemText",
+      "funder": "constant:Government of British Columbia",
+      "applicationUrl": "pageUrl",
+      "description": "pageDescription"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "representative-detail-page-reviewed",
-    "detailPagesReviewed": [
-      "https://www2.gov.bc.ca/ManufacturingJobsFund"
-    ],
+    "status": "automated-profile-live-validated",
+    "detailPagesReviewed": ["https://www2.gov.bc.ca/ManufacturingJobsFund"],
     "listPageNotes": "Dedicated source page with stream sections and funding recipient list.",
     "detailPageNotes": "Detail page has Program Overview, Eligibility, Program Streams, Application Process, FAQ, Funding Recipients, and Contact sections."
   }

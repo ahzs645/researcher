@@ -5,12 +5,7 @@
   "sourceType": "government_portal",
   "jurisdiction": "British Columbia",
   "funderType": "government",
-  "eligibilityTags": [
-    "agriculture",
-    "farmers",
-    "producers",
-    "provincial"
-  ],
+  "eligibilityTags": ["agriculture", "farmers", "producers", "provincial"],
   "topicTags": [
     "agriculture-wildlife",
     "production-insurance",
@@ -22,18 +17,20 @@
   "status": "active",
   "notes": "Official B.C. agriculture and seafood programs portal for farm, crop, livestock, and sector support programs.",
   "profile": {
-    "profileKind": "manual_mapping",
+    "profileKind": "html_selectors",
+    "itemSelector": "a[href*='/gov/content/industry/agriculture-seafood/programs/']",
     "fieldMappings": {
-      "title": "programName",
-      "applicationUrl": "url",
-      "description": "programSummary"
+      "title": "linkText",
+      "funder": "constant:Government of British Columbia",
+      "applicationUrl": "href",
+      "description": "contextText"
     },
     "requiresAuth": false
   },
   "extractionPlan": {
-    "status": "source-verified-detail-structure-pending",
+    "status": "automated-profile-live-validated",
     "detailPagesReviewed": [],
     "listPageNotes": "",
-    "detailPageNotes": "Open representative program/detail pages for this source before promoting the profile beyond manual_mapping."
+    "detailPageNotes": "The official program index is extracted from stable government program paths; detail enrichment remains optional."
   }
 }

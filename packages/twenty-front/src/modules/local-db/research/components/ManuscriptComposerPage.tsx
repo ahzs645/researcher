@@ -1,5 +1,5 @@
 import { styled } from '@linaria/react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { H1Title } from 'twenty-ui/display';
 import { Button, type SelectOption, TabButton } from 'twenty-ui/input';
@@ -7,6 +7,8 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptExportTab } from '@/local-db/research/components/composer/ManuscriptExportTab';
 import { ManuscriptListLanding } from '@/local-db/research/components/composer/ManuscriptListLanding';
+import { ManuscriptImportWizardRoot } from '@/local-db/research/import-wizard/components/ManuscriptImportWizardRoot';
+import { useOpenManuscriptImportWizard } from '@/local-db/research/import-wizard/hooks/useOpenManuscriptImportWizard';
 import { ManuscriptFiguresTab } from '@/local-db/research/components/composer/ManuscriptFiguresTab';
 import { ManuscriptReferencesTab } from '@/local-db/research/components/composer/ManuscriptReferencesTab';
 import { ManuscriptSubmissionTab } from '@/local-db/research/components/composer/ManuscriptSubmissionTab';
@@ -99,6 +101,9 @@ export const ManuscriptComposerPage = () => {
     manuscriptComposerTab,
   );
   const composer = useManuscriptComposer();
+  const { openManuscriptImportWizard } = useOpenManuscriptImportWizard();
+  const [isImportingNewManuscript, setIsImportingNewManuscript] =
+    useState(false);
   const manuscriptOptions: SelectOption<string>[] = composer.manuscripts.map(
     (manuscript) => ({
       value: manuscript.id,
@@ -116,15 +121,58 @@ export const ManuscriptComposerPage = () => {
     setManuscriptComposerTab,
   ]);
 
+  // The importer only appends into an existing manuscript, so importing a new
+  // paper means creating the shell first and discarding it if nothing lands.
+  const startImportAsNewManuscript = async () => {
+    if (isImportingNewManuscript) return;
+    setIsImportingNewManuscript(true);
+    const newManuscriptId = await composer.createManuscript();
+    if (!isDefined(newManuscriptId)) {
+      setIsImportingNewManuscript(false);
+      return;
+    }
+    let didImport = false;
+    openManuscriptImportWizard({
+      manuscriptId: newManuscriptId,
+      manuscriptName: 'Untitled manuscript',
+      existingSectionCount: 0,
+      existingSections: [],
+      existingReferences: [],
+      existingFigureRefKeys: [],
+      onChanged: () => {
+        didImport = true;
+        void composer.refetchImportedRecords();
+      },
+      onClosed: () => {
+        setIsImportingNewManuscript(false);
+        if (didImport) composer.selectManuscript(newManuscriptId);
+        else void composer.deleteManuscript(newManuscriptId);
+      },
+    });
+  };
+
   // Nothing selected yet: list the papers instead of guessing which one to open.
   if (!isDefined(composer.manuscript)) {
     return (
       <StyledPage>
         <StyledContent>
-          <H1Title title="Compose" />
+          <StyledHeader>
+            <H1Title title="Compose" />
+            <Button
+              title="Import as new manuscript…"
+              variant="primary"
+              accent="blue"
+              size="small"
+              disabled={isImportingNewManuscript}
+              onClick={() => {
+                void startImportAsNewManuscript();
+              }}
+            />
+          </StyledHeader>
           {composer.manuscripts.length === 0 ? (
             <StyledMeta>
-              No manuscripts yet — create one under Work › Manuscripts.
+              No manuscripts yet — import a document or portable research ZIP,
+              or create one under Work › Manuscripts.
             </StyledMeta>
           ) : (
             <>
@@ -138,6 +186,7 @@ export const ManuscriptComposerPage = () => {
               />
             </>
           )}
+          <ManuscriptImportWizardRoot />
         </StyledContent>
       </StyledPage>
     );

@@ -90,6 +90,12 @@ export const useManuscriptComposer = () => {
   const { deleteOneRecord: deleteReferenceRecord } = useDeleteOneRecord({
     objectNameSingular: 'reference',
   });
+  const { createOneRecord: createManuscriptRecord } = useCreateOneRecord({
+    objectNameSingular: 'manuscript',
+  });
+  const { deleteOneRecord: deleteManuscriptRecord } = useDeleteOneRecord({
+    objectNameSingular: 'manuscript',
+  });
   const { updateOneRecord } = useUpdateOneRecord();
   const manuscripts = manuscriptRecords as unknown as ManuscriptRecord[];
   const journals = journalRecords as unknown as JournalRecord[];
@@ -378,6 +384,23 @@ export const useManuscriptComposer = () => {
     }
     await refetchSections();
     if (isDefined(firstId)) selectSection(firstId);
+  };
+
+  // Creates the empty record an import needs to target. The importer only ever
+  // appends into an existing manuscript, so "import as a new paper" has to make
+  // the shell first; discardManuscriptIfEmpty cleans it up if the user backs out.
+  const createManuscript = async (): Promise<string | null> => {
+    const created = await createManuscriptRecord({
+      name: 'Untitled manuscript',
+      status: 'DRAFTING',
+    });
+    await refetchManuscripts();
+    return (created as { id?: string } | undefined)?.id ?? null;
+  };
+
+  const deleteManuscript = async (candidateId: string) => {
+    await deleteManuscriptRecord(candidateId);
+    await refetchManuscripts();
   };
 
   const saveSubmissionDetails = async (values: ManuscriptSubmissionDetails) => {
@@ -859,6 +882,8 @@ export const useManuscriptComposer = () => {
     portableSource,
     selectManuscript,
     clearManuscriptSelection,
+    createManuscript,
+    deleteManuscript,
     // Every section across all manuscripts, for the composer's landing list.
     allSections: sectionRecords as unknown as SectionRecord[],
     selectSection,

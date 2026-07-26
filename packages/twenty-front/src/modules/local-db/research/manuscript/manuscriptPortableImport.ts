@@ -2,6 +2,7 @@ import {
   type ImportedFigureDraft,
   type ImportedSectionDraft,
 } from './manuscriptDocImport';
+import { extractCitationKeys } from './manuscriptCrossReference';
 import { serializeManuscriptExportStyleOverrides } from './manuscriptExportStyleOverrides';
 import { type PortableResearchPaperManifest } from './manuscriptPortableManifest';
 import { type ReferenceDraft } from './manuscriptReferenceImport';
@@ -70,7 +71,21 @@ export const preparePortableResearchPaperImport = (
     references: manifest.references.map(
       ({ key: _key, ...reference }) => reference,
     ),
-    linkedCount: manifest.references.length,
+    // Count in-text citations that actually resolve to a reference record —
+    // reporting the reference count here read as "everything is linked" even
+    // when the prose cited nothing.
+    linkedCount: (() => {
+      const citationKeys = new Set(
+        manifest.references.map((reference) => reference.citationKey),
+      );
+      const cited = new Set<string>();
+      for (const section of manifest.sections) {
+        for (const key of extractCitationKeys(section.content ?? '')) {
+          if (citationKeys.has(key)) cited.add(key);
+        }
+      }
+      return cited.size;
+    })(),
     figures,
     linkedAssetCount: manifest.figures.filter(
       (figure) => figure.sectionKey !== undefined,

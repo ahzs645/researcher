@@ -12,6 +12,9 @@ export type ManuscriptImportWizardOptions = {
   existingReferences: ExistingImportReference[];
   existingFigureRefKeys: string[];
   onChanged: () => void;
+  // Fired whether the wizard was committed or cancelled, so a caller that
+  // created a throwaway manuscript to import into can clean it up.
+  onClosed?: () => void;
   exportTableStyle?: ManuscriptTableStyle;
   targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
   submissionExtras?: string | null;

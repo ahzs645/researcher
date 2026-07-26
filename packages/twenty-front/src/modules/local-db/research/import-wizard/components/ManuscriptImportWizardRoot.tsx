@@ -18,8 +18,10 @@ export const ManuscriptImportWizardRoot = () => {
   const { closeModal } = useModal();
 
   const handleClose = () => {
+    const { onClosed } = manuscriptImportWizard.options ?? {};
     setManuscriptImportWizard({ isOpen: false, options: null });
     closeModal(MANUSCRIPT_IMPORT_WIZARD_MODAL_ID);
+    onClosed?.();
   };
 
   if (!manuscriptImportWizard.isOpen || manuscriptImportWizard.options === null)

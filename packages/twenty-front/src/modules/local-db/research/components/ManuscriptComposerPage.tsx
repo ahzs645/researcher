@@ -51,6 +51,10 @@ const StyledPage = styled.div`
   min-height: 0;
   overflow-y: auto;
   padding: ${themeCssVariables.spacing[6]};
+  /* Expanding an outline group changes the page's height. Without a reserved
+     gutter the scrollbar appearing narrows this container, which reflows the
+     whole write grid — outline column included. */
+  scrollbar-gutter: stable;
   width: 100%;
 `;
 

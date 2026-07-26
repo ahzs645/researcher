@@ -28,6 +28,10 @@ const StyledOutline = styled.nav`
   overflow-y: auto;
   padding: ${themeCssVariables.spacing[1]};
   position: sticky;
+  /* Expanding a group can push the nav past max-height, and a classic
+     scrollbar appearing would shrink the content box and reflow every row.
+     Reserving the gutter keeps row widths identical either way. */
+  scrollbar-gutter: stable;
   top: ${themeCssVariables.spacing[3]};
 
   @media (max-width: 720px) {

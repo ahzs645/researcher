@@ -2,10 +2,11 @@ import { styled } from '@linaria/react';
 import { useEffect } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { H1Title } from 'twenty-ui/display';
-import { type SelectOption, TabButton } from 'twenty-ui/input';
+import { Button, type SelectOption, TabButton } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptExportTab } from '@/local-db/research/components/composer/ManuscriptExportTab';
+import { ManuscriptListLanding } from '@/local-db/research/components/composer/ManuscriptListLanding';
 import { ManuscriptFiguresTab } from '@/local-db/research/components/composer/ManuscriptFiguresTab';
 import { ManuscriptReferencesTab } from '@/local-db/research/components/composer/ManuscriptReferencesTab';
 import { ManuscriptSubmissionTab } from '@/local-db/research/components/composer/ManuscriptSubmissionTab';
@@ -71,6 +72,12 @@ const StyledHeader = styled.div`
   }
 `;
 
+const StyledHeaderActions = styled.div`
+  align-items: center;
+  display: flex;
+  gap: ${themeCssVariables.spacing[2]};
+`;
+
 const StyledTabBar = styled.div`
   border-bottom: 1px solid ${themeCssVariables.border.color.light};
   display: flex;
@@ -109,14 +116,28 @@ export const ManuscriptComposerPage = () => {
     setManuscriptComposerTab,
   ]);
 
+  // Nothing selected yet: list the papers instead of guessing which one to open.
   if (!isDefined(composer.manuscript)) {
     return (
       <StyledPage>
         <StyledContent>
           <H1Title title="Compose" />
-          <StyledMeta>
-            No manuscripts yet — create one under Work › Manuscripts.
-          </StyledMeta>
+          {composer.manuscripts.length === 0 ? (
+            <StyledMeta>
+              No manuscripts yet — create one under Work › Manuscripts.
+            </StyledMeta>
+          ) : (
+            <>
+              <StyledMeta>
+                Select a manuscript to open in the composer.
+              </StyledMeta>
+              <ManuscriptListLanding
+                manuscripts={composer.manuscripts}
+                sections={composer.allSections}
+                onOpen={composer.selectManuscript}
+              />
+            </>
+          )}
         </StyledContent>
       </StyledPage>
     );
@@ -151,12 +172,20 @@ export const ManuscriptComposerPage = () => {
       <StyledContent>
         <StyledHeader>
           <H1Title title="Compose" />
-          <Select
-            dropdownId="compose-manuscript-select"
-            options={manuscriptOptions}
-            value={manuscript.id}
-            onChange={composer.selectManuscript}
-          />
+          <StyledHeaderActions>
+            <Button
+              title="All manuscripts"
+              variant="secondary"
+              size="small"
+              onClick={composer.clearManuscriptSelection}
+            />
+            <Select
+              dropdownId="compose-manuscript-select"
+              options={manuscriptOptions}
+              value={manuscript.id}
+              onChange={composer.selectManuscript}
+            />
+          </StyledHeaderActions>
         </StyledHeader>
 
         <StyledTabBar role="tablist" aria-label="Manuscript composer">

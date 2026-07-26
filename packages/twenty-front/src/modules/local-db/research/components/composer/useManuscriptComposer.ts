@@ -109,17 +109,24 @@ export const useManuscriptComposer = () => {
       return queuedSave;
     };
   });
-  const manuscript =
-    manuscripts.find((item) => item.id === manuscriptId) ?? manuscripts[0];
+  // No implicit fallback to the first record: with several papers open, landing
+  // on an arbitrary one is worse than showing the list and letting the user pick.
+  const manuscript = isDefined(manuscriptId)
+    ? manuscripts.find((item) => item.id === manuscriptId)
+    : undefined;
 
+  // A section deep-link still resolves its owning manuscript automatically.
   useEffect(() => {
-    if (isDefined(manuscriptId) || manuscripts.length === 0) return;
-    const owningManuscriptId = isDefined(sectionId)
-      ? (sectionRecords as unknown as SectionRecord[]).find(
-          (section) => section.id === sectionId,
-        )?.manuscript?.id
-      : undefined;
-    setManuscriptId(owningManuscriptId ?? manuscripts[0].id);
+    if (
+      isDefined(manuscriptId) ||
+      manuscripts.length === 0 ||
+      !isDefined(sectionId)
+    )
+      return;
+    const owningManuscriptId = (
+      sectionRecords as unknown as SectionRecord[]
+    ).find((section) => section.id === sectionId)?.manuscript?.id;
+    if (isDefined(owningManuscriptId)) setManuscriptId(owningManuscriptId);
   }, [manuscripts, manuscriptId, sectionId, sectionRecords]);
 
   const updateSelectionParams = (
@@ -148,6 +155,20 @@ export const useManuscriptComposer = () => {
         null,
     );
     updateSelectionParams(nextManuscriptId, null);
+  };
+
+  const clearManuscriptSelection = () => {
+    setManuscriptId(null);
+    setSectionId(null);
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete('manuscript');
+        next.delete('section');
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   const selectSection = (nextSectionId: string) => {
@@ -837,6 +858,9 @@ export const useManuscriptComposer = () => {
     bundle,
     portableSource,
     selectManuscript,
+    clearManuscriptSelection,
+    // Every section across all manuscripts, for the composer's landing list.
+    allSections: sectionRecords as unknown as SectionRecord[],
     selectSection,
     persistSection,
     persistSectionById,

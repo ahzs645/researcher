@@ -31,6 +31,43 @@ const COMMAND_TEXT: Record<string, string> = {
   geq: '≥',
   pm: '±',
   infty: '∞',
+  cap: '∩',
+  cup: '∪',
+  in: '∈',
+  approx: '≈',
+  neq: '≠',
+  equiv: '≡',
+  propto: '∝',
+  partial: '∂',
+  int: '∫',
+  to: '→',
+  ldots: '…',
+  cdots: '⋯',
+  prime: '′',
+};
+
+// Spacing macros carry no glyph — LaTeX writes them as `\,` or `\quad`, and the
+// old fallback emitted the literal punctuation (`\,` became a comma).
+const SPACING_COMMANDS: Record<string, string> = {
+  ',': ' ',
+  ':': ' ',
+  ';': ' ',
+  '!': '',
+  ' ': ' ',
+  quad: '  ',
+  qquad: '    ',
+  thinspace: ' ',
+};
+
+// Accents render as base + combining mark, which Word composes into one glyph.
+const ACCENT_COMBINING: Record<string, string> = {
+  bar: '̄',
+  overline: '̄',
+  hat: '̂',
+  tilde: '̃',
+  vec: '⃗',
+  dot: '̇',
+  ddot: '̈',
 };
 
 type ParseResult = {
@@ -38,21 +75,24 @@ type ParseResult = {
   index: number;
 };
 
+// Returns the whole base when no scripts apply. Returning only `base[0]` here
+// silently truncated every multi-component group, so `\mathrm{abs}` rendered as
+// "a" unless a subscript happened to follow it.
 const scriptResult = (
   base: MathComponent[],
   subScript?: MathComponent[],
   superScript?: MathComponent[],
-): MathComponent => {
+): MathComponent[] => {
   if (subScript !== undefined && superScript !== undefined) {
-    return new MathSubSuperScript({ children: base, subScript, superScript });
+    return [new MathSubSuperScript({ children: base, subScript, superScript })];
   }
   if (subScript !== undefined) {
-    return new MathSubScript({ children: base, subScript });
+    return [new MathSubScript({ children: base, subScript })];
   }
   if (superScript !== undefined) {
-    return new MathSuperScript({ children: base, superScript });
+    return [new MathSuperScript({ children: base, superScript })];
   }
-  return base[0] ?? new MathRun('');
+  return base;
 };
 
 const parseLatex = (
@@ -77,7 +117,7 @@ const parseLatex = (
   const parseScripts = (
     base: MathComponent[],
   ): {
-    component: MathComponent;
+    components: MathComponent[];
     sub?: MathComponent[];
     sup?: MathComponent[];
   } => {
@@ -91,7 +131,7 @@ const parseLatex = (
       else superScript = script;
     }
     return {
-      component: scriptResult(base, subScript, superScript),
+      components: scriptResult(base, subScript, superScript),
       sub: subScript,
       sup: superScript,
     };
@@ -103,13 +143,21 @@ const parseLatex = (
     const command = match?.[0] ?? source[index] ?? '';
     index += command.length;
 
-    if (command === 'frac') {
+    if (command === 'frac' || command === 'dfrac' || command === 'tfrac') {
       const numerator = parseGroup();
       const denominator = parseGroup();
       return [new MathFraction({ numerator, denominator })];
     }
     if (command === 'sqrt') {
       return [new MathRadical({ children: parseGroup() })];
+    }
+    const accent = ACCENT_COMBINING[command];
+    if (accent !== undefined) {
+      return [...parseGroup(), new MathRun(accent)];
+    }
+    const spacing = SPACING_COMMANDS[command];
+    if (spacing !== undefined) {
+      return spacing.length > 0 ? [new MathRun(spacing)] : [];
     }
     if (command === 'sum') {
       const scripts = parseScripts([new MathRun('')]);
@@ -149,7 +197,7 @@ const parseLatex = (
       base = [new MathRun(character ?? '')];
     }
     if (base.length === 0) return [];
-    return [parseScripts(base).component];
+    return parseScripts(base).components;
   };
 
   while (index < source.length) {

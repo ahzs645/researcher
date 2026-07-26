@@ -92,6 +92,7 @@ export const FIGURE_GQL = {
   widthPercent: true,
   orderIndex: true,
   tableData: true,
+  equationLatex: true,
   manuscript: { id: true },
   section: { id: true },
 };

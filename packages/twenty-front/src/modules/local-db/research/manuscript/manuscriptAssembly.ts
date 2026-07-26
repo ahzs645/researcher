@@ -170,12 +170,14 @@ export type ManuscriptDocNode =
   | { kind: 'prose'; markdown: string }
   | { kind: 'figure'; figure: NumberedFigure }
   | { kind: 'table'; figure: NumberedFigure }
+  | { kind: 'equation'; figure: NumberedFigure }
   | { kind: 'bibliography'; entries: FormattedBibliographyEntry[] };
 
-const figureNode = (figure: NumberedFigure): ManuscriptDocNode =>
-  figure.assetKind === 'TABLE'
-    ? { kind: 'table', figure }
-    : { kind: 'figure', figure };
+const figureNode = (figure: NumberedFigure): ManuscriptDocNode => {
+  if (figure.assetKind === 'TABLE') return { kind: 'table', figure };
+  if (figure.assetKind === 'EQUATION') return { kind: 'equation', figure };
+  return { kind: 'figure', figure };
+};
 
 const renderSectionBody = (
   section: SectionLike,
@@ -220,7 +222,11 @@ export const buildManuscriptBundle = (
     } else {
       unanchoredMain.push(figure);
     }
-    if (!figureHasImage(figure) && figure.assetKind !== 'TABLE') {
+    if (figure.assetKind === 'EQUATION') {
+      if (!isNonEmptyString(figure.equationLatex)) {
+        warnings.push(`${figure.label} has no equation body yet`);
+      }
+    } else if (!figureHasImage(figure) && figure.assetKind !== 'TABLE') {
       warnings.push(`${figure.label} has no image yet`);
     }
   }

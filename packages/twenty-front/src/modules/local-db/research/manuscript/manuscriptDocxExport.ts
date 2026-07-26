@@ -13,11 +13,16 @@ import {
   Math as DocxMath,
   PageNumber,
   Paragraph,
+  Tab,
+  TabStopType,
   TextRun,
 } from 'docx';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
-import { buildBlockNoteDocument } from './manuscriptBlocks';
+import {
+  buildBlockNoteDocument,
+  EQUATION_LABEL_SEPARATOR,
+} from './manuscriptBlocks';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { manuscriptAuthorLineSegments } from './manuscriptContributors';
 import { latexToMathComponents } from './manuscriptDocxMath';
@@ -244,17 +249,33 @@ const createManuscriptDocxMappings = ({
     paragraph: (block, exporter) => {
       const equation = inlineContentText(block.content).trim();
       if (block.props.textColor === 'equation') {
+        // Numbered equations arrive as "latex<sep>(3)"; the label is pushed to
+        // the right margin with a tab stop, the way journals set them.
+        const [latex, label] = equation.split(EQUATION_LABEL_SEPARATOR);
+        const hasLabel = label !== undefined && label.trim().length > 0;
         return new Paragraph({
-          alignment: AlignmentType.CENTER,
+          alignment: hasLabel ? AlignmentType.LEFT : AlignmentType.CENTER,
+          ...(hasLabel
+            ? {
+                tabStops: [
+                  { type: TabStopType.CENTER, position: 4680 },
+                  { type: TabStopType.RIGHT, position: 9360 },
+                ],
+              }
+            : {}),
           spacing: {
             before: 120,
             after: 120,
             line: 276,
             lineRule: LineRuleType.AUTO,
           },
-          children: [
-            new DocxMath({ children: latexToMathComponents(equation) }),
-          ],
+          children: hasLabel
+            ? [
+                new TextRun({ children: [new Tab()] }),
+                new DocxMath({ children: latexToMathComponents(latex) }),
+                new TextRun({ children: [new Tab()], text: label.trim() }),
+              ]
+            : [new DocxMath({ children: latexToMathComponents(latex) })],
         });
       }
       if (block.props.textColor === 'author-line') {

@@ -4,6 +4,7 @@ import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
+import { ManuscriptEquationEditor } from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { Select } from '@/ui/input/components/Select';
 
@@ -13,6 +14,7 @@ type ManuscriptFigureCreateFormProps = {
   placement: string;
   imageUrl: string;
   tableData: string;
+  equationLatex: string;
   tableStyle: ManuscriptTableStyle;
   tableEditorVersion: number;
   isAdding: boolean;
@@ -21,6 +23,7 @@ type ManuscriptFigureCreateFormProps = {
   onPlacementChange: (value: string) => void;
   onImageUrlChange: (value: string) => void;
   onTableDataChange: (value: string) => void;
+  onEquationLatexChange: (value: string) => void;
   onAdd: () => void;
   onUpload: (file: File) => void;
 };
@@ -29,9 +32,14 @@ const ASSET_KIND_OPTIONS: SelectOption<string>[] = [
   { value: 'FIGURE', label: 'Figure' },
   { value: 'TABLE', label: 'Table' },
   { value: 'CHART', label: 'Chart (from table data)' },
+  { value: 'EQUATION', label: 'Equation' },
   { value: 'SCHEME', label: 'Scheme' },
   { value: 'BOX', label: 'Box' },
 ];
+
+// The shared editor round-trips `$$…$$`; assets store the bare LaTeX body.
+const stripEquationDelimiters = (markdown: string): string =>
+  markdown.trim().replace(/^\$\$/, '').replace(/\$\$$/, '').trim();
 
 const PLACEMENT_OPTIONS: SelectOption<string>[] = [
   { value: 'MAIN', label: 'Main' },
@@ -67,6 +75,7 @@ export const ManuscriptFigureCreateForm = ({
   placement,
   imageUrl,
   tableData,
+  equationLatex,
   tableStyle,
   tableEditorVersion,
   isAdding,
@@ -75,6 +84,7 @@ export const ManuscriptFigureCreateForm = ({
   onPlacementChange,
   onImageUrlChange,
   onTableDataChange,
+  onEquationLatexChange,
   onAdd,
   onUpload,
 }: ManuscriptFigureCreateFormProps) => {
@@ -113,6 +123,13 @@ export const ManuscriptFigureCreateForm = ({
           tableStyle={tableStyle}
           onChange={onTableDataChange}
         />
+      ) : assetKind === 'EQUATION' ? (
+        <ManuscriptEquationEditor
+          markdown={`$$${equationLatex}$$`}
+          onChange={(markdown) =>
+            onEquationLatexChange(stripEquationDelimiters(markdown))
+          }
+        />
       ) : (
         <StyledInput
           placeholder="Image URL (optional)"
@@ -129,13 +146,15 @@ export const ManuscriptFigureCreateForm = ({
           disabled={isAdding || caption.trim().length === 0}
           onClick={onAdd}
         />
-        <Button
-          title="Upload image…"
-          variant="secondary"
-          size="small"
-          disabled={isAdding || caption.trim().length === 0}
-          onClick={() => fileInputRef.current?.click()}
-        />
+        {assetKind === 'EQUATION' ? null : (
+          <Button
+            title="Upload image…"
+            variant="secondary"
+            size="small"
+            disabled={isAdding || caption.trim().length === 0}
+            onClick={() => fileInputRef.current?.click()}
+          />
+        )}
         <input
           ref={fileInputRef}
           type="file"

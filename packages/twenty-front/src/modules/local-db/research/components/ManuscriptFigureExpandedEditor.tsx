@@ -5,6 +5,7 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptFigureMetadataFields } from '@/local-db/research/components/ManuscriptFigureMetadataFields';
 import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
+import { ManuscriptEquationEditor } from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
 import {
   deriveFigureNameFromCaption,
   syncFigureNameFromCaption,
@@ -148,6 +149,9 @@ export const ManuscriptFigureExpandedEditor = ({
 }: ManuscriptFigureExpandedEditorProps) => {
   const { enqueueSuccessSnackBar } = useSnackBar();
   const [tableDraft, setTableDraft] = useState(figure.tableData ?? '');
+  const [equationDraft, setEquationDraft] = useState(
+    figure.equationLatex ?? '',
+  );
   const [captionDraft, setCaptionDraft] = useState(
     figure.caption ?? figure.name ?? '',
   );
@@ -324,6 +328,32 @@ export const ManuscriptFigureExpandedEditor = ({
               size="small"
               disabled={isAdding}
               onClick={onPlotTable}
+            />
+          </StyledActions>
+        </>
+      ) : null}
+      {figure.assetKind === 'EQUATION' ? (
+        <>
+          <ManuscriptEquationEditor
+            markdown={`$$${equationDraft}$$`}
+            onChange={(markdown) =>
+              setEquationDraft(
+                markdown
+                  .trim()
+                  .replace(/^\$\$/, '')
+                  .replace(/\$\$$/, '')
+                  .trim(),
+              )
+            }
+          />
+          <StyledActions>
+            <Button
+              title="Save equation"
+              variant="primary"
+              accent="blue"
+              size="small"
+              disabled={equationDraft === (figure.equationLatex ?? '')}
+              onClick={() => onPersist({ equationLatex: equationDraft })}
             />
           </StyledActions>
         </>

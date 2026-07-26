@@ -51,6 +51,9 @@ export const preparePortableResearchPaperImport = (
       ...(figure.tableData !== undefined
         ? { tableData: figure.tableData }
         : {}),
+      ...(figure.equationLatex !== undefined
+        ? { equationLatex: figure.equationLatex }
+        : {}),
       imageSource: figure.imageUrl === undefined ? 'NONE' : 'UPLOAD',
       ...(figure.imageUrl !== undefined ? { imageUrl: figure.imageUrl } : {}),
       ...(figure.altText !== undefined ? { altText: figure.altText } : {}),

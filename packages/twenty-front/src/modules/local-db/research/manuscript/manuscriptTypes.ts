@@ -47,6 +47,8 @@ export type FigureLike = {
   sectionId?: string | null;
   // For TABLE assets: the grid as a GFM Markdown table string.
   tableData?: string | null;
+  // For EQUATION assets: the body as LaTeX, without delimiters.
+  equationLatex?: string | null;
 };
 
 export type ReferenceLike = {

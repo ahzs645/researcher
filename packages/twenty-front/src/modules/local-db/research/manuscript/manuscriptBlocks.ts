@@ -85,6 +85,32 @@ const tableCaptionBlock = (figure: NumberedFigure): ExportPartialBlock => ({
   content: captionText(figure),
 });
 
+// A numbered equation travels to the DOCX mapper as a single 'equation'
+// paragraph, so the LaTeX body and its label share one line. BlockNote props
+// are a closed set, so the label rides in the content behind an invisible
+// separator that cannot occur in LaTeX.
+export const EQUATION_LABEL_SEPARATOR = '⁣';
+
+const equationToBlocks = (figure: NumberedFigure): ExportPartialBlock[] => {
+  const latex = (figure.equationLatex ?? '').trim();
+  if (latex.length === 0) return [];
+  const blocks: ExportPartialBlock[] = [
+    {
+      type: 'paragraph',
+      props: { textColor: 'equation' },
+      content: `${latex}${EQUATION_LABEL_SEPARATOR}${figure.label}`,
+    },
+  ];
+  if (isNonEmptyString(figure.caption)) {
+    blocks.push({
+      type: 'paragraph',
+      props: { textColor: 'table-caption' },
+      content: figure.caption,
+    });
+  }
+  return blocks;
+};
+
 const tableToBlocks = (
   figure: NumberedFigure,
   captionPosition: string | null | undefined,
@@ -464,6 +490,9 @@ const bundleToBlocks = (
             bundle.style.tableCaptionPosition ?? 'ABOVE',
           ),
         );
+        break;
+      case 'equation':
+        blocks.push(...equationToBlocks(node.figure));
         break;
       case 'bibliography':
         for (const entry of node.entries) {

@@ -64,6 +64,7 @@ export const ManuscriptFigurePanel = ({
   const [placement, setPlacement] = useState('MAIN');
   const [imageUrl, setImageUrl] = useState('');
   const [tableData, setTableData] = useState('');
+  const [equationLatex, setEquationLatex] = useState('');
   const [tableEditorVersion, setTableEditorVersion] = useState(0);
   const [isAdding, setIsAdding] = useState(false);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
@@ -187,6 +188,9 @@ export const ManuscriptFigurePanel = ({
               ? 'URL'
               : 'NONE',
           ...(assetKind === 'TABLE' ? { tableData: tableData.trim() } : {}),
+          ...(assetKind === 'EQUATION'
+            ? { equationLatex: equationLatex.trim() }
+            : {}),
           orderIndex: figures.length,
         });
         enqueueSuccessSnackBar({ message: `Added ${assetKind.toLowerCase()}` });
@@ -195,6 +199,7 @@ export const ManuscriptFigurePanel = ({
       setCaption('');
       setImageUrl('');
       setTableData('');
+      setEquationLatex('');
       setTableEditorVersion((version) => version + 1);
       setIsCreateFormOpen(false);
       onChanged();
@@ -248,6 +253,7 @@ export const ManuscriptFigurePanel = ({
           placement={placement}
           imageUrl={imageUrl}
           tableData={tableData}
+          equationLatex={equationLatex}
           tableStyle={tableStyle}
           tableEditorVersion={tableEditorVersion}
           isAdding={isAdding}
@@ -256,6 +262,7 @@ export const ManuscriptFigurePanel = ({
           onPlacementChange={setPlacement}
           onImageUrlChange={setImageUrl}
           onTableDataChange={setTableData}
+          onEquationLatexChange={setEquationLatex}
           onAdd={() => {
             void addFigure();
           }}

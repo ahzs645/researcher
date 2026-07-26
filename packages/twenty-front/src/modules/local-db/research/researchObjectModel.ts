@@ -1875,6 +1875,13 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         description: 'For tables: the grid as a Markdown table (| a | b |…)',
       },
       {
+        name: 'equationLatex',
+        label: 'Equation',
+        type: 'TEXT',
+        icon: 'IconMath',
+        description: 'For equations: the body as LaTeX, e.g. \\frac{a}{b}',
+      },
+      {
         name: 'imageSource',
         label: 'Image source',
         type: 'SELECT',

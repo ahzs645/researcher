@@ -53,6 +53,18 @@ export const figureToMarkdown = (figure: NumberedFigure): string => {
 
   const lines: string[] = [];
   lines.push(`<a id="${figure.refKey ?? figure.id}"></a>`);
+
+  // Equations carry LaTeX rather than a raster image, and their label is the
+  // number itself — no "Figure 1." caption prefix.
+  if (figure.assetKind === 'EQUATION') {
+    if (isNonEmptyString(figure.equationLatex)) {
+      lines.push(`$$${figure.equationLatex.trim()}$$`);
+    }
+    lines.push(figure.label);
+    if (isNonEmptyString(figure.caption)) lines.push(figure.caption);
+    return lines.join('\n\n');
+  }
+
   if (image.kind !== 'none') {
     lines.push(`![${alt}](${image.src})`);
   } else if (figure.assetKind !== 'TABLE') {

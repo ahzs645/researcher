@@ -53,6 +53,7 @@ export type ImportedFigureDraft = {
   sourceLabel?: string;
   sectionOrderIndex?: number;
   tableData?: string;
+  equationLatex?: string;
   imageSource: 'NONE' | 'UPLOAD';
   imageUrl?: string;
   altText?: string;

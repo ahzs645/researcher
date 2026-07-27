@@ -43,14 +43,42 @@ const cslAuthors = (authors: unknown): string => {
     .join('; ');
 };
 
-const cslYear = (item: Record<string, unknown>): number | null => {
-  const issued = item.issued as { 'date-parts'?: number[][] } | undefined;
-  const year = issued?.['date-parts']?.[0]?.[0];
-  return typeof year === 'number' ? year : null;
+// CSL-JSON `date-parts` members are number *or* numeric string: the Zotero Web
+// API emits `[[2000]]` while the Zotero field codes embedded in a .docx emit
+// `[["2000"]]`. Reading only numbers dropped the year off every field-code
+// import, which then collapsed every generated citation key to `<family>nd`.
+const asYear = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.trunc(value) : null;
+  }
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  // Reject non-numeric placeholders ("n.d.", "in press") rather than NaN them.
+  return /^-?\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : null;
 };
 
-const asString = (value: unknown): string | null =>
-  typeof value === 'string' && value.length > 0 ? value : null;
+// Shared reader for any CSL date field (`issued`, `accessed`, `submitted`…) so
+// a second caller never re-introduces the number-only assumption.
+export const cslDatePartsYear = (value: unknown): number | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  const dateParts = (value as { 'date-parts'?: unknown })['date-parts'];
+  if (!Array.isArray(dateParts)) return null;
+  const first: unknown = dateParts[0];
+  return Array.isArray(first) ? asYear(first[0]) : null;
+};
+
+const cslYear = (item: Record<string, unknown>): number | null =>
+  cslDatePartsYear(item.issued);
+
+// CSL-JSON allows a number wherever a "string" field is expected (`id`,
+// `volume`, `issue`, `page` routinely arrive as numbers), so coerce instead of
+// dropping the value.
+const asString = (value: unknown): string | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : null;
+  }
+  return typeof value === 'string' && value.length > 0 ? value : null;
+};
 
 // One CSL-JSON item → a reference draft. Used by paste-CSL, DOI, and Zotero.
 export const cslItemToReferenceDraft = (

@@ -1,4 +1,6 @@
 import {
+  citationKeysFromProp,
+  citationKeysToProp,
   manuscriptBlocksToMarkdown,
   manuscriptNodesToTokens,
   manuscriptTokensToNodes,
@@ -139,7 +141,7 @@ describe('manuscript editor content', () => {
     expect(manuscriptTokensToNodes(blocks)).toEqual(blocks);
   });
 
-  it('keeps code, styled, linked, clustered, and escaped tokens lossless', () => {
+  it('keeps code, styled, linked, and escaped tokens lossless', () => {
     const blocks = [
       {
         type: 'paragraph',
@@ -207,7 +209,11 @@ describe('manuscript editor content', () => {
 
     const converted = manuscriptTokensToNodes(blocks);
 
-    expect(converted.slice(0, 5)).toEqual(blocks.slice(0, 5));
+    expect(converted.slice(0, 4)).toEqual(blocks.slice(0, 4));
+    expect(converted[4].content).toEqual([
+      { type: 'citation', props: { citationKey: 'a; b' } },
+      { type: 'citation', props: { citationKey: 'c; d' } },
+    ]);
     expect(converted[5].content).toEqual([
       { type: 'citation', props: { citationKey: 'a' } },
       { type: 'crossRef', props: { refKey: 'fig:x' } },
@@ -215,6 +221,90 @@ describe('manuscript editor content', () => {
     ]);
     expect(converted[6]).toEqual(blocks[6]);
     expect(manuscriptNodesToTokens(converted)).toEqual(blocks);
+  });
+
+  it('turns a multi-key citation cluster into one node and back', () => {
+    const blocks = [
+      {
+        type: 'paragraph',
+        props: {},
+        content: [
+          {
+            type: 'text',
+            text: 'Air quality worsens [@li2017; @manisalidis2020; @pehoiu2008] here.',
+            styles: {},
+          },
+        ],
+        children: [],
+      },
+    ];
+
+    const converted = manuscriptTokensToNodes(blocks);
+
+    expect(converted[0].content).toEqual([
+      { type: 'text', text: 'Air quality worsens ', styles: {} },
+      {
+        type: 'citation',
+        props: { citationKey: 'li2017; manisalidis2020; pehoiu2008' },
+      },
+      { type: 'text', text: ' here.', styles: {} },
+    ]);
+    expect(manuscriptNodesToTokens(converted)).toEqual(blocks);
+  });
+
+  it('normalizes cluster spacing and leaves locator forms as text', () => {
+    const blocks = [
+      {
+        type: 'paragraph',
+        props: {},
+        content: [
+          {
+            type: 'text',
+            text: '[@a;@b] but [@a, p. 33] and [@a; b] stay text',
+            styles: {},
+          },
+        ],
+        children: [],
+      },
+    ];
+
+    const converted = manuscriptTokensToNodes(blocks);
+
+    expect(converted[0].content).toEqual([
+      { type: 'citation', props: { citationKey: 'a; b' } },
+      {
+        type: 'text',
+        text: ' but [@a, p. 33] and [@a; b] stay text',
+        styles: {},
+      },
+    ]);
+    expect(manuscriptNodesToTokens(converted)).toEqual([
+      {
+        ...blocks[0],
+        content: [
+          {
+            type: 'text',
+            text: '[@a; @b] but [@a, p. 33] and [@a; b] stay text',
+            styles: {},
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('splits and rejoins cluster keys through the prop helpers', () => {
+    expect(citationKeysFromProp('li2017; manisalidis2020')).toEqual([
+      'li2017',
+      'manisalidis2020',
+    ]);
+    expect(citationKeysFromProp('@li2017;@manisalidis2020')).toEqual([
+      'li2017',
+      'manisalidis2020',
+    ]);
+    expect(citationKeysFromProp('')).toEqual([]);
+    expect(citationKeysToProp(['li2017', 'manisalidis2020'])).toBe(
+      'li2017; manisalidis2020',
+    );
   });
 
   it('restores escaped citation and dollar literals through the adapter', () => {

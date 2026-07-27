@@ -1,9 +1,12 @@
 import {
   buildCitationContext,
+  citationClusterKey,
+  extractCitationClusters,
   firstAuthorSurname,
   formatBibliography,
   formatInTextCitation,
   renderCitationsInText,
+  renderCitationsInTextWithLabels,
 } from '@/local-db/research/manuscript/manuscriptCitations';
 import {
   extractCitationKeys,
@@ -76,6 +79,24 @@ describe('numeric citations', () => {
 
   it('rewrites in-text clusters', () => {
     expect(renderCitationsInText('see [@smith2020]', context)).toBe('see [2]');
+  });
+
+  // The export path must collapse a whole cluster into one in-text citation —
+  // the editor chip relies on the same cluster semantics.
+  it('rewrites a multi-key cluster as one citation, with or without CSL labels', () => {
+    expect(
+      renderCitationsInText('see [@smith2020; @doe2019] here', context),
+    ).toBe('see [2, 1] here');
+    expect(
+      renderCitationsInTextWithLabels(
+        'see [@smith2020; @doe2019] here',
+        new Map([[citationClusterKey(['smith2020', 'doe2019']), '(2, 1)']]),
+        context,
+      ),
+    ).toBe('see (2, 1) here');
+    expect(
+      extractCitationClusters('a [@smith2020; @doe2019] b [@doe2019]'),
+    ).toEqual([['smith2020', 'doe2019'], ['doe2019']]);
   });
 });
 

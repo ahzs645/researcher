@@ -19,6 +19,10 @@ import {
 } from '@/local-db/research/components/editor/ManuscriptEditorPickers';
 import { ManuscriptEquationEditor } from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
 import { formatInTextCitation } from '@/local-db/research/manuscript/manuscriptCitations';
+import {
+  citationKeysFromProp,
+  citationKeysToProp,
+} from '@/local-db/research/manuscript/manuscriptEditorContent';
 import { resolveAssetKey } from '@/local-db/research/manuscript/manuscriptNumbering';
 
 const StyledInlineAnchor = styled.span`
@@ -65,6 +69,13 @@ const StyledFallback = styled.code`
 const StyledActions = styled.div`
   display: flex;
   justify-content: flex-end;
+`;
+
+const StyledPopoverHint = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  display: block;
+  font-size: ${themeCssVariables.font.size.xs};
+  padding-bottom: ${themeCssVariables.spacing[1]};
 `;
 
 const renderInlineKatex = (latex: string): string | undefined => {
@@ -151,24 +162,38 @@ const InlineEquationNode = ({ latex, onSave }: InlineEquationNodeProps) => {
   );
 };
 
-type CitationNodeProps = {
+type ManuscriptCitationChipProps = {
+  // One key, or a whole cluster's keys joined by "; " (see manuscriptEditorContent).
   citationKey: string;
   onRemove: (element: HTMLElement | null) => void;
   onSave: (citationKey: string) => void;
 };
 
-const CitationNode = ({ citationKey, onRemove, onSave }: CitationNodeProps) => {
+export const ManuscriptCitationChip = ({
+  citationKey,
+  onRemove,
+  onSave,
+}: ManuscriptCitationChipProps) => {
   const { citationContext, citationLabelsByKey, isCitationStyleLoading } =
     useManuscriptEditorContext();
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const resolved = citationContext.referencesByKey.has(citationKey);
-  const label = resolved
-    ? (citationLabelsByKey.get(citationKey) ??
-      (isCitationStyleLoading
-        ? '…'
-        : formatInTextCitation([citationKey], citationContext)))
-    : `[@${citationKey}]`;
+  const keys = citationKeysFromProp(citationKey);
+  const rawToken = `[${keys.map((key) => `@${key}`).join('; ')}]`;
+  const resolved =
+    keys.length > 0 &&
+    keys.every((key) => citationContext.referencesByKey.has(key));
+  // The provider precomputes CSL labels per single key, and a cluster's CSL
+  // label cannot be derived by concatenating them — so a cluster falls back to
+  // the deterministic formatter, which renders all its sources in one label.
+  const label = !resolved
+    ? rawToken
+    : keys.length === 1
+      ? (citationLabelsByKey.get(keys[0]) ??
+        (isCitationStyleLoading
+          ? '…'
+          : formatInTextCitation(keys, citationContext)))
+      : formatInTextCitation(keys, citationContext);
   return (
     <StyledInlineAnchor ref={anchorRef} contentEditable={false}>
       <StyledChip
@@ -184,9 +209,20 @@ const CitationNode = ({ citationKey, onRemove, onSave }: CitationNodeProps) => {
           anchorRef={anchorRef}
           onClose={() => setIsOpen(false)}
         >
+          {keys.length > 1 ? (
+            <StyledPopoverHint>
+              {`Cluster of ${keys.length}: ${keys.join('; ')}. Picking a reference adds it to this cluster.`}
+            </StyledPopoverHint>
+          ) : null}
           <ManuscriptReferencePicker
             onSelect={(key) => {
-              onSave(key);
+              // Replacing a multi-source cluster with one key would silently
+              // drop the other sources, so a cluster gains the picked key.
+              onSave(
+                keys.length > 1
+                  ? citationKeysToProp([...new Set([...keys, key])])
+                  : key,
+              );
               setIsOpen(false);
             }}
             onRemove={() => onRemove(anchorRef.current)}
@@ -260,7 +296,7 @@ export const Citation = createReactInlineContentSpec(
   } as const,
   {
     render: ({ editor, inlineContent, updateInlineContent }) => (
-      <CitationNode
+      <ManuscriptCitationChip
         citationKey={inlineContent.props.citationKey}
         onSave={(citationKey) =>
           updateInlineContent({ type: 'citation', props: { citationKey } })

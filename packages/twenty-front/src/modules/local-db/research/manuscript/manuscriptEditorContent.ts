@@ -10,6 +10,25 @@ export type ManuscriptInlineNode =
   | { type: 'citation'; props: { citationKey: string }; content?: undefined }
   | { type: 'crossRef'; props: { refKey: string }; content?: undefined };
 
+// A citation cluster (`[@a; @b]`) is one semantic unit: the formatter renders it
+// as a single "(A, 2017; B, 2020)" label, so it must stay one inline node. But
+// BlockNote inline props are primitives, so the cluster's keys travel joined by
+// this separator inside the single `citationKey` prop.
+const CITATION_KEY_SEPARATOR = '; ';
+
+// Pandoc-style cluster of bare keys only. Locator forms like `[@a, p. 3]` stay
+// literal text, exactly as before, because the chip cannot round-trip a locator.
+const CITATION_TOKEN = /^\[@[^\]\s;]+(?:\s*;\s*@[^\]\s;]+)*\]/;
+
+export const citationKeysFromProp = (citationKey: string): string[] =>
+  citationKey
+    .split(';')
+    .map((part) => part.trim().replace(/^@/, ''))
+    .filter((part) => part.length > 0);
+
+export const citationKeysToProp = (keys: string[]): string =>
+  keys.join(CITATION_KEY_SEPARATOR);
+
 // BlockNote removes Markdown escapes while parsing. Keep their provenance in
 // the editable text with an invisible separator, then restore the backslash
 // after serialization so an unrelated edit cannot activate a literal token.
@@ -64,13 +83,17 @@ const nextToken = (
   }
 
   if (text.startsWith('[@', start)) {
-    const match = /^\[@([^\]\s;]+)\]/.exec(text.slice(start));
+    const match = CITATION_TOKEN.exec(text.slice(start));
     if (match !== null) {
       return {
         end: start + match[0].length,
         node: {
           type: 'citation',
-          props: { citationKey: match[1] },
+          props: {
+            citationKey: citationKeysToProp(
+              citationKeysFromProp(match[0].slice(1, -1)),
+            ),
+          },
         },
       };
     }
@@ -155,7 +178,13 @@ const inlineNodeToText = (node: JsonRecord): JsonRecord | undefined => {
     return { type: 'text', text: `$${node.props.latex}$`, styles: {} };
   }
   if (node.type === 'citation' && typeof node.props.citationKey === 'string') {
-    return { type: 'text', text: `[@${node.props.citationKey}]`, styles: {} };
+    const keys = citationKeysFromProp(node.props.citationKey);
+    // Re-emit every key with its own `@` so the cluster stays Pandoc-valid.
+    const text =
+      keys.length === 0
+        ? `[@${node.props.citationKey}]`
+        : `[${keys.map((key) => `@${key}`).join(CITATION_KEY_SEPARATOR)}]`;
+    return { type: 'text', text, styles: {} };
   }
   if (node.type === 'crossRef' && typeof node.props.refKey === 'string') {
     return { type: 'text', text: `[#${node.props.refKey}]`, styles: {} };

@@ -11,6 +11,7 @@ import {
   parseWordStyleDefinitions,
   serializeWordMarkdownBlocks,
 } from '@/local-db/research/manuscript/manuscriptDocImport';
+import { COMMAND_TEXT } from '@/local-db/research/manuscript/manuscriptDocxMath';
 import { stripManuscriptScriptMarkers } from '@/local-db/research/manuscript/manuscriptScripts';
 
 describe('classifyHeading', () => {
@@ -63,6 +64,30 @@ describe('classifyHeading', () => {
       sectionType: 'OTHER',
       placement: 'MAIN',
     });
+  });
+
+  it('classifies both consent statements as ethics back matter', () => {
+    expect(classifyHeading('Consent for publication')).toEqual({
+      sectionType: 'ETHICS',
+      placement: 'BACK_MATTER',
+    });
+    expect(classifyHeading('Consent to participate')).toEqual({
+      sectionType: 'ETHICS',
+      placement: 'BACK_MATTER',
+    });
+    expect(classifyHeading('Informed consent statement')).toEqual({
+      sectionType: 'ETHICS',
+      placement: 'BACK_MATTER',
+    });
+  });
+
+  it('classifies "study site" alongside "study area" as methods', () => {
+    expect(classifyHeading('2.1 Study site')).toEqual({
+      sectionType: 'METHODS',
+      placement: 'MAIN',
+    });
+    expect(classifyHeading('Study area').sectionType).toBe('METHODS');
+    expect(classifyHeading('Study location').sectionType).toBe('METHODS');
   });
 });
 
@@ -123,7 +148,7 @@ describe('parseMarkdownDocument', () => {
     ]);
   });
 
-  it('preserves heading levels as separate section drafts', () => {
+  it('preserves heading levels and lets subsections inherit their parent type', () => {
     const doc = parseMarkdownDocument(
       [
         '## Methods',
@@ -134,10 +159,48 @@ describe('parseMarkdownDocument', () => {
         'Twenty volunteers.',
       ].join('\n'),
     );
+    // "Study site" matches the METHODS rule directly; "Participants" matches no
+    // rule and inherits METHODS from its ancestor instead of falling to OTHER.
     expect(doc.sections).toMatchObject([
-      { name: 'Methods', sectionType: 'METHODS', level: 2 },
-      { name: 'Study site', sectionType: 'OTHER', level: 3 },
-      { name: 'Participants', sectionType: 'OTHER', level: 3 },
+      { name: 'Methods', sectionType: 'METHODS', placement: 'MAIN', level: 2 },
+      {
+        name: 'Study site',
+        sectionType: 'METHODS',
+        placement: 'MAIN',
+        level: 3,
+      },
+      {
+        name: 'Participants',
+        sectionType: 'METHODS',
+        placement: 'MAIN',
+        level: 3,
+      },
+    ]);
+  });
+
+  it('inherits SUPPLEMENT for supplement subsections but not across front matter', () => {
+    const doc = parseMarkdownDocument(
+      [
+        '## Supplementary Material',
+        'Extra detail.',
+        '### Instrument drift',
+        'Daily zero checks.',
+        '## References',
+        '1. Bertasson et al. 2023.',
+        '### Reading notes',
+        'Kept out of the reference list.',
+      ].join('\n'),
+    );
+
+    expect(doc.sections).toMatchObject([
+      { name: 'Supplementary Material', sectionType: 'SUPPLEMENT' },
+      {
+        name: 'Instrument drift',
+        sectionType: 'SUPPLEMENT',
+        placement: 'SUPPLEMENT',
+      },
+      { name: 'References', sectionType: 'REFERENCES' },
+      { name: 'Reading notes', sectionType: 'OTHER', placement: 'MAIN' },
     ]);
   });
 
@@ -563,7 +626,7 @@ describe('parseWordMlToMarkdown', () => {
     );
     const xml = `<w:body>${para('Methods', 'CustomHead')}${para(
       'Results',
-    )}<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Study site</w:t></w:r></w:p></w:body>`;
+    )}<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Sensor calibration</w:t></w:r></w:p></w:body>`;
     const blocks = parseWordMlToMarkdownBlocks(xml, { styles });
 
     expect(blocks).toEqual([
@@ -583,7 +646,7 @@ describe('parseWordMlToMarkdown', () => {
       },
       {
         kind: 'paragraph',
-        markdown: '\n### Study site\n',
+        markdown: '\n### Sensor calibration\n',
         sourceHeadingLevel: 3,
         headingSource: 'bold',
       },
@@ -622,8 +685,10 @@ describe('parseWordMlToMarkdown', () => {
     )}<w:p><m:oMath><m:r><m:t>C_d=</m:t></m:r><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub><m:r><m:t>i=1</m:t></m:r></m:sub><m:sup><m:r><m:t>n</m:t></m:r></m:sup><m:e><m:sSub><m:e><m:r><m:t>C</m:t></m:r></m:e><m:sub><m:r><m:t>f</m:t></m:r></m:sub></m:sSub></m:e></m:nary></m:oMath></w:p></w:body>`;
     const doc = parseWordDocument(xml);
 
+    // The `_` in the literal run text "C_d=" is a literal underscore in Word, so
+    // it has to be escaped or LaTeX would silently turn "d=" into a subscript.
     expect(doc.sections[0].content).toContain(
-      String.raw`C_d=\sum_{i=1}^{n} C_{f}`,
+      String.raw`C\_d=\sum_{i=1}^{n} C_{f}`,
     );
   });
 
@@ -638,5 +703,303 @@ describe('parseWordMlToMarkdown', () => {
     expect(stripManuscriptScriptMarkers(doc.sections[0].content)).toBe(
       'PM2.5 uses μg/m3',
     );
+  });
+});
+
+describe('Word line breaks and tabs', () => {
+  const body = (paragraphs: string): string => `<w:body>${paragraphs}</w:body>`;
+  const run = (text: string, bold = false): string =>
+    `<w:r>${bold ? '<w:rPr><w:b/></w:rPr>' : ''}<w:t>${text}</w:t></w:r>`;
+
+  it('keeps a <w:br/> as a line break instead of fusing the two runs', () => {
+    const markdown = parseWordMlToMarkdown(
+      body(
+        `<w:p>${run('The sensors ran continuously.')}<w:br/>${run('A second observation period followed in the spring.')}</w:p>`,
+      ),
+    );
+
+    expect(markdown).toBe(
+      'The sensors ran continuously.\nA second observation period followed in the spring.',
+    );
+    expect(markdown).not.toContain('continuously.A second');
+  });
+
+  it('keeps a <w:tab/> as a tab and ignores pPr tab stops', () => {
+    const markdown = parseWordMlToMarkdown(
+      body(
+        `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs></w:pPr>${run('Site A')}<w:tab/>${run('12.4')}</w:p>`,
+      ),
+    );
+
+    expect(markdown).toBe('Site A\t12.4');
+  });
+
+  it('splits a fully bold run after a break into its own heading', () => {
+    const doc = parseWordDocument(
+      body(
+        `<w:p>${run('We thank the field crew for their patient sampling work.')}<w:br/>${run('Acknowledgment', true)}</w:p>` +
+          `<w:p>${run('The station operators supported every campaign.')}<w:br/>${run('Data Availability', true)}</w:p>` +
+          `<w:p>${run('Data are available from the corresponding author on request.')}</w:p>`,
+      ),
+    );
+
+    expect(
+      doc.sections.map((section) => [section.name, section.sectionType]),
+    ).toEqual([
+      ['Acknowledgment', 'ACKNOWLEDGMENTS'],
+      ['Data Availability', 'DATA_AVAILABILITY'],
+    ]);
+    expect(doc.sections[1].content).toContain('available from the');
+  });
+
+  it('does not split a trailing bold run that is emphasis, not a heading', () => {
+    const afterBreak = parseWordMlToMarkdownBlocks(
+      body(
+        `<w:p>${run('Concentrations rose sharply.')}<w:br/>${run('All differences were significant at the ninety-five percent level.', true)}</w:p>`,
+      ),
+    );
+    const withoutBreak = parseWordMlToMarkdownBlocks(
+      body(
+        `<w:p>${run('Effects were significant at ')}${run('p&lt;0.05', true)}</w:p>`,
+      ),
+    );
+
+    // A sentence-shaped trailing run stays in the paragraph, and with no break
+    // there is nothing to split: one block out either way.
+    expect(afterBreak).toHaveLength(1);
+    expect(afterBreak[0].markdown).toContain('\nAll differences');
+    expect(afterBreak[0].sourceHeadingLevel).toBeUndefined();
+    expect(withoutBreak).toHaveLength(1);
+  });
+});
+
+describe('OMML → LaTeX', () => {
+  const mathOf = (omml: string): string => {
+    const markdown = parseWordMlToMarkdown(
+      `<w:body><w:p><m:oMath>${omml}</m:oMath></w:p></w:body>`,
+    );
+    return /\$\$([\s\S]*)\$\$/.exec(markdown)?.[1] ?? markdown;
+  };
+  const mRun = (text: string): string => `<m:r><m:t>${text}</m:t></m:r>`;
+  const mSub = (base: string, subscript: string): string =>
+    `<m:sSub><m:e>${base}</m:e><m:sub>${subscript}</m:sub></m:sSub>`;
+  const mFrac = (numerator: string, denominator: string): string =>
+    `<m:f><m:num>${numerator}</m:num><m:den>${denominator}</m:den></m:f>`;
+  const mDelimiter = (inner: string, properties = ''): string =>
+    `<m:d>${properties}<m:e>${inner}</m:e></m:d>`;
+
+  it('keeps the outer script of a nested subscript', () => {
+    expect(mathOf(mSub(mSub(mRun('C'), mRun('i')), mRun('crustal')))).toBe(
+      String.raw`{C_{i}}_{crustal}`,
+    );
+  });
+
+  it('keeps the outer fraction of a nested fraction', () => {
+    expect(mathOf(mFrac(mFrac(mRun('a'), mRun('b')), mRun('c')))).toBe(
+      String.raw`\frac{\frac{a}{b}}{c}`,
+    );
+  });
+
+  it('preserves the aerosol/crustal contrast of the enrichment factor', () => {
+    const ratio = mDelimiter(
+      `${mSub(mRun('C'), mRun('i'))}${mRun('/')}${mSub(mRun('C'), mRun('ref'))}`,
+    );
+
+    expect(
+      mathOf(
+        `${mRun('EF=')}${mFrac(
+          mSub(ratio, mRun('aerosal')),
+          mSub(ratio, mRun('crustal')),
+        )}`,
+      ),
+    ).toBe(
+      String.raw`EF=\frac{{\left(C_{i}/C_{ref}\right)}_{aerosal}}{{\left(C_{i}/C_{ref}\right)}_{crustal}}`,
+    );
+  });
+
+  it('keeps the n-ary operator when Word omits the upper limit', () => {
+    expect(
+      mathOf(
+        `<m:nary><m:naryPr><m:chr m:val="∑"/><m:supHide m:val="1"/></m:naryPr><m:sub>${mRun('i')}</m:sub><m:e>${mRun('x')}</m:e></m:nary>`,
+      ),
+    ).toBe(String.raw`\sum_{i} x`);
+  });
+
+  it('maps m:chr to the matching operator and defaults to \\sum', () => {
+    const nary = (chr: string | null): string =>
+      `<m:nary><m:naryPr>${chr === null ? '' : `<m:chr m:val="${chr}"/>`}</m:naryPr><m:sub>${mRun('a')}</m:sub><m:sup>${mRun('b')}</m:sup><m:e>${mRun('f')}</m:e></m:nary>`;
+
+    expect(mathOf(nary('∫'))).toBe(String.raw`\int_{a}^{b} f`);
+    expect(mathOf(nary('∏'))).toBe(String.raw`\prod_{a}^{b} f`);
+    expect(mathOf(nary('∮'))).toBe(String.raw`\oint_{a}^{b} f`);
+    // Word writes no m:chr at all for a summation.
+    expect(mathOf(nary(null))).toBe(String.raw`\sum_{a}^{b} f`);
+  });
+
+  it('keeps delimiters, and honours custom delimiter characters', () => {
+    expect(mathOf(mDelimiter(`${mRun('a')}${mRun('+')}${mRun('b')}`))).toBe(
+      String.raw`\left(a+b\right)`,
+    );
+    expect(
+      mathOf(
+        mDelimiter(
+          mRun('x'),
+          '<m:dPr><m:begChr m:val="["/><m:endChr m:val="]"/></m:dPr>',
+        ),
+      ),
+    ).toBe(String.raw`\left[x\right]`);
+  });
+
+  it('converts sub-superscripts, radicals, functions, accents and limits', () => {
+    expect(
+      mathOf(
+        `<m:sSubSup><m:e>${mRun('x')}</m:e><m:sub>${mRun('i')}</m:sub><m:sup>${mRun('2')}</m:sup></m:sSubSup>`,
+      ),
+    ).toBe(String.raw`x_{i}^{2}`);
+    expect(mathOf(`<m:rad><m:e>${mRun('2')}</m:e></m:rad>`)).toBe(
+      String.raw`\sqrt{2}`,
+    );
+    expect(
+      mathOf(
+        `<m:rad><m:deg>${mRun('3')}</m:deg><m:e>${mRun('x')}</m:e></m:rad>`,
+      ),
+    ).toBe(String.raw`\sqrt[3]{x}`);
+    expect(
+      mathOf(
+        `<m:func><m:fName>${mRun('sin')}</m:fName><m:e>${mRun('x')}</m:e></m:func>`,
+      ),
+    ).toBe(String.raw`\sin x`);
+    expect(mathOf(`<m:bar><m:e>${mRun('x')}</m:e></m:bar>`)).toBe(
+      String.raw`\bar{x}`,
+    );
+    expect(mathOf(`<m:acc><m:e>${mRun('y')}</m:e></m:acc>`)).toBe(
+      String.raw`\hat{y}`,
+    );
+    expect(
+      mathOf(
+        `<m:limLow><m:e>${mRun('max')}</m:e><m:lim>${mRun('n')}</m:lim></m:limLow>`,
+      ),
+    ).toBe(String.raw`\underset{n}{max}`);
+    expect(
+      mathOf(
+        `<m:limUpp><m:e>${mRun('X')}</m:e><m:lim>${mRun('~')}</m:lim></m:limUpp>`,
+      ),
+    ).toBe(String.raw`\overset{\sim}{X}`);
+  });
+
+  it('escapes LaTeX control characters in literal run text', () => {
+    // `%` would comment out the rest of the line and `$` would close the math
+    // block early, truncating the equation in the composer.
+    expect(mathOf(mRun('50% &amp; #1_x $'))).toBe(
+      String.raw`50\% \& \#1\_x \$`,
+    );
+  });
+
+  it('escapes only literal run text, never generated subscript markup', () => {
+    // Escaping is applied to `m:t` text *before* it is composed into LaTeX, so a
+    // real `m:sSub` keeps its `_{…}` while the literal `%`/`&`/`_` are escaped.
+    expect(
+      mathOf(
+        `${mSub(mRun('C'), mRun('d'))}${mRun(' = 50% &amp; C_ref')}${mFrac(
+          mSub(mRun('x'), mRun('i')),
+          mRun('2'),
+        )}`,
+      ),
+    ).toBe(String.raw`C_{d} = 50\% \& C\_ref\frac{x_{i}}{2}`);
+  });
+
+  it('maps Word operator glyphs to the commands the exporter round-trips', () => {
+    expect(mathOf(`${mRun('3')}${mRun('×')}${mRun('10')}`)).toBe(
+      String.raw`3\times 10`,
+    );
+    expect(mathOf(mRun('a≤b±c·d'))).toBe(String.raw`a\le b\pm c\cdot d`);
+    // The commands come from the exporter's own table, so export writes the
+    // same glyphs back out.
+    expect(COMMAND_TEXT.times).toBe('×');
+    expect(COMMAND_TEXT.le).toBe('≤');
+  });
+});
+
+describe('title page metadata', () => {
+  const para = (text: string, style?: string): string =>
+    `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t>${text}</w:t></w:r></w:p>`;
+  const boldPara = (text: string): string =>
+    `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${text}</w:t></w:r></w:p>`;
+
+  it('routes thesis title-page furniture into titlePageExtraLines', () => {
+    const doc = parseWordDocument(
+      `<w:body>${para('Airborne trace metals in a northern airshed')}${boldPara(
+        'by',
+      )}${boldPara('Jane Researcher')}${boldPara(
+        'Student # (230235918)',
+      )}${boldPara(
+        'BHSc., University of Northern British Columbia, 2019',
+      )}${boldPara(
+        'A thesis submitted in partial fulfillment of the requirements for the degree of Master of Science',
+      )}${boldPara('April 2026')}${para('Abstract', 'Heading1')}${para(
+        'We measured trace metals.',
+      )}</w:body>`,
+    );
+
+    expect(doc.title).toBe('Airborne trace metals in a northern airshed');
+    expect(doc.authorLine).toBe('Jane Researcher');
+    expect(doc.affiliations).toBe(
+      'BHSc., University of Northern British Columbia, 2019',
+    );
+    expect(doc.titlePageExtraLines).toEqual([
+      'by',
+      'Student # (230235918)',
+      'A thesis submitted in partial fulfillment of the requirements for the degree of Master of Science',
+      'April 2026',
+    ]);
+    // Each of those lines used to import as its own empty junk section.
+    expect(doc.sections.map((section) => section.name)).toEqual(['Abstract']);
+    expect(doc.sections.map((section) => section.orderIndex)).toEqual([0]);
+  });
+
+  it('keeps the title page at the top level of the outline', () => {
+    const doc = parseWordDocument(
+      `<w:body>${para('Paper title')}${para('Jane Researcher')}${para(
+        'Introduction',
+        'Heading1',
+      )}${para('Body prose.')}</w:body>`,
+    );
+
+    expect(doc.sections[0]).toMatchObject({ name: 'Title page', level: 1 });
+  });
+});
+
+describe('author contributions', () => {
+  const para = (text: string, style?: string): string =>
+    `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t>${text}</w:t></w:r></w:p>`;
+  const statement =
+    'All authors contributed to the study conception, data collection and analysis.';
+
+  it('synthesizes a heading only when the statement has none', () => {
+    const doc = parseWordDocument(
+      `<w:body>${para('Paper title')}${para('Introduction', 'Heading1')}${para(
+        'Body prose.',
+      )}${para(statement)}</w:body>`,
+    );
+    const contributions = doc.sections.filter(
+      (section) => section.sectionType === 'AUTHOR_CONTRIBUTIONS',
+    );
+
+    expect(contributions).toHaveLength(1);
+    expect(contributions[0].content).toContain('All authors contributed');
+  });
+
+  it('does not duplicate a real Author contributions heading', () => {
+    const doc = parseWordDocument(
+      `<w:body>${para('Paper title')}${para('Introduction', 'Heading1')}${para(
+        'Body prose.',
+      )}${para('Author contributions', 'Heading1')}${para(statement)}</w:body>`,
+    );
+    const contributions = doc.sections.filter(
+      (section) => section.sectionType === 'AUTHOR_CONTRIBUTIONS',
+    );
+
+    expect(contributions).toHaveLength(1);
+    expect(contributions[0].content).toContain('All authors contributed');
   });
 });

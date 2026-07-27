@@ -243,6 +243,9 @@ const sourceInfoFromDocument = (
   ...(document.correspondingAuthor !== undefined
     ? { correspondingAuthor: document.correspondingAuthor }
     : {}),
+  ...(document.titlePageExtraLines !== undefined
+    ? { titlePageExtraLines: document.titlePageExtraLines }
+    : {}),
   ...(document.warnings !== undefined ? { warnings: document.warnings } : {}),
   ...(document.stats !== undefined ? { stats: document.stats } : {}),
 });

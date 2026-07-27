@@ -12,6 +12,7 @@ export type ImportedSourceInfo = Pick<
   | 'authorLine'
   | 'affiliations'
   | 'correspondingAuthor'
+  | 'titlePageExtraLines'
   | 'warnings'
   | 'stats'
 >;
@@ -522,6 +523,9 @@ export const assembleImportedDocument = (
       : {}),
     ...(sourceInfo.correspondingAuthor !== undefined
       ? { correspondingAuthor: sourceInfo.correspondingAuthor }
+      : {}),
+    ...(sourceInfo.titlePageExtraLines !== undefined
+      ? { titlePageExtraLines: sourceInfo.titlePageExtraLines }
       : {}),
     ...(sourceInfo.warnings !== undefined
       ? { warnings: sourceInfo.warnings }

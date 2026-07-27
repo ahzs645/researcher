@@ -9,42 +9,10 @@ import {
   type MathComponent,
 } from 'docx';
 
-const COMMAND_TEXT: Record<string, string> = {
-  alpha: 'α',
-  beta: 'β',
-  gamma: 'γ',
-  delta: 'δ',
-  epsilon: 'ε',
-  lambda: 'λ',
-  mu: 'μ',
-  pi: 'π',
-  rho: 'ρ',
-  sigma: 'σ',
-  theta: 'θ',
-  Delta: 'Δ',
-  Sigma: 'Σ',
-  times: '×',
-  cdot: '·',
-  le: '≤',
-  leq: '≤',
-  ge: '≥',
-  geq: '≥',
-  pm: '±',
-  infty: '∞',
-  cap: '∩',
-  cup: '∪',
-  in: '∈',
-  approx: '≈',
-  neq: '≠',
-  equiv: '≡',
-  propto: '∝',
-  partial: '∂',
-  int: '∫',
-  to: '→',
-  ldots: '…',
-  cdots: '⋯',
-  prime: '′',
-};
+import { COMMAND_TEXT } from './manuscriptMathGlyphs';
+
+// Re-exported for the existing callers that reach for it here.
+export { COMMAND_TEXT };
 
 // Spacing macros carry no glyph — LaTeX writes them as `\,` or `\quad`, and the
 // old fallback emitted the literal punctuation (`\,` became a comma).

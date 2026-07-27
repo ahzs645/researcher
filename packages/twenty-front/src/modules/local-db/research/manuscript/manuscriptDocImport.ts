@@ -8,6 +8,7 @@
 
 import { countWords } from './manuscriptAssembly';
 import { assetPlacementMarker } from './manuscriptAssetPlacement';
+import { COMMAND_TEXT } from './manuscriptMathGlyphs';
 import { gridToMarkdownTable } from './manuscriptTables';
 import { wrapManuscriptScript } from './manuscriptScripts';
 import { type PortableResearchPaperManifest } from './manuscriptPortableManifest';
@@ -31,6 +32,9 @@ export type ImportedDocument = {
   authorLine?: string;
   affiliations?: string;
   correspondingAuthor?: string;
+  // Title-page furniture the composer renders verbatim under the author block
+  // (degree statements, submission dates, student numbers).
+  titlePageExtraLines?: string[];
   sections: ImportedSectionDraft[];
   warnings?: string[];
   stats?: {
@@ -111,7 +115,10 @@ const SECTION_RULES: SectionRule[] = [
   {
     sectionType: 'ETHICS',
     placement: 'BACK_MATTER',
-    pattern: /ethic(s|al)|institutional review|irb\b|consent to participate/,
+    // "Consent for publication" is a separate ICMJE statement from "consent to
+    // participate"; both belong to ETHICS, not to the main text.
+    pattern:
+      /ethic(s|al)|institutional review|irb\b|consent (?:to participate|for publication)|informed consent/,
   },
   {
     sectionType: 'FUNDING',
@@ -154,7 +161,7 @@ const SECTION_RULES: SectionRule[] = [
     sectionType: 'METHODS',
     placement: 'MAIN',
     pattern:
-      /(methodolog|^methods?\b|materials and methods|experimental|study design|data and methods|study area|participants and|procedure)/,
+      /(methodolog|^methods?\b|materials and methods|experimental|study design|data and methods|study (?:area|site|location)|participants and|procedure)/,
   },
   {
     sectionType: 'RESULTS',
@@ -307,8 +314,10 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
     title = firstLine.trim() || undefined;
     const remainder = rest.join('\n').trim();
     if (remainder.length > 0) {
+      // The title page is a top-level part of the document, not a subsection of
+      // whatever heading happens to follow it.
       first.heading = 'Title page';
-      first.level = 2;
+      first.level = 1;
       first.body = remainder;
     } else {
       startIndex = 1;
@@ -326,7 +335,7 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
       title = first.heading;
       if (first.body.length > 0) {
         first.heading = 'Title page';
-        first.level = 2;
+        first.level = 1;
       } else {
         startIndex = 1;
       }
@@ -334,13 +343,44 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
   }
 
   const sections: ImportedSectionDraft[] = [];
+  // "2.1 Sampling sites" under "2 Method" is still Method: an unrecognised
+  // subsection inherits its nearest classified body ancestor instead of falling
+  // to OTHER/MAIN. Front and back matter never adopt children — a subsection of
+  // the title page or the references is not more title page.
+  let parent: { level: number; sectionType: string; placement: string } | null =
+    null;
   for (let index = startIndex; index < blocks.length; index += 1) {
     const block = blocks[index];
     const heading = block.heading ?? 'Body';
     if (block.body.length === 0 && block.heading === null) continue;
 
+    const draft = draftFromBlock(
+      heading,
+      block.body,
+      sections.length,
+      block.level,
+    );
+    const blockLevel = block.level || 1;
+    if (draft.sectionType !== 'OTHER') {
+      parent =
+        draft.placement === 'MAIN' || draft.placement === 'SUPPLEMENT'
+          ? {
+              level: blockLevel,
+              sectionType: draft.sectionType,
+              placement: draft.placement,
+            }
+          : null;
+      sections.push(draft);
+      continue;
+    }
     sections.push(
-      draftFromBlock(heading, block.body, sections.length, block.level),
+      parent !== null && blockLevel > parent.level
+        ? {
+            ...draft,
+            sectionType: parent.sectionType,
+            placement: parent.placement,
+          }
+        : draft,
     );
   }
 
@@ -371,13 +411,17 @@ const decodeXml = (value: string): string =>
       (entity) => XML_ENTITIES[entity] ?? entity,
     );
 
+// Text-bearing tokens of a paragraph, in document order. Breaks and tabs must be
+// read *in the same pass* as `<w:t>`: substituting them into the surrounding XML
+// (the previous approach) threw them away, because only `<w:t>` contents were
+// collected afterwards — so a heading following a `<w:br/>` fused onto the end of
+// the previous paragraph and disappeared from the imported outline.
+const WORD_TEXT_TOKEN =
+  /<w:tab\b[^>]*\/?>|<w:(?:br|cr)\b[^>]*\/?>|<\/w:p>\s*<w:p\b[^>]*>|<(?:w|m):t\b[^>]*>([\s\S]*?)<\/(?:w|m):t>/g;
+
 // Concatenate the text runs of a paragraph/cell, honouring tabs and line breaks.
 const wordRunsText = (xml: string): string => {
-  const withBreaks = xml
-    .replace(/<w:tab\b[^>]*\/>/g, '\t')
-    .replace(/<w:br\b[^>]*\/>/g, '\n')
-    .replace(/<\/w:p>\s*<w:p\b[^>]*>/g, '\n');
-  const withScripts = withBreaks.replace(/<w:r\b[\s\S]*?<\/w:r>/g, (runXml) => {
+  const withScripts = xml.replace(/<w:r\b[\s\S]*?<\/w:r>/g, (runXml) => {
     const superscript = /<w:vertAlign\b[^>]*w:val="superscript"/.test(runXml);
     const subscript = /<w:vertAlign\b[^>]*w:val="subscript"/.test(runXml);
     if (!superscript && !subscript) return runXml;
@@ -397,10 +441,18 @@ const wordRunsText = (xml: string): string => {
       },
     );
   });
-  const runs = [
-    ...withScripts.matchAll(/<(?:w|m):t\b[^>]*>([\s\S]*?)<\/(?:w|m):t>/g),
-  ];
-  return runs.map((match) => decodeXml(match[1])).join('');
+  // `<w:pPr>` holds tab *stops* (`<w:tabs><w:tab w:pos="720"/>`), which are
+  // layout, not content — reading them would inject phantom tabs into the prose.
+  const content = withScripts.replace(/<w:pPr\b[\s\S]*?<\/w:pPr>/g, '');
+  let text = '';
+  for (const match of content.matchAll(WORD_TEXT_TOKEN)) {
+    if (match[1] !== undefined) {
+      text += decodeXml(match[1]);
+    } else {
+      text += match[0].startsWith('<w:tab') ? '\t' : '\n';
+    }
+  }
+  return text;
 };
 
 export type WordStyleDefinition = {
@@ -464,39 +516,286 @@ const headingLevelFromStyle = (
   return 0;
 };
 
-const stripXmlTags = (xml: string): string =>
-  decodeXml(xml.replace(/<[^>]+>/g, ''))
-    .replace(/\s+/g, ' ')
-    .trim();
+// ── OMML (Word math) → LaTeX ───────────────────────────────────────────────
+// OMML is a tree: an `m:sSub` can sit inside another `m:sSub`'s `m:e`. Lazy
+// regexes terminate on the *inner* closing tag, which silently dropped the outer
+// script (`{C_{i}}_{crustal}` became `C_{i}crustal`). The walker below balances
+// open/close tags the way `findMatchingTableEnd` does for nested `w:tbl`.
 
-const ommlToLatex = (mathXml: string): string => {
-  let converted = mathXml;
-
-  converted = converted.replace(
-    /<m:nary\b[\s\S]*?<\/m:naryPr>\s*<m:sub\b[^>]*>([\s\S]*?)<\/m:sub>\s*<m:sup\b[^>]*>([\s\S]*?)<\/m:sup>\s*<m:e\b[^>]*>([\s\S]*)<\/m:e>\s*<\/m:nary>/g,
-    (_match, subscript: string, superscript: string, expression: string) =>
-      `\\sum_{${ommlToLatex(subscript)}}^{${ommlToLatex(
-        superscript,
-      )}} ${ommlToLatex(expression)}`,
-  );
-  converted = converted.replace(
-    /<m:f\b[\s\S]*?<m:num\b[^>]*>([\s\S]*?)<\/m:num>[\s\S]*?<m:den\b[^>]*>([\s\S]*?)<\/m:den>[\s\S]*?<\/m:f>/g,
-    (_match, numerator: string, denominator: string) =>
-      `\\frac{${ommlToLatex(numerator)}}{${ommlToLatex(denominator)}}`,
-  );
-  converted = converted.replace(
-    /<m:sSub\b[\s\S]*?<m:e\b[^>]*>([\s\S]*?)<\/m:e>[\s\S]*?<m:sub\b[^>]*>([\s\S]*?)<\/m:sub>[\s\S]*?<\/m:sSub>/g,
-    (_match, base: string, subscript: string) =>
-      `${ommlToLatex(base)}_{${ommlToLatex(subscript)}}`,
-  );
-  converted = converted.replace(
-    /<m:sSup\b[\s\S]*?<m:e\b[^>]*>([\s\S]*?)<\/m:e>[\s\S]*?<m:sup\b[^>]*>([\s\S]*?)<\/m:sup>[\s\S]*?<\/m:sSup>/g,
-    (_match, base: string, superscript: string) =>
-      `${ommlToLatex(base)}^{${ommlToLatex(superscript)}}`,
-  );
-
-  return stripXmlTags(converted);
+// Literal `m:t` text is prose, not markup: an unescaped `%` comments out the
+// rest of the line and a stray `$` closes the math block early.
+const LATEX_ESCAPES: Record<string, string> = {
+  '\\': '\\backslash ',
+  '{': '\\{',
+  '}': '\\}',
+  $: '\\$',
+  '&': '\\&',
+  '#': '\\#',
+  '^': '\\hat{}',
+  _: '\\_',
+  '%': '\\%',
+  '~': '\\sim ',
 };
+
+// Word stores operators as literal glyphs. Inverting the export map keeps the
+// round-trip stable: `×` imports as `\times` and exports back to `×`.
+const LATEX_COMMAND_BY_GLYPH: Record<string, string> = Object.entries(
+  COMMAND_TEXT,
+).reduce<Record<string, string>>(
+  (map, [command, glyph]) =>
+    map[glyph] === undefined ? { ...map, [glyph]: command } : map,
+  {},
+);
+
+// n-ary operators live only in the `m:chr` *attribute*, so a missed match used
+// to delete the `∑` entirely. Word omits `m:chr` when the operator is a sum.
+const NARY_OPERATORS: Record<string, string> = {
+  '∑': '\\sum',
+  '∏': '\\prod',
+  '∐': '\\coprod',
+  '∫': '\\int',
+  '∬': '\\iint',
+  '∭': '\\iiint',
+  '∮': '\\oint',
+  '⋃': '\\bigcup',
+  '⋂': '\\bigcap',
+  '⋀': '\\bigwedge',
+  '⋁': '\\bigvee',
+};
+
+const ACCENT_COMMANDS: Record<string, string> = {
+  '̂': '\\hat',
+  '̃': '\\tilde',
+  '̄': '\\bar',
+  '̇': '\\dot',
+  '̈': '\\ddot',
+  '̀': '\\grave',
+  '́': '\\acute',
+  '⃗': '\\vec',
+};
+
+const DELIMITER_COMMANDS: Record<string, string> = {
+  '{': '\\{',
+  '}': '\\}',
+  '⟨': '\\langle',
+  '⟩': '\\rangle',
+  '‖': '\\|',
+};
+
+const LATEX_FUNCTIONS = new Set([
+  'sin',
+  'cos',
+  'tan',
+  'cot',
+  'sec',
+  'csc',
+  'arcsin',
+  'arccos',
+  'arctan',
+  'sinh',
+  'cosh',
+  'tanh',
+  'log',
+  'ln',
+  'lg',
+  'exp',
+  'lim',
+  'max',
+  'min',
+  'det',
+  'deg',
+  'gcd',
+]);
+
+const escapeLatexText = (text: string): string =>
+  [...text]
+    .map((character) => {
+      const command = LATEX_COMMAND_BY_GLYPH[character];
+      if (command !== undefined) return `\\${command} `;
+      return LATEX_ESCAPES[character] ?? character;
+    })
+    .join('');
+
+type OmmlElement = { name: string; attributes: string; inner: string };
+
+const XML_TAG = /<(\/?)([A-Za-z][\w.:-]*)((?:[^>"]|"[^"]*")*?)(\/?)>/g;
+
+// Balanced scan for the close of `name`, mirroring `findMatchingTableEnd`.
+const findOmmlElementEnd = (
+  xml: string,
+  name: string,
+  from: number,
+): { inner: string; end: number } => {
+  const tag = new RegExp(
+    `<${name}\\b(?:[^>"]|"[^"]*")*?(/?)>|</${name}\\s*>`,
+    'g',
+  );
+  tag.lastIndex = from;
+  let depth = 1;
+  let match: RegExpExecArray | null;
+  while ((match = tag.exec(xml)) !== null) {
+    if (match[0].startsWith('</')) {
+      depth -= 1;
+      if (depth === 0) {
+        return { inner: xml.slice(from, match.index), end: tag.lastIndex };
+      }
+    } else if (match[1] !== '/') {
+      depth += 1;
+    }
+  }
+  return { inner: xml.slice(from), end: xml.length };
+};
+
+const ommlChildren = (xml: string): OmmlElement[] => {
+  const children: OmmlElement[] = [];
+  let cursor = 0;
+  while (cursor < xml.length) {
+    XML_TAG.lastIndex = cursor;
+    const match = XML_TAG.exec(xml);
+    if (match === null) break;
+    const [, closing, name, attributes, selfClosing] = match;
+    if (closing === '/') {
+      cursor = XML_TAG.lastIndex;
+      continue;
+    }
+    if (selfClosing === '/') {
+      children.push({ name, attributes, inner: '' });
+      cursor = XML_TAG.lastIndex;
+      continue;
+    }
+    const closed = findOmmlElementEnd(xml, name, XML_TAG.lastIndex);
+    children.push({ name, attributes, inner: closed.inner });
+    cursor = closed.end;
+  }
+  return children;
+};
+
+const ommlChildInner = (
+  children: OmmlElement[],
+  name: string,
+): string | undefined => children.find((child) => child.name === name)?.inner;
+
+// Word property children (`m:naryPr`, `m:dPr`, …) carry their payload in
+// attributes: `<m:chr m:val="∑"/>`.
+const ommlPropertyValue = (
+  children: OmmlElement[],
+  propertyName: string,
+  valueName: string,
+): string | undefined => {
+  const properties = ommlChildInner(children, propertyName);
+  if (properties === undefined) return undefined;
+  const value = ommlChildren(properties).find(
+    (child) => child.name === valueName,
+  );
+  return value === undefined
+    ? undefined
+    : decodeXml(/m:val="([^"]*)"/.exec(value.attributes)?.[1] ?? '');
+};
+
+// A script base only needs braces when it is more than one atom, so `C_{i}` stays
+// readable while a nested script becomes `{C_{i}}_{crustal}`.
+const scriptBase = (value: string): string =>
+  /^(?:\\[A-Za-z]+|[^\\{}])$/.test(value) ? value : `{${value}}`;
+
+const convertOmmlChildren = (xml: string): string =>
+  ommlChildren(xml).map(convertOmmlElement).join('');
+
+const convertOmmlElement = (element: OmmlElement): string => {
+  const { name, inner } = element;
+  const children = ommlChildren(inner);
+  // Trimmed: every child is composed into a `{…}` group, where padding from a
+  // glyph command (`\sim `) or from pretty-printed XML would be noise.
+  const part = (childName: string): string =>
+    convertOmmlChildren(ommlChildInner(children, childName) ?? '').trim();
+
+  switch (name) {
+    case 'm:t':
+    case 'w:t':
+      return escapeLatexText(decodeXml(inner));
+    case 'm:f':
+      return `\\frac{${part('m:num')}}{${part('m:den')}}`;
+    case 'm:sSub':
+      return `${scriptBase(part('m:e'))}_{${part('m:sub')}}`;
+    case 'm:sSup':
+      return `${scriptBase(part('m:e'))}^{${part('m:sup')}}`;
+    case 'm:sSubSup':
+      return `${scriptBase(part('m:e'))}_{${part('m:sub')}}^{${part('m:sup')}}`;
+    case 'm:nary': {
+      const operatorGlyph = ommlPropertyValue(children, 'm:naryPr', 'm:chr');
+      const operator =
+        operatorGlyph === undefined
+          ? '\\sum'
+          : (NARY_OPERATORS[operatorGlyph] ?? escapeLatexText(operatorGlyph));
+      // Word omits `m:sup` entirely when only a lower limit is set.
+      const lower = ommlChildInner(children, 'm:sub');
+      const upper = ommlChildInner(children, 'm:sup');
+      const limits = [
+        lower === undefined ? '' : `_{${convertOmmlChildren(lower).trim()}}`,
+        upper === undefined ? '' : `^{${convertOmmlChildren(upper).trim()}}`,
+      ].join('');
+      return `${operator}${limits} ${part('m:e')}`;
+    }
+    case 'm:d': {
+      const begin = ommlPropertyValue(children, 'm:dPr', 'm:begChr') ?? '(';
+      const end = ommlPropertyValue(children, 'm:dPr', 'm:endChr') ?? ')';
+      const separator = ommlPropertyValue(children, 'm:dPr', 'm:sepChr') ?? '|';
+      const delimiter = (character: string): string =>
+        character.length === 0
+          ? '.'
+          : (DELIMITER_COMMANDS[character] ?? character);
+      const parts = children
+        .filter((child) => child.name === 'm:e')
+        .map((child) => convertOmmlChildren(child.inner).trim());
+      return `\\left${delimiter(begin)}${parts.join(separator)}\\right${delimiter(end)}`;
+    }
+    case 'm:rad': {
+      const degree = ommlChildInner(children, 'm:deg');
+      const converted =
+        degree === undefined ? '' : convertOmmlChildren(degree).trim();
+      return `\\sqrt${converted.length > 0 ? `[${converted}]` : ''}{${part('m:e')}}`;
+    }
+    case 'm:func': {
+      const functionName = part('m:fName').trim();
+      const command = LATEX_FUNCTIONS.has(functionName)
+        ? `\\${functionName}`
+        : functionName;
+      return `${command} ${part('m:e')}`;
+    }
+    case 'm:bar':
+      return ommlPropertyValue(children, 'm:barPr', 'm:pos') === 'bot'
+        ? `\\underline{${part('m:e')}}`
+        : `\\bar{${part('m:e')}}`;
+    case 'm:acc': {
+      const accent = ommlPropertyValue(children, 'm:accPr', 'm:chr');
+      const command =
+        accent === undefined ? '\\hat' : (ACCENT_COMMANDS[accent] ?? '\\hat');
+      return `${command}{${part('m:e')}}`;
+    }
+    case 'm:limLow':
+      return `\\underset{${part('m:lim')}}{${part('m:e')}}`;
+    case 'm:limUpp':
+      return `\\overset{${part('m:lim')}}{${part('m:e')}}`;
+    case 'm:m':
+      return `\\begin{matrix}${children
+        .filter((child) => child.name === 'm:mr')
+        .map((row) =>
+          ommlChildren(row.inner)
+            .filter((cell) => cell.name === 'm:e')
+            .map((cell) => convertOmmlChildren(cell.inner).trim())
+            .join(' & '),
+        )
+        .join(' \\\\ ')}\\end{matrix}`;
+    default:
+      // Property elements are formatting only; everything else (m:oMath, m:r,
+      // m:e, w:ins, …) is a transparent wrapper around more math.
+      return name.endsWith('Pr') ? '' : convertOmmlChildren(inner);
+  }
+};
+
+const ommlToLatex = (mathXml: string): string =>
+  convertOmmlChildren(mathXml)
+    .replace(/[ \t\r\n]+/g, ' ')
+    .trim();
 
 const paragraphMath = (paragraphXml: string): string[] =>
   (paragraphXml.match(/<m:oMath\b[\s\S]*?<\/m:oMath>/g) ?? [])
@@ -532,10 +831,47 @@ const semanticHeadingLevel = (text: string): number => {
   return classification.sectionType === 'OTHER' ? 0 : 2;
 };
 
+const BOLD_RUN_PROPERTY = /<w:b\b(?![^>]*w:val="(?:0|false)")[^>]*\/?>/;
+
+const isBoldRun = (runXml: string): boolean =>
+  BOLD_RUN_PROPERTY.test(/<w:rPr\b[\s\S]*?<\/w:rPr>/.exec(runXml)?.[0] ?? '');
+
+// Word thesis templates end a body paragraph with `<w:br/>` followed by a fully
+// bold run so the next heading keeps its page break. Such headings
+// ("Acknowledgment", "Data Availability") only survive import if that trailing
+// run is split back out, so keep the gate narrow: every run after the last break
+// must be bold, short, and must not read like a sentence.
+const trailingBoldHeadingText = (paragraphXml: string): string | null => {
+  const breakIndex = paragraphXml.lastIndexOf('<w:br');
+  if (breakIndex < 0) return null;
+  const runs = [
+    ...paragraphXml.slice(breakIndex).matchAll(/<w:r\b[^>]*>[\s\S]*?<\/w:r>/g),
+  ].map((match) => match[0]);
+  if (runs.length === 0 || !runs.every(isBoldRun)) return null;
+  const text = runs.map(wordRunsText).join('').trim();
+  if (text.length === 0 || text.length > 100 || text.includes('\n'))
+    return null;
+  return isProseLike(text) ? null : text;
+};
+
+const headingBlock = (
+  text: string,
+  provenance: Pick<WordMarkdownBlock, 'styleId' | 'styleName'>,
+): WordMarkdownBlock => {
+  const level = semanticHeadingLevel(text) || 3;
+  return {
+    kind: 'paragraph',
+    markdown: `\n${'#'.repeat(level)} ${text}\n`,
+    ...provenance,
+    sourceHeadingLevel: level,
+    headingSource: level === 3 ? 'bold' : 'semantic',
+  };
+};
+
 const wordParagraphToMarkdown = (
   paragraphXml: string,
   options: WordImportOptions,
-): WordMarkdownBlock => {
+): WordMarkdownBlock[] => {
   const styleMatch = /<w:pStyle\b[^>]*w:val="([^"]*)"/.exec(paragraphXml);
   const styleId = styleMatch?.[1] ?? '';
   const styleName = options.styles?.[styleId]?.name;
@@ -543,7 +879,7 @@ const wordParagraphToMarkdown = (
   // OMML carries its own <m:t> text runs. Remove it from the prose pass so an
   // equation is emitted once as math, not once as flattened text and again as
   // math.
-  const text = wordRunsText(
+  const paragraphText = wordRunsText(
     paragraphXml.replace(/<m:oMath\b[\s\S]*?<\/m:oMath>/g, ''),
   ).trim();
   const images = paragraphImages(paragraphXml, options.imageByRelationshipId);
@@ -554,33 +890,45 @@ const wordParagraphToMarkdown = (
     ...(styleName !== undefined ? { styleName } : {}),
   };
 
-  if (text.length === 0 && images.length === 0 && math.length === 0) {
-    return { kind: 'paragraph', markdown: '', ...provenance };
+  if (paragraphText.length === 0 && images.length === 0 && math.length === 0) {
+    return [{ kind: 'paragraph', markdown: '', ...provenance }];
   }
 
+  // A trailing bold run after a line break is the next heading, not the tail of
+  // this paragraph — emit it as its own block.
+  const trailingHeading = trailingBoldHeadingText(paragraphXml);
+  const breakIndex = paragraphText.lastIndexOf('\n');
+  const splitHeading =
+    trailingHeading !== null &&
+    breakIndex > 0 &&
+    paragraphText.slice(breakIndex + 1).trim() === trailingHeading
+      ? trailingHeading
+      : null;
+  const text =
+    splitHeading === null
+      ? paragraphText
+      : paragraphText.slice(0, breakIndex).trim();
+  const trailingBlocks =
+    splitHeading === null ? [] : [headingBlock(splitHeading, provenance)];
+
   if (/^keywords?\s*:/i.test(text)) {
-    return {
-      kind: 'paragraph',
-      markdown: `\n## Keywords\n\n${text.replace(/^keywords?\s*:\s*/i, '')}\n`,
-      ...provenance,
-      sourceHeadingLevel: 2,
-      headingSource: 'semantic',
-    };
-  }
-  if (/^all authors contributed\b/i.test(text)) {
-    return {
-      kind: 'paragraph',
-      markdown: `\n## Author contributions\n\n${text}\n`,
-      ...provenance,
-      sourceHeadingLevel: 2,
-      headingSource: 'semantic',
-    };
+    return [
+      {
+        kind: 'paragraph',
+        markdown: `\n## Keywords\n\n${text.replace(/^keywords?\s*:\s*/i, '')}\n`,
+        ...provenance,
+        sourceHeadingLevel: 2,
+        headingSource: 'semantic',
+      },
+      ...trailingBlocks,
+    ];
   }
 
   const detectedLevel = semanticHeadingLevel(text);
   let headingSource: WordMarkdownBlock['headingSource'];
   let finalLevel = 0;
-  if (math.length === 0 && !isProseLike(text)) {
+  // A multi-line paragraph is prose with breaks in it, never a single heading.
+  if (math.length === 0 && !isProseLike(text) && !text.includes('\n')) {
     if (level > 0) {
       finalLevel = Math.min(level, 3);
       headingSource = 'style';
@@ -595,16 +943,19 @@ const wordParagraphToMarkdown = (
   const renderedText =
     finalLevel > 0 ? `\n${'#'.repeat(finalLevel)} ${text}\n` : text;
 
-  return {
-    kind: 'paragraph',
-    markdown: [renderedText, ...math, ...images]
-      .filter((part) => part.trim().length > 0)
-      .join('\n\n'),
-    ...provenance,
-    ...(finalLevel > 0 && headingSource !== undefined
-      ? { sourceHeadingLevel: finalLevel, headingSource }
-      : {}),
-  };
+  return [
+    {
+      kind: 'paragraph',
+      markdown: [renderedText, ...math, ...images]
+        .filter((part) => part.trim().length > 0)
+        .join('\n\n'),
+      ...provenance,
+      ...(finalLevel > 0 && headingSource !== undefined
+        ? { sourceHeadingLevel: finalLevel, headingSource }
+        : {}),
+    },
+    ...trailingBlocks,
+  ];
 };
 
 const wordTableToMarkdown = (tableXml: string): string => {
@@ -710,6 +1061,44 @@ const injectAbstractHeading = (
   return blocks;
 };
 
+const blockHeadingTexts = (block: WordMarkdownBlock): string[] =>
+  block.markdown
+    .split('\n')
+    .map((line) => HEADING_RE.exec(line.trim())?.[2])
+    .filter((heading): heading is string => heading !== undefined);
+
+const AUTHOR_CONTRIBUTIONS_PROSE = /^all authors contributed\b/i;
+
+// The "All authors contributed…" statement usually arrives unlabelled, but many
+// journals' templates *do* carry a real heading. Synthesising one regardless
+// produced a duplicate, empty "Author contributions" section.
+const injectAuthorContributionsHeading = (
+  blocks: WordMarkdownBlock[],
+): WordMarkdownBlock[] => {
+  const proseIndex = blocks.findIndex((block) =>
+    AUTHOR_CONTRIBUTIONS_PROSE.test(block.markdown.trim()),
+  );
+  if (proseIndex < 0) return blocks;
+  const hasRealHeading = blocks.some((block) =>
+    blockHeadingTexts(block).some(
+      (heading) =>
+        classifyHeading(heading).sectionType === 'AUTHOR_CONTRIBUTIONS',
+    ),
+  );
+  if (hasRealHeading) return blocks;
+
+  return [
+    ...blocks.slice(0, proseIndex),
+    {
+      kind: 'synthetic',
+      markdown: '## Author contributions',
+      sourceHeadingLevel: 2,
+      headingSource: 'semantic',
+    },
+    ...blocks.slice(proseIndex),
+  ];
+};
+
 const removeDuplicateTitleBlocks = (
   blocks: WordMarkdownBlock[],
 ): WordMarkdownBlock[] => {
@@ -744,12 +1133,14 @@ export const parseWordMlToMarkdownBlocks = (
   const out: WordMarkdownBlock[] = [];
   for (const token of tokens) {
     out.push(
-      token.startsWith('<w:tbl')
-        ? { kind: 'table', markdown: wordTableToMarkdown(token) }
-        : wordParagraphToMarkdown(token, options),
+      ...(token.startsWith('<w:tbl')
+        ? [{ kind: 'table' as const, markdown: wordTableToMarkdown(token) }]
+        : wordParagraphToMarkdown(token, options)),
     );
   }
-  return injectAbstractHeading(removeDuplicateTitleBlocks(out));
+  return injectAuthorContributionsHeading(
+    injectAbstractHeading(removeDuplicateTitleBlocks(out)),
+  );
 };
 
 export const serializeWordMarkdownBlocks = (
@@ -773,6 +1164,129 @@ export const parseWordMlToMarkdown = (
   serializeWordMarkdownBlocks(
     parseWordMlToMarkdownBlocks(documentXml, options),
   );
+
+// ── Title-page metadata ────────────────────────────────────────────────────
+// A thesis title page is a stack of one-line fragments ("by", the student
+// number, the degree statement, the date). Word styles each of them like a
+// heading, so every line used to become its own empty junk section. They are
+// manuscript metadata: the author line, the affiliations and — for everything
+// else — the ordered `titlePageExtraLines` the composer renders verbatim.
+
+const TITLE_PAGE_CONNECTOR =
+  /^(?:by|submitted by|presented by|prepared by|authors?)\s*[:.]?$/i;
+const AFFILIATION_LINE =
+  /universit|institut|department|faculty|college|school of|laborator|centre|center|hospital|academy|\bdivision of\b/i;
+const DEGREE_STATEMENT =
+  /thesis|dissertation|in partial fulfil|requirements for the degree|degree of\b/i;
+const CORRESPONDING_LINE = /^\*?(?:corresponding author|correspondence)\s*:/i;
+
+const isAuthorCandidate = (line: string): boolean =>
+  line.length <= 200 &&
+  !TITLE_PAGE_CONNECTOR.test(line) &&
+  !DEGREE_STATEMENT.test(line) &&
+  !AFFILIATION_LINE.test(line) &&
+  !CORRESPONDING_LINE.test(line) &&
+  !/^\d/.test(line);
+
+type TitlePageMetadata = {
+  sections: ImportedSectionDraft[];
+  authorLine?: string;
+  affiliations?: string;
+  correspondingAuthor?: string;
+  titlePageExtraLines?: string[];
+};
+
+const extractTitlePageMetadata = (
+  allSections: ImportedSectionDraft[],
+): TitlePageMetadata => {
+  const titlePageIndex = allSections.findIndex(
+    (section) => section.sectionType === 'TITLE_PAGE',
+  );
+  // Word styles each title-page fragment like a heading, so the leading run of
+  // short untyped sections is title-page furniture, not content. Fold it away —
+  // but only a *contiguous* run that still has real structure after it, so a
+  // short leading section of a document that never reaches an abstract survives.
+  const foldedIndexes = new Set<number>();
+  let foldEnd = titlePageIndex + 1;
+  for (let index = foldEnd; index < allSections.length; index += 1) {
+    const section = allSections[index];
+    if (section.sectionType !== 'OTHER' || section.wordCount > 12) break;
+    foldedIndexes.add(index);
+    foldEnd = index + 1;
+  }
+  if (
+    !allSections
+      .slice(foldEnd)
+      .some((section) => STRUCTURAL_SECTION_TYPES.has(section.sectionType))
+  ) {
+    foldedIndexes.clear();
+  }
+
+  const contentLines = (section: ImportedSectionDraft | undefined): string[] =>
+    (section?.content ?? '')
+      .split('\n')
+      .map((line) => line.replace(/^#{1,6}\s+/, '').trim())
+      .filter((line) => line.length > 0);
+
+  const lines = [
+    ...contentLines(allSections[titlePageIndex]),
+    ...[...foldedIndexes].flatMap((index) => [
+      allSections[index].name,
+      ...contentLines(allSections[index]),
+    ]),
+  ];
+
+  const sections = allSections
+    .filter((_section, index) => !foldedIndexes.has(index))
+    .map((section, orderIndex) => ({ ...section, orderIndex }));
+  if (lines.length === 0) return { sections };
+
+  const connectorIndex = lines.findIndex((line) =>
+    TITLE_PAGE_CONNECTOR.test(line),
+  );
+  const authorIndex = lines.findIndex(
+    (line, index) => index > connectorIndex && isAuthorCandidate(line),
+  );
+  const authorLine = authorIndex >= 0 ? lines[authorIndex] : undefined;
+  const correspondingIndex = lines.findIndex((line) =>
+    CORRESPONDING_LINE.test(line),
+  );
+  const correspondingAuthor =
+    correspondingIndex >= 0
+      ? lines[correspondingIndex].replace(/^\*|\*$/g, '').trim()
+      : undefined;
+  const affiliationIndexes = new Set(
+    lines
+      .map((line, index) => ({ line, index }))
+      .filter(
+        ({ line, index }) =>
+          index > authorIndex &&
+          index !== correspondingIndex &&
+          AFFILIATION_LINE.test(line) &&
+          !DEGREE_STATEMENT.test(line),
+      )
+      .map(({ index }) => index),
+  );
+  const affiliationLines = lines.filter((_line, index) =>
+    affiliationIndexes.has(index),
+  );
+  const extraLines = lines.filter(
+    (_line, index) =>
+      index !== authorIndex &&
+      index !== correspondingIndex &&
+      !affiliationIndexes.has(index),
+  );
+
+  return {
+    sections,
+    ...(authorLine !== undefined ? { authorLine } : {}),
+    ...(affiliationLines.length > 0
+      ? { affiliations: affiliationLines.join('\n') }
+      : {}),
+    ...(correspondingAuthor !== undefined ? { correspondingAuthor } : {}),
+    ...(extraLines.length > 0 ? { titlePageExtraLines: extraLines } : {}),
+  };
+};
 
 export const parseWordDocumentFromBlocks = (
   documentXml: string,
@@ -798,33 +1312,14 @@ export const parseWordDocumentFromBlocks = (
     );
   }
 
-  const titlePage = document.sections.find(
-    (section) => section.sectionType === 'TITLE_PAGE',
+  const { sections, ...titlePageMetadata } = extractTitlePageMetadata(
+    document.sections,
   );
-  const titlePageLines = (titlePage?.content ?? '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  const correspondingIndex = titlePageLines.findIndex((line) =>
-    /^\*?(?:corresponding author|correspondence)\s*:/i.test(line),
-  );
-  const authorLine = titlePageLines[0]?.replace(/^#{1,6}\s+/, '').trim();
-  const affiliationLines = titlePageLines.slice(
-    1,
-    correspondingIndex >= 0 ? correspondingIndex : undefined,
-  );
-  const correspondingAuthor =
-    correspondingIndex >= 0
-      ? titlePageLines[correspondingIndex].replace(/^\*|\*$/g, '').trim()
-      : undefined;
 
   return {
     ...document,
-    ...(authorLine !== undefined ? { authorLine } : {}),
-    ...(affiliationLines.length > 0
-      ? { affiliations: affiliationLines.join('\n') }
-      : {}),
-    ...(correspondingAuthor !== undefined ? { correspondingAuthor } : {}),
+    sections,
+    ...titlePageMetadata,
     warnings,
     stats: { equationCount, embeddedImageCount, tableCount },
   };

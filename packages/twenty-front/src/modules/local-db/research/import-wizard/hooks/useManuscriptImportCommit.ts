@@ -8,6 +8,7 @@ import {
 } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 import { portableManuscriptRecordUpdate } from '@/local-db/research/manuscript/manuscriptPortableImport';
 import { type SubmissionTransposeUpdate } from '@/local-db/research/manuscript/manuscriptSubmissionTranspose';
+import { serializeManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';
 import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
@@ -182,6 +183,12 @@ export const useManuscriptImportCommit = ({
         }
         if (isDefined(document.correspondingAuthor)) {
           manuscriptUpdate.correspondingAuthor = document.correspondingAuthor;
+        }
+        if (isDefined(document.titlePageExtraLines)) {
+          manuscriptUpdate.titlePageExtraLines =
+            serializeManuscriptTitlePageExtraLines(
+              document.titlePageExtraLines,
+            );
         }
         if (submissionTransposeUpdate !== undefined) {
           Object.assign(manuscriptUpdate, submissionTransposeUpdate);

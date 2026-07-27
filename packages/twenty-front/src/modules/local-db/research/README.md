@@ -42,6 +42,14 @@ reads as a research workspace rather than the demo CRM:
 - **Hidden demo objects:** Rockets, Pets, Survey results, Employment histories,
   Pet care agreements are filtered out of the nav (records stay queryable).
 
+- **Manuscripts is the door to the composer.** There is no "Compose paper" nav
+  LINK: opening a `manuscript` record (the side panel's ⌘⏎ "Open in composer",
+  or the record page's button) routes to `/compose?manuscript=<id>`. The route
+  itself stays registered so deep links keep working, and the composer links
+  back with "Record details" / "All manuscripts". The re-routing is scoped to
+  `manuscript` by `manuscriptComposerRoute.ts` — every other object still opens
+  its CRM record page.
+
 Returning visitors already have a seeded nav, so `bridgeSystemSeed` carries a
 `BRIDGE_NAV_LAYOUT_VERSION`; bump it when the layout changes and `migrateNavLayout`
 rebuilds the `navigationMenuItem` table on next boot.
@@ -133,7 +141,9 @@ scratch, and format it offline:
   kept inline). Fully unit-tested.
 - `manuscript/manuscriptDocxFile.ts` — browser glue that unzips `word/document.xml`
   from a real `.docx` with the native `DecompressionStream` (no zip dependency),
-  then hands the XML to the pure parser. Powers the **Import** panel on Compose.
+  then hands the XML to the pure parser. Powers the **Import** panel on Compose,
+  on a manuscript's record page, and the "Import as new manuscript…" action on
+  the Manuscripts table (shared shell logic in `useImportAsNewManuscript`).
 - `manuscript/manuscriptScaffold.ts` — journal-driven section skeletons (IMRaD /
   thesis / chapter) with the abstract word limit pulled from the chosen
   `journalTemplate`; `wordLimitStatus` backs the editor's over-limit warning.

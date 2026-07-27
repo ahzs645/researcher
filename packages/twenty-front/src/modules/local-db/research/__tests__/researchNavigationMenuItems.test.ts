@@ -132,6 +132,22 @@ describe('research navigation menu items', () => {
     expect(link?.folderId).toBe(RESEARCH_NAV_FOLDER_IDS.DISCOVERY);
   });
 
+  // The composer used to have its own "Compose paper" LINK, which duplicated
+  // the Manuscripts table. Manuscripts is now the single door to /compose.
+  it('does not add a standalone Compose link', () => {
+    expect(augmented.some((item) => item.name === 'Compose paper')).toBe(false);
+    expect(augmented.some((item) => item.link === '/compose')).toBe(false);
+  });
+
+  it('keeps the other internal links under Work', () => {
+    const obligations = augmented.find(
+      (item) => item.name === 'My obligations',
+    );
+    expect(obligations?.type).toBe('LINK');
+    expect(obligations?.link).toBe('/obligations');
+    expect(obligations?.folderId).toBe(RESEARCH_NAV_FOLDER_IDS.WORK);
+  });
+
   it('tailors lab administration out of solo mode', () => {
     const soloItems = augmentNavigationMenuItemsWithResearch<
       Record<string, unknown>
@@ -176,10 +192,9 @@ describe('research navigation menu items', () => {
     );
     const folderCount = Object.keys(RESEARCH_NAV_FOLDER_IDS).length;
     // all research objects (minus those edited through a dedicated surface) +
-    // the four folders + the Discovery, Compose, Obligations & Import-proposal
-    // links.
+    // the four folders + the Discovery, Obligations & Import-proposal links.
     expect(kept).toHaveLength(
-      RESEARCH_OBJECT_SPECS.length - NAV_HIDDEN_OBJECTS.size + folderCount + 4,
+      RESEARCH_OBJECT_SPECS.length - NAV_HIDDEN_OBJECTS.size + folderCount + 3,
     );
     expect(
       kept.some((item) => (item as { name?: string }).name === 'Funding'),

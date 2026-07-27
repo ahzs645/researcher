@@ -32,7 +32,8 @@ import { mockedViews } from '~/testing/mock-data/generated/metadata/views/mock-v
 //   6 → 7  solo researcher nav hides lab-admin objects and renames Lab
 //   7 → 8  manuscript sections dropped from the nav (edited in the Compose editor)
 //   8 → 9  "Import proposal" link added under Funding (grant/proposal importer)
-const BRIDGE_NAV_LAYOUT_VERSION = 9;
+//   9 → 10 "Compose paper" link dropped — Manuscripts is the door to the composer
+const BRIDGE_NAV_LAYOUT_VERSION = 10;
 
 // Default workspace persona until the first-run setup chooses one.
 const DEFAULT_WORKSPACE_MODE: WorkspaceMode = 'LAB';

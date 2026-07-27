@@ -11,6 +11,9 @@ import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscri
 
 type ManuscriptImportPanelProps = {
   compact?: boolean;
+  // Surfaces that already own a primary call to action (the record page's
+  // "Open in composer") demote the import button so only one blue button wins.
+  variant?: 'primary' | 'secondary';
   manuscriptId: string;
   manuscriptName?: string | null;
   existingSectionCount: number;
@@ -37,6 +40,7 @@ const StyledHint = styled.span`
 
 export const ManuscriptImportPanel = ({
   compact = false,
+  variant = 'primary',
   manuscriptId,
   manuscriptName,
   existingSectionCount,
@@ -61,8 +65,8 @@ export const ManuscriptImportPanel = ({
       ) : null}
       <Button
         title="Import document…"
-        variant="primary"
-        accent="blue"
+        variant={variant}
+        accent={variant === 'primary' ? 'blue' : 'default'}
         size="small"
         onClick={() =>
           openManuscriptImportWizard({

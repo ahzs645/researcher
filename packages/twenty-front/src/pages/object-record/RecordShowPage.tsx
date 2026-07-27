@@ -7,6 +7,7 @@ import { TimelineActivityContext } from '@/activities/timeline-activities/contex
 import { MAIN_CONTEXT_STORE_INSTANCE_ID } from '@/context-store/constants/MainContextStoreInstanceId';
 import { ContextStoreComponentInstanceContext } from '@/context-store/states/contexts/ContextStoreComponentInstanceContext';
 import { isLayoutCustomizationModeEnabledState } from '@/layout-customization/states/isLayoutCustomizationModeEnabledState';
+import { ManuscriptRecordHeaderActions } from '@/local-db/research/components/ManuscriptRecordHeaderActions';
 import { MainContainerLayoutWithSidePanel } from '@/object-record/components/MainContainerLayoutWithSidePanel';
 import { RecordComponentInstanceContextsWrapper } from '@/object-record/components/RecordComponentInstanceContextsWrapper';
 import { PageLayoutRecordPageRenderer } from '@/object-record/record-show/components/PageLayoutRecordPageRenderer';
@@ -55,6 +56,10 @@ export const RecordShowPage = () => {
               objectNameSingular={objectNameSingular}
               objectRecordId={objectRecordId}
             >
+              <ManuscriptRecordHeaderActions
+                objectNameSingular={objectNameSingular}
+                recordId={objectRecordId}
+              />
               <RecordShowCommandMenu />
               {!isLayoutCustomizationModeEnabled && <SidePanelToggleButton />}
             </RecordShowPageHeader>

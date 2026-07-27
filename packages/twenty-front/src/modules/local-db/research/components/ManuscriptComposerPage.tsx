@@ -1,14 +1,21 @@
 import { styled } from '@linaria/react';
-import { useEffect, useState } from 'react';
-import { isDefined } from 'twenty-shared/utils';
-import { H1Title } from 'twenty-ui/display';
+import { useEffect } from 'react';
+import { AppPath } from 'twenty-shared/types';
+import { getAppPath, isDefined } from 'twenty-shared/utils';
+import { H1Title, IconListDetails } from 'twenty-ui/display';
 import { Button, type SelectOption, TabButton } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { addTwentyDataBridgeModeToPath } from '@/local-db/twenty-local/addTwentyDataBridgeModeToPath';
 import { ManuscriptExportTab } from '@/local-db/research/components/composer/ManuscriptExportTab';
 import { ManuscriptListLanding } from '@/local-db/research/components/composer/ManuscriptListLanding';
 import { ManuscriptImportWizardRoot } from '@/local-db/research/import-wizard/components/ManuscriptImportWizardRoot';
-import { useOpenManuscriptImportWizard } from '@/local-db/research/import-wizard/hooks/useOpenManuscriptImportWizard';
+import { useImportAsNewManuscript } from '@/local-db/research/import-wizard/hooks/useImportAsNewManuscript';
+import {
+  MANUSCRIPT_OBJECT_NAME_PLURAL,
+  MANUSCRIPT_OBJECT_NAME_SINGULAR,
+} from '@/local-db/research/manuscriptComposerRoute';
+import { resolveManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptTableStyleOptions';
 import { ManuscriptFiguresTab } from '@/local-db/research/components/composer/ManuscriptFiguresTab';
 import { ManuscriptReferencesTab } from '@/local-db/research/components/composer/ManuscriptReferencesTab';
 import { ManuscriptSubmissionTab } from '@/local-db/research/components/composer/ManuscriptSubmissionTab';
@@ -20,7 +27,6 @@ import {
 } from '@/local-db/research/components/composer/manuscriptComposerTabState';
 import { ManuscriptWriteTab } from '@/local-db/research/components/composer/ManuscriptWriteTab';
 import { useManuscriptComposer } from '@/local-db/research/components/composer/useManuscriptComposer';
-import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { Select } from '@/ui/input/components/Select';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 
@@ -36,12 +42,25 @@ const COMPOSER_TABS: Array<{
   { id: 'export', title: 'Export' },
 ];
 
-const MANUSCRIPT_TABLE_STYLES: ManuscriptTableStyle[] = [
-  'ACADEMIC',
-  'GRID',
-  'SHADED_HEADER',
-  'BORDERLESS',
-];
+// The Manuscripts object list is the door into the composer, so both the
+// "All manuscripts" escape hatch and the per-paper "Record details" link go
+// back to the CRM surface rather than to a second, composer-local list.
+// Resolved per render, not at module scope: the bridge mode is only known once
+// the app has booted.
+const buildManuscriptsIndexPath = () =>
+  addTwentyDataBridgeModeToPath(
+    getAppPath(AppPath.RecordIndexPage, {
+      objectNamePlural: MANUSCRIPT_OBJECT_NAME_PLURAL,
+    }),
+  );
+
+const buildManuscriptRecordPath = (manuscriptId: string) =>
+  addTwentyDataBridgeModeToPath(
+    getAppPath(AppPath.RecordShowPage, {
+      objectNameSingular: MANUSCRIPT_OBJECT_NAME_SINGULAR,
+      objectRecordId: manuscriptId,
+    }),
+  );
 
 const StyledPage = styled.div`
   box-sizing: border-box;
@@ -105,9 +124,11 @@ export const ManuscriptComposerPage = () => {
     manuscriptComposerTab,
   );
   const composer = useManuscriptComposer();
-  const { openManuscriptImportWizard } = useOpenManuscriptImportWizard();
-  const [isImportingNewManuscript, setIsImportingNewManuscript] =
-    useState(false);
+  const { isImportingNewManuscript, startImportAsNewManuscript } =
+    useImportAsNewManuscript({
+      onImported: composer.selectManuscript,
+      onManuscriptsChanged: () => void composer.refetchImportedRecords(),
+    });
   const manuscriptOptions: SelectOption<string>[] = composer.manuscripts.map(
     (manuscript) => ({
       value: manuscript.id,
@@ -124,36 +145,6 @@ export const ManuscriptComposerPage = () => {
     manuscriptComposerTab,
     setManuscriptComposerTab,
   ]);
-
-  // The importer only appends into an existing manuscript, so importing a new
-  // paper means creating the shell first and discarding it if nothing lands.
-  const startImportAsNewManuscript = async () => {
-    if (isImportingNewManuscript) return;
-    setIsImportingNewManuscript(true);
-    const newManuscriptId = await composer.createManuscript();
-    if (!isDefined(newManuscriptId)) {
-      setIsImportingNewManuscript(false);
-      return;
-    }
-    let didImport = false;
-    openManuscriptImportWizard({
-      manuscriptId: newManuscriptId,
-      manuscriptName: 'Untitled manuscript',
-      existingSectionCount: 0,
-      existingSections: [],
-      existingReferences: [],
-      existingFigureRefKeys: [],
-      onChanged: () => {
-        didImport = true;
-        void composer.refetchImportedRecords();
-      },
-      onClosed: () => {
-        setIsImportingNewManuscript(false);
-        if (didImport) composer.selectManuscript(newManuscriptId);
-        else void composer.deleteManuscript(newManuscriptId);
-      },
-    });
-  };
 
   // Nothing selected yet: list the papers instead of guessing which one to open.
   if (!isDefined(composer.manuscript)) {
@@ -206,10 +197,9 @@ export const ManuscriptComposerPage = () => {
   const effectiveJournal =
     linkedJournal ??
     composer.journals.find((journal) => journal.id === composer.journalId);
-  const exportTableStyle =
-    MANUSCRIPT_TABLE_STYLES.find(
-      (tableStyle) => tableStyle === composer.effectiveStyle.tableStyle,
-    ) ?? 'ACADEMIC';
+  const exportTableStyle = resolveManuscriptTableStyle(
+    composer.effectiveStyle.tableStyle,
+  );
   const selectRelatedSection = (sectionId: string) => {
     composer.selectSection(sectionId);
     setManuscriptComposerTab(
@@ -230,7 +220,14 @@ export const ManuscriptComposerPage = () => {
               title="All manuscripts"
               variant="secondary"
               size="small"
-              onClick={composer.clearManuscriptSelection}
+              to={buildManuscriptsIndexPath()}
+            />
+            <Button
+              title="Record details"
+              Icon={IconListDetails}
+              variant="secondary"
+              size="small"
+              to={buildManuscriptRecordPath(manuscript.id)}
             />
             <Select
               dropdownId="compose-manuscript-select"

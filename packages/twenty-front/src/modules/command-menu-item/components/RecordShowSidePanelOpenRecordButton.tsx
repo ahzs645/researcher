@@ -6,6 +6,7 @@ import { sidePanelNavigationStackState } from '@/side-panel/states/sidePanelNavi
 import { SidePanelPageComponentInstanceContext } from '@/side-panel/states/contexts/SidePanelPageComponentInstanceContext';
 import { MAIN_CONTEXT_STORE_INSTANCE_ID } from '@/context-store/constants/MainContextStoreInstanceId';
 import { contextStoreRecordShowParentViewComponentState } from '@/context-store/states/contextStoreRecordShowParentViewComponentState';
+import { getManuscriptComposerPathForRecord } from '@/local-db/research/manuscriptComposerRoute';
 import { CoreObjectNameSingular, AppPath } from 'twenty-shared/types';
 import { recordStoreFamilyState } from '@/object-record/record-store/states/recordStoreFamilyState';
 import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
@@ -22,6 +23,7 @@ import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSe
 import { t } from '@lingui/core/macro';
 import { useStore } from 'jotai';
 import { useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { isDefined } from 'twenty-shared/utils';
 import { IconBrowserMaximize } from 'twenty-ui/display';
 import { Button } from 'twenty-ui/input';
@@ -74,6 +76,14 @@ export const RecordShowSidePanelOpenRecordButton = ({
   const store = useStore();
 
   const navigate = useNavigateApp();
+  const navigateToPath = useNavigate();
+
+  // Manuscripts are edited in the composer, not on the CRM record page, so
+  // "Open" resolves to the composer deep link for that object only.
+  const manuscriptComposerPath = getManuscriptComposerPathForRecord({
+    objectNameSingular,
+    recordId,
+  });
 
   const commandMenuId = useAvailableComponentInstanceIdOrThrow(
     CommandMenuComponentInstanceContext,
@@ -82,6 +92,16 @@ export const RecordShowSidePanelOpenRecordButton = ({
   const { closeDropdown } = useCloseDropdown();
 
   const handleOpenRecord = useCallback(() => {
+    if (isDefined(manuscriptComposerPath)) {
+      store.set(sidePanelNavigationStackState.atom, []);
+      navigateToPath(manuscriptComposerPath);
+      closeDropdown(
+        getSidePanelCommandMenuDropdownIdFromCommandMenuId(commandMenuId),
+      );
+      closeSidePanelMenu();
+      return;
+    }
+
     const tabIdToOpen =
       activeTabId === 'home'
         ? objectNameSingular === CoreObjectNameSingular.Note ||
@@ -118,7 +138,9 @@ export const RecordShowSidePanelOpenRecordButton = ({
     activeTabId,
     closeSidePanelMenu,
     closeDropdown,
+    manuscriptComposerPath,
     navigate,
+    navigateToPath,
     objectNameSingular,
     parentViewState,
     recordId,
@@ -139,7 +161,7 @@ export const RecordShowSidePanelOpenRecordButton = ({
 
   return (
     <Button
-      title={t`Open`}
+      title={isDefined(manuscriptComposerPath) ? t`Open in composer` : t`Open`}
       variant="primary"
       accent="blue"
       size="small"

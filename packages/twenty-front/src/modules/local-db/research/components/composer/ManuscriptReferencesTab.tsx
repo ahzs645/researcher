@@ -279,6 +279,7 @@ export const ManuscriptReferencesTab = ({
         sections={sections}
         references={references}
         usage={usage}
+        onDeleteReference={(reference) => onDeleteReferences([reference.id])}
         onSelectSection={onSelectSection}
         onUpdateReference={onUpdateReference}
       />

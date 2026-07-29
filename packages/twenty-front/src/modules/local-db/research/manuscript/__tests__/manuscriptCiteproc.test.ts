@@ -7,6 +7,10 @@ import {
   VENDORED_CSL_STYLES,
 } from '@/local-db/research/manuscript/manuscriptCiteproc';
 import { buildManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
+import {
+  bibliographyHtmlToInlineRuns,
+  bibliographyHtmlToMarkdown,
+} from '@/local-db/research/manuscript/manuscriptCitations';
 import { prepareManuscriptBundleWithCsl } from '@/local-db/research/manuscript/manuscriptCslIntegration';
 import { type ReferenceLike } from '@/local-db/research/manuscript/manuscriptTypes';
 import { getResearchSeedRecords } from '@/local-db/research/researchSeedRecords';
@@ -103,6 +107,32 @@ describe('manuscript citeproc', () => {
     for (const styleId of new Set(seededStyleIds)) {
       expect(resolveCslStyleXml(styleId)).not.toBeNull();
     }
+  });
+
+  it('keeps CSL italics available as markdown and inline runs', async () => {
+    const engine = await createCiteprocEngine({
+      styleId: 'apa',
+      references: [reference('doe', 'Doe', 2020, 'First')],
+    });
+    expect(engine).not.toBeNull();
+    // The citation pass registers the items the bibliography then renders.
+    formatCslCitations(engine!, [['doe']]);
+    const entries = formatCslBibliography(engine!);
+    const htmlEntry = entries.find((entry) => entry.html !== undefined);
+    expect(htmlEntry).toBeDefined();
+    // APA italicizes the journal name; the html must expose it…
+    expect(htmlEntry!.html).toContain('<i>');
+    // …so the markdown export keeps the italics…
+    expect(bibliographyHtmlToMarkdown(htmlEntry!.html!)).toContain(
+      '*Journal of Testing*',
+    );
+    // …and the DOCX/PDF block path gets an italic run.
+    const runs = bibliographyHtmlToInlineRuns(htmlEntry!.html!);
+    expect(
+      runs.some(
+        (run) => run.styles.italic === true && run.text.includes('Journal of Testing'),
+      ),
+    ).toBe(true);
   });
 
   it('builds an engine for every vendored style', async () => {

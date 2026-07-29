@@ -21,6 +21,7 @@ import {
   type FigureLike,
   type JournalStyle,
   type ReferenceLike,
+  type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 
 import '@blocknote/core/fonts/inter.css';
@@ -39,10 +40,12 @@ type ManuscriptSectionEditorProps = {
   figures: FigureLike[];
   initialMarkdown: string;
   minimumHeight?: number;
-  onPersist: (markdown: string) => void;
+  onPersist: (markdown: string) => void | Promise<void>;
+  onPersistError?: () => void;
   onReady?: () => void;
   references: ReferenceLike[];
   readonly?: boolean;
+  sections?: SectionLike[];
   style: JournalStyle;
 };
 
@@ -75,9 +78,11 @@ export const ManuscriptSectionEditor = ({
   initialMarkdown,
   minimumHeight,
   onPersist,
+  onPersistError,
   onReady,
   references,
   readonly = false,
+  sections,
   style,
 }: ManuscriptSectionEditorProps) => {
   const { colorScheme } = useContext(ThemeContext);
@@ -106,7 +111,9 @@ export const ManuscriptSectionEditor = ({
   }, []);
 
   const persist = useDebouncedCallback(() => {
-    mountedOnPersist(manuscriptBlocksToMarkdown(editor, editor.document));
+    void Promise.resolve(
+      mountedOnPersist(manuscriptBlocksToMarkdown(editor, editor.document)),
+    ).catch(onPersistError);
   }, 800);
 
   useEffect(
@@ -121,6 +128,7 @@ export const ManuscriptSectionEditor = ({
       citationKeys={citationKeys}
       figures={figures}
       references={references}
+      sections={sections}
       style={style}
     >
       <StyledEditorShell

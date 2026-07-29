@@ -6,9 +6,13 @@ import { pdf, Text } from '@react-pdf/renderer';
 import { createElement } from 'react';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
-import { buildBlockNoteDocument } from './manuscriptBlocks';
+import {
+  buildBlockNoteDocument,
+  EQUATION_LABEL_SEPARATOR,
+} from './manuscriptBlocks';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
+import { latexToUnicodeText } from './manuscriptMathText';
 
 // PDF export from the *same* BlockNote block model the DOCX exporter builds —
 // BlockNote's PDF exporter renders blocks to a react-pdf document, which
@@ -32,6 +36,33 @@ export const exportManuscriptToPdfBlob = async (
   type PdfTextElement = Awaited<
     ReturnType<(typeof pdfDefaultSchemaMappings.blockMapping)['paragraph']>
   >;
+  // react-pdf cannot typeset math, so equation paragraphs (LaTeX source plus
+  // the invisible label separator) go through the Unicode linearizer — the
+  // same readable fallback, instead of printing raw LaTeX.
+  const plainText = (content: unknown): string => {
+    if (!Array.isArray(content)) return '';
+    return content
+      .map((inline) => {
+        if (typeof inline !== 'object' || inline === null) return '';
+        const record = inline as { type?: string; text?: string; content?: unknown };
+        if (record.type === 'text') return record.text ?? '';
+        return plainText(record.content);
+      })
+      .join('');
+  };
+  const equationChildren = (block: {
+    content?: unknown;
+  }): { equation: string; label?: string } => {
+    const [latex, label] = plainText(block.content).split(
+      EQUATION_LABEL_SEPARATOR,
+    );
+    return {
+      equation: latexToUnicodeText(latex ?? ''),
+      ...(label !== undefined && label.trim().length > 0
+        ? { label: label.trim() }
+        : {}),
+    };
+  };
   const paragraphMapping: (typeof pdfDefaultSchemaMappings.blockMapping)['paragraph'] =
     (block, exporter) =>
       // The exporter declares ReactElement<Text> instead of TextProps. The
@@ -48,7 +79,15 @@ export const exportManuscriptToPdfBlob = async (
               ? 'justify'
               : block.props.textAlignment,
         },
-        children: exporter.transformInlineContent(block.content),
+        children:
+          block.props.textColor === 'equation'
+            ? (() => {
+                const { equation, label } = equationChildren(block);
+                return label !== undefined
+                  ? `${equation}    ${label}`
+                  : equation;
+              })()
+            : exporter.transformInlineContent(block.content),
       }) as unknown as PdfTextElement;
   const headingMapping: (typeof pdfDefaultSchemaMappings.blockMapping)['heading'] =
     (block, exporter) =>

@@ -96,6 +96,7 @@ describe('createSubmissionPackage', () => {
     expect(result.includedFiles).toEqual(
       expect.arrayContaining([
         'cover-letter.docx',
+        'manifest.xml',
         'metadata.json',
         'references.json',
         'research-paper.json',
@@ -112,6 +113,24 @@ describe('createSubmissionPackage', () => {
     expect(strFromU8(packageFiles['submission-readiness.txt'])).toContain(
       'submission-extras/FUNDING.txt',
     );
+
+    // The JATS article and the MECA manifest are well-formed XML, and the
+    // manifest types the manuscript, JATS, extras and metadata correctly.
+    const jatsFilename = result.includedFiles.find((filename) =>
+      filename.endsWith('.jats.xml'),
+    );
+    expect(jatsFilename).toBeDefined();
+    const manifest = strFromU8(packageFiles['manifest.xml']);
+    for (const xml of [manifest, strFromU8(packageFiles[jatsFilename!])]) {
+      expect(
+        new DOMParser().parseFromString(xml, 'text/xml').querySelector(
+          'parsererror',
+        ),
+      ).toBeNull();
+    }
+    expect(manifest).toContain('type="manuscript"');
+    expect(manifest).toContain('type="cover-letter"');
+    expect(manifest).toContain('href="submission-extras/FUNDING.txt"');
 
     expect(
       result.includedFiles.some((filename) =>

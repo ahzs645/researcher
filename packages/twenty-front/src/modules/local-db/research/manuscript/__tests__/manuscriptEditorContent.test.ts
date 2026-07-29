@@ -319,4 +319,32 @@ describe('manuscript editor content', () => {
       ),
     ).toBe(markdown);
   });
+
+  it('round-trips raw HTML blocks, anchors and comments verbatim', () => {
+    const cases = [
+      '<a id="fig:arpes"></a>\n\nCaption text.',
+      'Before.\n\n<!-- a working comment -->\n\nAfter.',
+      '<div class="note">\n  <p>Raw HTML block</p>\n</div>\n\nAfter.',
+      '<table>\n  <tr><td>Raw</td></tr>\n</table>',
+    ];
+    for (const markdown of cases) {
+      expect(
+        manuscriptBlocksToMarkdown(
+          testEditor,
+          markdownToManuscriptBlocks(testEditor, markdown),
+        ),
+      ).toBe(markdown);
+    }
+  });
+
+  it('does not stash html-ish lines inside fenced code or inline text', () => {
+    const markdown =
+      '```html\n<div>already fenced</div>\n```\n\nUse <b>bold</b> inline.';
+    expect(
+      manuscriptBlocksToMarkdown(
+        testEditor,
+        markdownToManuscriptBlocks(testEditor, markdown),
+      ),
+    ).toBe(markdown);
+  });
 });

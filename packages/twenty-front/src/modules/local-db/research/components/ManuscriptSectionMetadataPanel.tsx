@@ -8,6 +8,7 @@ import {
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
+import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { Select } from '@/ui/input/components/Select';
 
 type ManuscriptSectionMetadataPanelProps = {
@@ -113,6 +114,7 @@ export const ManuscriptSectionMetadataPanel = ({
   onChanged,
 }: ManuscriptSectionMetadataPanelProps) => {
   const { updateOneRecord } = useUpdateOneRecord();
+  const { enqueueErrorSnackBar } = useSnackBar();
   const peers = sections.filter(
     (candidate) => candidate.placement === section.placement,
   );
@@ -123,7 +125,11 @@ export const ManuscriptSectionMetadataPanel = ({
       objectNameSingular: 'manuscriptSection',
       idToUpdate: section.id,
       updateOneRecordInput: values,
-    }).then(onChanged);
+    })
+      .then(onChanged)
+      .catch(() =>
+        enqueueErrorSnackBar({ message: 'Could not save section metadata' }),
+      );
   };
 
   const moveSection = (direction: -1 | 1) => {
@@ -142,7 +148,11 @@ export const ManuscriptSectionMetadataPanel = ({
         idToUpdate: adjacent.id,
         updateOneRecordInput: { orderIndex: currentOrder },
       }),
-    ]).then(onChanged);
+    ])
+      .then(onChanged)
+      .catch(() =>
+        enqueueErrorSnackBar({ message: 'Could not reorder section' }),
+      );
   };
 
   const changePlacement = (placement: string) => {
@@ -171,7 +181,9 @@ export const ManuscriptSectionMetadataPanel = ({
           updateOneRecordInput: { placement: assetPlacement },
         }),
       ),
-    ]).then(onChanged);
+    ])
+      .then(onChanged)
+      .catch(() => enqueueErrorSnackBar({ message: 'Could not move section' }));
   };
 
   return (

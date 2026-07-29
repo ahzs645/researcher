@@ -21,6 +21,7 @@ type ManuscriptFigureListItemProps = {
   isAdding: boolean;
   isExpanded: boolean;
   tableStyle: ManuscriptTableStyle;
+  onDelete: () => void;
   onToggle: () => void;
   onSelectSection: (sectionId: string) => void;
   onPersist: (values: Record<string, unknown>) => void;
@@ -133,6 +134,7 @@ export const ManuscriptFigureListItem = ({
   isAdding,
   isExpanded,
   tableStyle,
+  onDelete,
   onToggle,
   onSelectSection,
   onPersist,
@@ -208,6 +210,7 @@ export const ManuscriptFigureListItem = ({
           isAdding={isAdding}
           tableStyle={tableStyle}
           onPersist={onPersist}
+          onDelete={onDelete}
           onMove={onMove}
           onPlotTable={onPlotTable}
           onReplaceImage={onReplaceImage}

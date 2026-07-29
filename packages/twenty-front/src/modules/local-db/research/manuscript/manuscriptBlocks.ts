@@ -7,6 +7,7 @@ import {
 import { isNonEmptyString } from '@sniptt/guards';
 
 import { type ManuscriptBundle } from './manuscriptAssembly';
+import { bibliographyHtmlToInlineRuns } from './manuscriptCitations';
 import { formatManuscriptAuthorLine } from './manuscriptContributors';
 import { resolveFigureImage } from './manuscriptImages';
 import { wrapManuscriptScript } from './manuscriptScripts';
@@ -496,7 +497,13 @@ const bundleToBlocks = (
         break;
       case 'bibliography':
         for (const entry of node.entries) {
-          blocks.push({ type: 'paragraph', content: entry.text });
+          blocks.push({
+            type: 'paragraph',
+            content:
+              entry.html !== undefined
+                ? bibliographyHtmlToInlineRuns(entry.html)
+                : entry.text,
+          });
         }
         break;
     }

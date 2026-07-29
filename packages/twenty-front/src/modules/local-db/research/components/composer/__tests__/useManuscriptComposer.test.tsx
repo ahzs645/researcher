@@ -382,4 +382,106 @@ describe('useManuscriptComposer submission persistence', () => {
       );
     });
   });
+
+  it('duplicates the manuscript record and remaps copied figure sections', async () => {
+    const sourceSection = {
+      id: 'source-section-id',
+      name: 'Results',
+      sectionType: 'RESULTS',
+      placement: 'MAIN',
+      content: 'Findings',
+      orderIndex: 0,
+      level: 1,
+      wordCount: 1,
+      includeInExport: true,
+      status: 'DRAFTING',
+      manuscript: { id: manuscript.id },
+    };
+    const sourceFigure = {
+      id: 'source-figure-id',
+      name: 'Exposure trend',
+      refKey: 'fig:trend',
+      assetKind: 'FIGURE',
+      placement: 'MAIN',
+      imageSource: 'URL',
+      imageUrl: 'https://example.com/trend.png',
+      orderIndex: 0,
+      section: { id: sourceSection.id },
+      manuscript: { id: manuscript.id },
+    };
+    const sourceReference = {
+      id: 'source-reference-id',
+      name: 'A source',
+      citationKey: 'source2026',
+      authors: 'Source, Sam',
+      year: 2026,
+      manuscript: { id: manuscript.id },
+    };
+    const createManuscript = jest.fn(async () => ({ id: 'copy-id' }));
+    const createSection = jest.fn(async () => ({ id: 'copy-section-id' }));
+    const createFigure = jest.fn(async () => ({ id: 'copy-figure-id' }));
+    const createReference = jest.fn(async () => ({ id: 'copy-reference-id' }));
+    jest
+      .mocked(useFindManyRecords)
+      .mockImplementation(({ objectNameSingular }) => {
+        if (objectNameSingular === 'manuscript') {
+          return findManyResult([manuscript], manuscriptRefetch);
+        }
+        if (objectNameSingular === 'journalTemplate') {
+          return findManyResult([journal], journalRefetch);
+        }
+        if (objectNameSingular === 'manuscriptSection') {
+          return findManyResult([sourceSection], sectionRefetch);
+        }
+        if (objectNameSingular === 'figure') {
+          return findManyResult([sourceFigure], figureRefetch);
+        }
+        return findManyResult([sourceReference], referenceRefetch);
+      });
+    jest.mocked(useCreateOneRecord).mockImplementation(
+      ({ objectNameSingular }) =>
+        ({
+          createOneRecord:
+            objectNameSingular === 'manuscript'
+              ? createManuscript
+              : objectNameSingular === 'manuscriptSection'
+                ? createSection
+                : objectNameSingular === 'figure'
+                  ? createFigure
+                  : createReference,
+        }) as unknown as ReturnType<typeof useCreateOneRecord>,
+    );
+    const { result } = renderHook(() => useManuscriptComposer());
+
+    await act(async () => {
+      await expect(result.current.duplicateCurrentManuscript()).resolves.toBe(
+        'copy-id',
+      );
+    });
+
+    expect(createManuscript).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Test manuscript (copy)',
+        status: 'DRAFTING',
+      }),
+    );
+    expect(createSection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manuscriptId: 'copy-id',
+        name: 'Results',
+      }),
+    );
+    expect(createFigure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manuscriptId: 'copy-id',
+        sectionId: 'copy-section-id',
+      }),
+    );
+    expect(createReference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manuscriptId: 'copy-id',
+        citationKey: 'source2026',
+      }),
+    );
+  });
 });

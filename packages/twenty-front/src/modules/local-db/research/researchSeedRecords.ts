@@ -1239,7 +1239,7 @@ const journalTemplateRecords = (): SeedRecord[] => [
     abstractWordLimit: 250,
     twoColumn: true,
     referenceDocUrl: '',
-    outputFormats: ['DOCX', 'PDF', 'LATEX'],
+    outputFormats: ['DOCX', 'PDF'],
     notes: 'Two-column; bracketed numeric citations.',
   }),
   makeRecord('journalTemplate', 'conference-ieee', 3, {
@@ -1256,7 +1256,7 @@ const journalTemplateRecords = (): SeedRecord[] => [
     abstractWordLimit: 200,
     twoColumn: true,
     referenceDocUrl: '',
-    outputFormats: ['DOCX', 'PDF', 'LATEX'],
+    outputFormats: ['DOCX', 'PDF'],
     notes: 'Generic two-column conference proceedings format.',
   }),
   makeRecord('journalTemplate', 'mdpi-ijerph', 4, {

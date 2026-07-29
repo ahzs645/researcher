@@ -3,6 +3,7 @@ import { isDefined } from 'twenty-shared/utils';
 
 import {
   buildCitationContext,
+  bibliographyHtmlToMarkdown,
   formatBibliography,
   renderCitationsInText,
   renderCitationsInTextWithLabels,
@@ -18,7 +19,11 @@ import {
   stripAssetPlacementMarkers,
 } from './manuscriptAssetPlacement';
 import { figureHasImage, figureToMarkdown } from './manuscriptImages';
-import { numberAssets } from './manuscriptNumbering';
+import {
+  buildAssetLookup,
+  numberAssets,
+  resolveAssetKey,
+} from './manuscriptNumbering';
 import {
   type FigureLike,
   type JournalStyle,
@@ -51,14 +56,15 @@ export const countWords = (markdown: string): number => {
   const text = stripAssetPlacementMarkers(markdown)
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ') // images
     .replace(/\[[#@][^\]]*\]/g, ' ') // cross-refs / citations
+    .replace(/\$\$[\s\S]*?\$\$|\$[^$\n]*\$/g, ' ') // math
     .replace(/[#*_>`~-]/g, ' ')
     .trim();
   return text.length === 0 ? 0 : text.split(/\s+/).length;
 };
 
 const keyOf = (reference: ReferenceLike): string =>
-  isNonEmptyString(reference.citationKey)
-    ? reference.citationKey
+  isNonEmptyString(reference.citationKey?.trim())
+    ? (reference.citationKey as string).trim()
     : reference.id;
 
 const compareSections = (a: SectionLike, b: SectionLike): number => {
@@ -205,14 +211,34 @@ export const buildManuscriptBundle = (
   const { manuscript, style } = input;
   const warnings: string[] = [];
 
-  const numbered = numberAssets(input.figures, style);
-  const figuresByRefKey = new Map<string, NumberedFigure>();
+  // The metadata already renders title-page fields, and a generated
+  // bibliography replaces an imported source References section.
+  const sections = manuscriptSectionsForExport(input);
+
+  const numbered = numberAssets(input.figures, style, sections);
+  const assetLookup = buildAssetLookup(numbered);
+  // Cross-refs inside captions and table grids resolve like in-text ones, and
+  // their citation keys count toward the bibliography — otherwise a citation
+  // that lives only in a caption never reaches the reference list.
+  const numberedResolvedText = numbered.map((figure) => {
+    const resolvedFigure = { ...figure };
+    for (const field of ['caption', 'tableData'] as const) {
+      const value = figure[field];
+      if (!isNonEmptyString(value)) continue;
+      const { text, unresolvedKeys } = resolveCrossReferences(value, numbered);
+      for (const key of unresolvedKeys) {
+        warnings.push(
+          `${figure.label} ${field === 'caption' ? 'caption' : 'table'} references unknown asset [#${key}]`,
+        );
+      }
+      if (text !== value) resolvedFigure[field] = text;
+    }
+    return resolvedFigure;
+  });
   const figuresBySection = new Map<string, NumberedFigure[]>();
   const unanchoredMain: NumberedFigure[] = [];
   const supplementFigures: NumberedFigure[] = [];
-  for (const figure of numbered) {
-    figuresByRefKey.set(figure.refKey ?? figure.id, figure);
-    figuresByRefKey.set(figure.id, figure);
+  for (const figure of numberedResolvedText) {
     if (isNonEmptyString(figure.sectionId)) {
       const list = figuresBySection.get(figure.sectionId) ?? [];
       list.push(figure);
@@ -236,10 +262,6 @@ export const buildManuscriptBundle = (
     referencesByKey.set(keyOf(reference), reference);
   }
 
-  // The metadata already renders title-page fields, and a generated
-  // bibliography replaces an imported source References section.
-  const sections = manuscriptSectionsForExport(input);
-
   // First pass: resolve cross-refs and collect citation keys in document order.
   const rendered = sections.map((section) =>
     renderSectionBody(section, numbered, warnings),
@@ -248,6 +270,19 @@ export const buildManuscriptBundle = (
   const seenKeys = new Set<string>();
   for (const part of rendered) {
     for (const key of part.citationKeys) {
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        citedKeys.push(key);
+      }
+    }
+  }
+  // Citations that live only inside a caption or a table grid still count —
+  // otherwise they would be dropped from the bibliography entirely.
+  for (const figure of numberedResolvedText) {
+    for (const key of [
+      ...extractCitationKeys(figure.caption ?? ''),
+      ...extractCitationKeys(figure.tableData ?? ''),
+    ]) {
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
         citedKeys.push(key);
@@ -285,16 +320,28 @@ export const buildManuscriptBundle = (
   const placedFigureIds = new Set<string>();
   let mainWords = 0;
 
-  sections.forEach((section, index) => {
-    const part = rendered[index];
-    const withCitations =
-      citationFormatting === undefined
-        ? renderCitationsInText(part.resolved, context)
-        : renderCitationsInTextWithLabels(
-            part.resolved,
+  const renderCitationText =
+    citationFormatting === undefined
+      ? (text: string) => renderCitationsInText(text, context)
+      : (text: string) =>
+          renderCitationsInTextWithLabels(
+            text,
             citationFormatting.labelsByCluster,
             context,
           );
+  const renderFigureText = (figure: NumberedFigure): NumberedFigure => ({
+    ...figure,
+    ...(isNonEmptyString(figure.caption)
+      ? { caption: renderCitationText(figure.caption) }
+      : {}),
+    ...(isNonEmptyString(figure.tableData)
+      ? { tableData: renderCitationText(figure.tableData) }
+      : {}),
+  });
+
+  sections.forEach((section, index) => {
+    const part = rendered[index];
+    const withCitations = renderCitationText(part.resolved);
     const anchored = figuresBySection.get(section.id) ?? [];
 
     const isSupplement = section.placement === 'SUPPLEMENT';
@@ -313,7 +360,7 @@ export const buildManuscriptBundle = (
         nodeTarget.push({ kind: 'prose', markdown: segment.markdown });
         continue;
       }
-      const figure = figuresByRefKey.get(segment.refKey);
+      const figure = resolveAssetKey(segment.refKey, assetLookup);
       if (figure === undefined) {
         warnings.push(
           `Section "${part.heading}" has an unknown asset placement [[asset:${segment.refKey}]]`,
@@ -327,8 +374,8 @@ export const buildManuscriptBundle = (
         continue;
       }
       placedFigureIds.add(figure.id);
-      target.push(figureToMarkdown(figure));
-      nodeTarget.push(figureNode(figure));
+      target.push(figureToMarkdown(renderFigureText(figure)));
+      nodeTarget.push(figureNode(renderFigureText(figure)));
     }
 
     // A section assignment remains a convenient coarse anchor. An explicit
@@ -337,8 +384,8 @@ export const buildManuscriptBundle = (
     for (const figure of anchored) {
       if (placedFigureIds.has(figure.id)) continue;
       placedFigureIds.add(figure.id);
-      target.push(figureToMarkdown(figure));
-      nodeTarget.push(figureNode(figure));
+      target.push(figureToMarkdown(renderFigureText(figure)));
+      nodeTarget.push(figureNode(renderFigureText(figure)));
     }
 
     // Word-limit checks.
@@ -357,13 +404,13 @@ export const buildManuscriptBundle = (
 
   for (const figure of unanchoredMain) {
     if (placedFigureIds.has(figure.id)) continue;
-    mainBlocks.push(figureToMarkdown(figure));
-    mainNodes.push(figureNode(figure));
+    mainBlocks.push(figureToMarkdown(renderFigureText(figure)));
+    mainNodes.push(figureNode(renderFigureText(figure)));
   }
   for (const figure of supplementFigures) {
     if (placedFigureIds.has(figure.id)) continue;
-    supplementBlocks.push(figureToMarkdown(figure));
-    supplementNodes.push(figureNode(figure));
+    supplementBlocks.push(figureToMarkdown(renderFigureText(figure)));
+    supplementNodes.push(figureNode(renderFigureText(figure)));
   }
 
   // Bibliography.
@@ -374,7 +421,13 @@ export const buildManuscriptBundle = (
     const bibBlock = [
       '## References',
       '',
-      ...bibliography.map((entry) => entry.text),
+      // Citeproc entries carry CSL markup (italics); fallback entries are
+      // already plain markdown.
+      ...bibliography.map((entry) =>
+        entry.html !== undefined
+          ? bibliographyHtmlToMarkdown(entry.html)
+          : entry.text,
+      ),
     ].join('\n');
     mainBlocks.push(bibBlock);
     mainNodes.push({ kind: 'heading', level: 2, text: 'References' });

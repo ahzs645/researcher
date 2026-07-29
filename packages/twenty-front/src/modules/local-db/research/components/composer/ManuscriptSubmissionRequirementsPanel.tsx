@@ -102,6 +102,33 @@ export const ManuscriptSubmissionRequirementsPanel = ({
   );
   const [pendingValues, setPendingValues] =
     useState<SubmissionRequirementValues>({});
+  // Re-sync when the resolved items change underneath us (journal switch, an
+  // import, a "keep journal value" write) — except keys with a debounced save
+  // still in flight, which would otherwise lose their just-typed text.
+  const itemsSignature = JSON.stringify(
+    initialItems.map((item) => [item.definition.key, item.value]),
+  );
+  const [lastItemsSignature, setLastItemsSignature] = useState(itemsSignature);
+  useEffect(() => {
+    if (itemsSignature === lastItemsSignature) return;
+    setLastItemsSignature(itemsSignature);
+    setValues((current) => {
+      const next = Object.fromEntries(
+        initialItems.map((item) => [item.definition.key, item.value]),
+      );
+      for (const key of Object.keys(pendingValues)) {
+        if (current[key] !== undefined) next[key] = current[key];
+      }
+      return next;
+    });
+  }, [initialItems, itemsSignature, lastItemsSignature, pendingValues]);
+
+  useEffect(() => {
+    setRequirements(
+      parseJournalSubmissionRequirements(template?.submissionRequirements),
+    );
+  }, [template?.submissionRequirements]);
+
   const persistValues = useDebouncedCallback(
     (changedValues: SubmissionRequirementValues) => {
       setPendingValues({});

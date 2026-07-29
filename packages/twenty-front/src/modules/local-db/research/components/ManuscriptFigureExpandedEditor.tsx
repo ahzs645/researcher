@@ -28,6 +28,7 @@ type ManuscriptFigureExpandedEditorProps = {
   peerCount: number;
   isAdding: boolean;
   tableStyle: ManuscriptTableStyle;
+  onDelete: () => void;
   onPersist: (values: Record<string, unknown>) => void;
   onMove: (direction: -1 | 1) => void;
   onPlotTable: () => void;
@@ -158,6 +159,7 @@ export const ManuscriptFigureExpandedEditor = ({
   peerCount,
   isAdding,
   tableStyle,
+  onDelete,
   onPersist,
   onMove,
   onPlotTable,
@@ -189,9 +191,13 @@ export const ManuscriptFigureExpandedEditor = ({
         label: section.name ?? section.sectionType ?? 'Section',
       })),
   ];
-  const copyText = (value: string, message: string) => {
-    void navigator.clipboard.writeText(value);
-    enqueueSuccessSnackBar({ message });
+  const copyText = async (value: string, message: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      enqueueSuccessSnackBar({ message });
+    } catch {
+      enqueueErrorSnackBar({ message: 'Could not copy to clipboard' });
+    }
   };
   const updateCaptionDraft = (nextCaption: string) => {
     setNameDraft((currentName) =>
@@ -305,7 +311,7 @@ export const ManuscriptFigureExpandedEditor = ({
             variant="secondary"
             size="small"
             onClick={() =>
-              copyText(
+              void copyText(
                 `[#${figure.refKey ?? figure.id}]`,
                 `Copied live reference for ${figure.label}`,
               )
@@ -316,11 +322,18 @@ export const ManuscriptFigureExpandedEditor = ({
             variant="secondary"
             size="small"
             onClick={() =>
-              copyText(
+              void copyText(
                 assetPlacementMarker(figure.refKey ?? figure.id),
                 `Copied placement linker for ${figure.label}`,
               )
             }
+          />
+          <Button
+            title="Delete"
+            variant="secondary"
+            accent="danger"
+            size="small"
+            onClick={onDelete}
           />
         </StyledActions>
       </StyledAssetEditor>

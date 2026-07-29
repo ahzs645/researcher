@@ -10,7 +10,10 @@ import { type NumberedFigure } from './manuscriptTypes';
 // Pure: resolution takes the numbered-asset lookup and returns rewritten text
 // plus any keys that didn't resolve, so the UI can flag dangling references.
 
-const CROSS_REF_PATTERN = /\[#([A-Za-z0-9:_-]+)\]/g;
+// The key charset matches the editor's tokenizer (manuscriptEditorContent):
+// anything but whitespace or a closing bracket. A stricter pattern here made
+// a refKey with a dot a live chip in the editor but literal text in exports.
+const CROSS_REF_PATTERN = /\[#([^\]\s]+)\]/g;
 // Citation keys: @key inside the text, key starts with a letter/digit and may
 // contain word chars, ':', '.', '-'. Matches Pandoc citekeys.
 const CITATION_PATTERN = /@([A-Za-z0-9_][\w:.-]*)/g;
@@ -47,21 +50,6 @@ export const extractCitationKeys = (markdown: string): string[] => {
   const keys: string[] = [];
   const seen = new Set<string>();
   for (const match of markdown.matchAll(CITATION_PATTERN)) {
-    const key = match[1];
-    if (!seen.has(key)) {
-      seen.add(key);
-      keys.push(key);
-    }
-  }
-  return keys;
-};
-
-// All cross-reference keys used in the text (to detect figures that are defined
-// but never referenced, or referenced but missing).
-export const extractCrossReferenceKeys = (markdown: string): string[] => {
-  const keys: string[] = [];
-  const seen = new Set<string>();
-  for (const match of markdown.matchAll(CROSS_REF_PATTERN)) {
     const key = match[1];
     if (!seen.has(key)) {
       seen.add(key);

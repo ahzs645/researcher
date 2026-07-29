@@ -21,6 +21,7 @@ type ManuscriptReferenceRowProps = {
   editor?: React.ReactNode;
   figures: FigureLike[];
   isEditing: boolean;
+  onDelete: () => void;
   onEdit: () => void;
   onSelectSection: (sectionId: string) => void;
   reference: ReferenceLike;
@@ -181,6 +182,7 @@ export const ManuscriptReferenceRow = ({
   editor,
   figures,
   isEditing,
+  onDelete,
   onEdit,
   onSelectSection,
   reference,
@@ -233,6 +235,13 @@ export const ManuscriptReferenceRow = ({
           onClick={onEdit}
         >
           Edit
+        </StyledEditButton>
+        <StyledEditButton
+          type="button"
+          data-reference-hover-action
+          onClick={onDelete}
+        >
+          Delete
         </StyledEditButton>
         <UsageBadge
           type="button"

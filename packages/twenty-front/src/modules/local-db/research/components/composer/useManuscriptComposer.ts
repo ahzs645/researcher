@@ -34,7 +34,11 @@ import {
   parseManuscriptTitlePageExtraLines,
   serializeManuscriptTitlePageExtraLines,
 } from '@/local-db/research/manuscript/manuscriptTitlePage';
-import { buildSectionSkeleton, missingScaffoldSections, type ScaffoldSectionDraft } from '@/local-db/research/manuscript/manuscriptScaffold';
+import {
+  buildSectionSkeleton,
+  missingScaffoldSections,
+  type ScaffoldSectionDraft,
+} from '@/local-db/research/manuscript/manuscriptScaffold';
 import {
   type JournalStyle,
   type ReferenceLike,
@@ -84,6 +88,15 @@ export const useManuscriptComposer = () => {
   const { createOneRecord: createSection } = useCreateOneRecord({
     objectNameSingular: 'manuscriptSection',
   });
+  const { createOneRecord: createFigure } = useCreateOneRecord({
+    objectNameSingular: 'figure',
+  });
+  const { createOneRecord: createManuscript } = useCreateOneRecord({
+    objectNameSingular: 'manuscript',
+  });
+  const { createOneRecord: createReference } = useCreateOneRecord({
+    objectNameSingular: 'reference',
+  });
   const { deleteOneRecord: deleteSectionRecord } = useDeleteOneRecord({
     objectNameSingular: 'manuscriptSection',
   });
@@ -101,6 +114,7 @@ export const useManuscriptComposer = () => {
     searchParams.get('section'),
   );
   const [journalId, setJournalId] = useState<string | null>(null);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [enqueueSubmissionSave] = useState(() => {
     let pendingSave = Promise.resolve();
     return (operation: () => Promise<void>) => {
@@ -290,9 +304,12 @@ export const useManuscriptComposer = () => {
     };
   }, [manuscript, sections, figures, references]);
 
-  const persistSectionById = (sectionIdToPersist: string, markdown: string) => {
+  const persistSectionById = async (
+    sectionIdToPersist: string,
+    markdown: string,
+  ) => {
     if (!sections.some((section) => section.id === sectionIdToPersist)) return;
-    void updateOneRecord({
+    await updateOneRecord({
       objectNameSingular: 'manuscriptSection',
       idToUpdate: sectionIdToPersist,
       updateOneRecordInput: {
@@ -304,7 +321,7 @@ export const useManuscriptComposer = () => {
 
   const persistSection = (markdown: string) => {
     if (!isDefined(selectedSection)) return;
-    persistSectionById(selectedSection.id, markdown);
+    return persistSectionById(selectedSection.id, markdown);
   };
 
   const persistCitationLinkedSections = async (
@@ -445,14 +462,174 @@ export const useManuscriptComposer = () => {
     await refetchSections();
   };
 
+  const duplicateCurrentManuscript = async (): Promise<string> => {
+    if (!isDefined(manuscript)) {
+      throw new Error('A manuscript is required before duplicating');
+    }
+    if (isDuplicating) {
+      throw new Error('This manuscript is already being duplicated');
+    }
+
+    setIsDuplicating(true);
+    try {
+      const duplicate = (await createManuscript({
+        name: `${manuscript.name ?? 'Untitled manuscript'} (copy)`,
+        status: manuscript.status ?? 'DRAFTING',
+        ...(isDefined(manuscript.manuscriptType)
+          ? { manuscriptType: manuscript.manuscriptType }
+          : {}),
+        ...(isDefined(manuscript.targetVenue)
+          ? { targetVenue: manuscript.targetVenue }
+          : {}),
+        ...(isDefined(manuscript.doi) ? { doi: manuscript.doi } : {}),
+        ...(isDefined(manuscript.authorLine)
+          ? { authorLine: manuscript.authorLine }
+          : {}),
+        ...(isDefined(manuscript.affiliations)
+          ? { affiliations: manuscript.affiliations }
+          : {}),
+        ...(isDefined(manuscript.titlePageExtraLines)
+          ? { titlePageExtraLines: manuscript.titlePageExtraLines }
+          : {}),
+        ...(isDefined(manuscript.correspondingAuthor)
+          ? { correspondingAuthor: manuscript.correspondingAuthor }
+          : {}),
+        ...(isDefined(manuscript.supplementTitle)
+          ? { supplementTitle: manuscript.supplementTitle }
+          : {}),
+        ...(isDefined(manuscript.supplementAuthorLine)
+          ? { supplementAuthorLine: manuscript.supplementAuthorLine }
+          : {}),
+        ...(isDefined(manuscript.supplementAffiliations)
+          ? { supplementAffiliations: manuscript.supplementAffiliations }
+          : {}),
+        ...(isDefined(manuscript.exportStyleOverrides)
+          ? { exportStyleOverrides: manuscript.exportStyleOverrides }
+          : {}),
+        ...(isDefined(manuscript.submissionExtras)
+          ? { submissionExtras: manuscript.submissionExtras }
+          : {}),
+        ...(isDefined(manuscript.coverLetter)
+          ? { coverLetter: manuscript.coverLetter }
+          : {}),
+        ...(isDefined(manuscript.highlights)
+          ? { highlights: manuscript.highlights }
+          : {}),
+        ...(isDefined(manuscript.competingInterests)
+          ? { competingInterests: manuscript.competingInterests }
+          : {}),
+        ...(isDefined(manuscript.suggestedReviewers)
+          ? { suggestedReviewers: manuscript.suggestedReviewers }
+          : {}),
+        ...(isDefined(manuscript.targetJournal?.id)
+          ? { targetJournalId: manuscript.targetJournal.id }
+          : {}),
+      })) as { id?: string } | undefined;
+      const duplicateId = duplicate?.id;
+      if (!isDefined(duplicateId)) {
+        throw new Error('Could not create a manuscript copy');
+      }
+
+      const duplicateSectionIds = new Map<string, string>();
+      for (const section of sections) {
+        const created = (await createSection({
+          name: section.name ?? 'Untitled section',
+          manuscriptId: duplicateId,
+          sectionType: section.sectionType ?? 'OTHER',
+          placement: section.placement ?? 'MAIN',
+          content: section.content ?? '',
+          orderIndex: section.orderIndex ?? 0,
+          level: section.level ?? 1,
+          wordCount: section.wordCount ?? countWords(section.content ?? ''),
+          status: section.status ?? 'NOT_STARTED',
+          includeInExport: section.includeInExport ?? true,
+          ...(isDefined(section.wordLimit)
+            ? { wordLimit: section.wordLimit }
+            : {}),
+        })) as { id?: string } | undefined;
+        if (isDefined(created?.id)) {
+          duplicateSectionIds.set(section.id, created.id);
+        }
+      }
+
+      for (const figure of figures) {
+        await createFigure({
+          name: figure.name ?? 'Untitled figure',
+          manuscriptId: duplicateId,
+          refKey: figure.refKey ?? `asset-${Date.now()}`,
+          sourceLabel: figure.sourceLabel,
+          caption: figure.caption,
+          assetKind: figure.assetKind ?? 'FIGURE',
+          placement: figure.placement ?? 'MAIN',
+          imageSource: figure.imageSource ?? 'NONE',
+          imageUrl: figure.imageUrl,
+          altText: figure.altText,
+          credit: figure.credit,
+          widthPercent: figure.widthPercent,
+          orderIndex: figure.orderIndex ?? 0,
+          tableData: figure.tableData,
+          equationLatex: figure.equationLatex,
+          ...(isDefined(figure.datasetId)
+            ? { datasetId: figure.datasetId }
+            : {}),
+          ...(isDefined(figure.sectionId) &&
+          duplicateSectionIds.has(figure.sectionId)
+            ? { sectionId: duplicateSectionIds.get(figure.sectionId) }
+            : {}),
+        });
+      }
+
+      for (const reference of references) {
+        await createReference({
+          name: reference.name,
+          manuscriptId: duplicateId,
+          citationKey: reference.citationKey,
+          cslType: reference.cslType,
+          authors: reference.authors,
+          year: reference.year,
+          containerTitle: reference.containerTitle,
+          volume: reference.volume,
+          issue: reference.issue,
+          pages: reference.pages,
+          doi: reference.doi,
+          url: reference.url,
+          cslJson: reference.cslJson,
+          notes: reference.notes,
+        });
+      }
+
+      await Promise.all([
+        refetchManuscripts(),
+        refetchSections(),
+        refetchFigures(),
+        refetchReferences(),
+      ]);
+      setManuscriptId(duplicateId);
+      setSectionId(null);
+      setJournalId(manuscript.targetJournal?.id ?? journals[0]?.id ?? null);
+      updateSelectionParams(duplicateId, null);
+      return duplicateId;
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
   const deleteSection = async (sectionIdToDelete: string) => {
     await deleteSectionRecord(sectionIdToDelete);
     await refetchSections();
+    if (sectionId === sectionIdToDelete && isDefined(manuscript)) {
+      setSectionId(null);
+      updateSelectionParams(manuscript.id, null);
+    }
   };
 
   const deleteSections = async (sectionIdsToDelete: string[]) => {
     await Promise.all(sectionIdsToDelete.map(deleteSectionRecord));
     await refetchSections();
+    if (isDefined(sectionId) && sectionIdsToDelete.includes(sectionId)) {
+      setSectionId(null);
+      if (isDefined(manuscript)) updateSelectionParams(manuscript.id, null);
+    }
   };
 
   const refetchReferencesAndVerifyDeleted = async (
@@ -620,19 +797,27 @@ export const useManuscriptComposer = () => {
     if (!isDefined(manuscript)) {
       throw new Error('A manuscript is required before selecting a journal');
     }
+    // Optimistic select, rolled back on failure — otherwise the Export tab
+    // formats for a journal the Submission checklist never adopted.
+    const previousJournalId = journalId;
     setJournalId(targetJournal.id);
     if (manuscript.targetJournal?.id === targetJournal.id) return;
 
-    await updateOneRecord({
-      objectNameSingular: 'manuscript',
-      idToUpdate: manuscript.id,
-      updateOneRecordInput: {
-        targetJournalId: targetJournal.id,
-        ...(isDefined(targetJournal.name)
-          ? { targetVenue: targetJournal.name }
-          : {}),
-      },
-    });
+    try {
+      await updateOneRecord({
+        objectNameSingular: 'manuscript',
+        idToUpdate: manuscript.id,
+        updateOneRecordInput: {
+          targetJournalId: targetJournal.id,
+          ...(isDefined(targetJournal.name)
+            ? { targetVenue: targetJournal.name }
+            : {}),
+        },
+      });
+    } catch (error) {
+      setJournalId(previousJournalId);
+      throw error;
+    }
   };
 
   const refetchCurrentManuscript = async (): Promise<ManuscriptRecord> => {
@@ -850,6 +1035,7 @@ export const useManuscriptComposer = () => {
     references,
     selectedSection,
     journalId,
+    isDuplicating,
     style,
     styleOverrides,
     effectiveStyle,
@@ -868,6 +1054,7 @@ export const useManuscriptComposer = () => {
     saveSubmissionDetails,
     saveTitlePageDetails,
     addKeywordsSection,
+    duplicateCurrentManuscript,
     deleteSection,
     deleteSections,
     deleteReferences,

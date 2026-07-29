@@ -28,6 +28,7 @@ import {
 import { ManuscriptWriteTab } from '@/local-db/research/components/composer/ManuscriptWriteTab';
 import { useManuscriptComposer } from '@/local-db/research/components/composer/useManuscriptComposer';
 import { Select } from '@/ui/input/components/Select';
+import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 
 const COMPOSER_TABS: Array<{
@@ -124,6 +125,7 @@ export const ManuscriptComposerPage = () => {
     manuscriptComposerTab,
   );
   const composer = useManuscriptComposer();
+  const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const { isImportingNewManuscript, startImportAsNewManuscript } =
     useImportAsNewManuscript({
       onImported: composer.selectManuscript,
@@ -229,6 +231,26 @@ export const ManuscriptComposerPage = () => {
               size="small"
               to={buildManuscriptRecordPath(manuscript.id)}
             />
+            <Button
+              title="Duplicate"
+              variant="secondary"
+              size="small"
+              disabled={composer.isDuplicating}
+              onClick={() =>
+                void composer
+                  .duplicateCurrentManuscript()
+                  .then(() =>
+                    enqueueSuccessSnackBar({
+                      message: 'Created a complete manuscript copy',
+                    }),
+                  )
+                  .catch(() =>
+                    enqueueErrorSnackBar({
+                      message: 'Could not duplicate manuscript',
+                    }),
+                  )
+              }
+            />
             <Select
               dropdownId="compose-manuscript-select"
               options={manuscriptOptions}
@@ -269,6 +291,11 @@ export const ManuscriptComposerPage = () => {
               void composer.changeSectionPlacement(sectionId, placement)
             }
             onPersistSection={composer.persistSection}
+            onPersistSectionError={() =>
+              enqueueErrorSnackBar({
+                message: 'Could not save section changes',
+              })
+            }
             onAddSection={(draft) => void composer.addSection(draft)}
             onScaffoldSections={() => void composer.scaffoldSections()}
             missingScaffold={composer.missingScaffold}

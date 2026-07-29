@@ -301,4 +301,103 @@ describe('countWords', () => {
   it('ignores markdown, images, citations and cross-refs', () => {
     expect(countWords('Two words [@k] [#fig:x] ![a](b)')).toBe(2);
   });
+
+  it('does not count math as words', () => {
+    expect(countWords('The ratio $C_i/C_{ref}$ grows')).toBe(3);
+    expect(countWords('Inline $$\\frac{a}{b}$$ done')).toBe(2);
+  });
+});
+
+describe('cross-reference consistency with the editor tokenizer', () => {
+  const dotted = buildManuscriptBundle({
+    manuscript: { id: 'm', name: 'T' },
+    style: { citationMode: 'NUMERIC' },
+    sections: [
+      {
+        id: 's',
+        name: 'Results',
+        sectionType: 'RESULTS',
+        placement: 'MAIN',
+        orderIndex: 0,
+        content:
+          'Shown in [#fig:fig.2.6] and placed here.\n\n[[asset:Fig:Fig.2.6]]',
+      },
+    ],
+    figures: [
+      {
+        id: 'f',
+        refKey: 'fig.2.6',
+        name: 'Factors',
+        caption: 'Factor profiles.',
+        assetKind: 'FIGURE',
+        placement: 'MAIN',
+        sectionId: 's',
+        imageUrl: 'https://example.org/f.png',
+        imageSource: 'URL',
+      },
+    ],
+    references: [],
+  });
+
+  it('resolves refKeys containing dots in both text and placement markers', () => {
+    expect(dotted.mainMarkdown).toContain('Shown in Figure 1');
+    expect(dotted.warnings).toHaveLength(0);
+  });
+
+  it('resolves citation keys and refs inside captions and tables', () => {
+    const captioned = buildManuscriptBundle({
+      manuscript: { id: 'm', name: 'T' },
+      style: { citationMode: 'NUMERIC' },
+      sections: [
+        {
+          id: 's',
+          name: 'Results',
+          sectionType: 'RESULTS',
+          placement: 'MAIN',
+          orderIndex: 0,
+          content: 'Body.',
+        },
+      ],
+      figures: [
+        {
+          id: 't',
+          refKey: 'grid',
+          name: 'Grid',
+          caption: 'Adapted from [@smith2020]; compare [#fig:other].',
+          assetKind: 'TABLE',
+          placement: 'MAIN',
+          sectionId: 's',
+          tableData: '| A |\n| --- |\n| 1 |',
+        },
+        {
+          id: 'o',
+          refKey: 'other',
+          name: 'Other',
+          caption: 'Other figure.',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+          sectionId: 's',
+          imageUrl: 'https://example.org/o.png',
+          imageSource: 'URL',
+        },
+      ],
+      references: [
+        {
+          id: 'r1',
+          citationKey: 'smith2020',
+          name: 'A study',
+          authors: 'Smith, J.',
+          year: 2020,
+        },
+      ],
+    });
+
+    // The caption-only citation reaches the bibliography and gets a number…
+    expect(captioned.warnings).toHaveLength(0);
+    expect(captioned.bibliography.length).toBe(1);
+    // …the caption's cross-ref resolves…
+    expect(captioned.mainMarkdown).toContain('compare Figure 1.');
+    // …and the caption's citation renders as a number, not a raw token.
+    expect(captioned.mainMarkdown).toContain('Adapted from [1];');
+  });
 });

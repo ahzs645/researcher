@@ -19,7 +19,8 @@ type ManuscriptWriteEditorProps = {
   figures: FigureLike[];
   minimumEditorHeight?: number;
   onEditorReady: () => void;
-  onPersistSection: (markdown: string) => void;
+  onPersistSection: (markdown: string) => void | Promise<void>;
+  onPersistSectionError: () => void;
   onSectionMetadataChanged: () => void;
   references: ReferenceLike[];
   section?: SectionLike;
@@ -70,6 +71,7 @@ export const ManuscriptWriteEditor = ({
   minimumEditorHeight,
   onEditorReady,
   onPersistSection,
+  onPersistSectionError,
   onSectionMetadataChanged,
   references,
   section,
@@ -102,8 +104,10 @@ export const ManuscriptWriteEditor = ({
             initialMarkdown={section.content ?? ''}
             minimumHeight={minimumEditorHeight}
             onPersist={onPersistSection}
+            onPersistError={onPersistSectionError}
             onReady={onEditorReady}
             references={references}
+            sections={sections}
             style={style}
           />
           {isDefined(wordStatus) ? (

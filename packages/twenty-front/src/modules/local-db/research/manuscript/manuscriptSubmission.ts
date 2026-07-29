@@ -2,6 +2,7 @@ import { isNonEmptyString } from '@sniptt/guards';
 import { isDefined } from 'twenty-shared/utils';
 
 import { countWords, type ManuscriptBundle } from './manuscriptAssembly';
+import { isImageDataUrl } from './manuscriptImages';
 import { resolveSubmissionRequirementItems } from './manuscriptSubmissionRequirements';
 
 export type SubmissionMaterials = {
@@ -197,16 +198,23 @@ export const validateSubmission = (
     });
   }
 
+  // What the package actually ships: uploaded data-URL images only — tables,
+  // equations and caption-only placeholders never become figure files.
+  const packagedImageCount = bundle.numberedFigures.filter(
+    (figure) =>
+      figure.assetKind !== 'TABLE' && isImageDataUrl(figure.imageUrl),
+  ).length;
+
   for (const artifact of style.requiredArtifacts ?? []) {
     if (artifact === 'SEPARATE_FIGURES') {
       checks.push({
         id: `artifact-${artifact}`,
         label: artifactLabel(artifact),
         detail:
-          bundle.stats.figureCount > 0
-            ? `${bundle.stats.figureCount} assets will be included in the package`
-            : 'No main-text figures are connected',
-        severity: bundle.stats.figureCount > 0 ? 'READY' : 'WARNING',
+          packagedImageCount > 0
+            ? `${packagedImageCount} image file(s) will be included in the package`
+            : 'No uploaded figure images are connected',
+        severity: packagedImageCount > 0 ? 'READY' : 'WARNING',
       });
       continue;
     }
@@ -230,8 +238,20 @@ export const validateSubmission = (
       },
       materials,
     );
+    // Artifact keys already carry their own ERROR check when the profile
+    // lists them as requiredArtifacts — reporting a second WARNING for the
+    // same missing material reads as two different problems.
+    const artifactCheckedKeys = new Set(style.requiredArtifacts ?? []);
     for (const item of requirementItems) {
       if (!item.required || item.filled) continue;
+      if (artifactCheckedKeys.has(item.definition.key)) continue;
+      // Satisfied by the package contents rather than a free-text field.
+      if (
+        item.definition.key === 'SEPARATE_FIGURES' &&
+        packagedImageCount > 0
+      ) {
+        continue;
+      }
       checks.push({
         id: `journal-requirement-${item.definition.key}`,
         label: item.definition.label,

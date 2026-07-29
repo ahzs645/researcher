@@ -3,6 +3,7 @@ import {
   type FigureLike,
   type JournalStyle,
   type NumberedFigure,
+  type SectionLike,
 } from './manuscriptTypes';
 
 // Auto-numbering for figures, tables, schemes… — the modular heart of "how
@@ -67,22 +68,64 @@ const compareAssets = (a: FigureLike, b: FigureLike): number => {
 
 // Number a set of assets. Returns them in render order, each carrying its number
 // + rendered label. Counters are keyed by (kind, main|supplement).
+//
+// With `numberingScope: 'PER_SECTION'` (and the manuscript's sections), main
+// assets number per top-level section — Figure 1.1, 1.2 — each kind restarting
+// its counter per chapter. Supplements keep their continuous prefixed sequence.
 export const numberAssets = (
   figures: FigureLike[],
   style: JournalStyle = {},
+  sections?: SectionLike[],
 ): NumberedFigure[] => {
   const supplementPrefix = style.supplementPrefix ?? 'S';
+  const perSection =
+    style.numberingScope === 'PER_SECTION' &&
+    sections !== undefined &&
+    sections.length > 0;
+  // Chapter index per section id: increments at each level-1 main section;
+  // deeper subsections belong to the chapter they sit under.
+  const chapterBySectionId = new Map<string, number>();
+  if (perSection) {
+    const mainSections = sections
+      .filter((section) => (section.placement ?? 'MAIN') === 'MAIN')
+      .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+    let chapter = 0;
+    for (const section of mainSections) {
+      if ((section.level ?? 1) <= 1) chapter += 1;
+      chapterBySectionId.set(section.id, chapter);
+    }
+  }
   const counters = new Map<string, number>();
   const ordered = [...figures].sort(compareAssets);
+  // Figures not anchored to a section join the chapter of the previous
+  // anchored figure; anything before the first chapter joins chapter 1.
+  let lastChapter = 1;
 
   return ordered.map((figure) => {
     const kind = asKind(figure.assetKind);
     const supplement = isSupplement(figure.placement);
-    const counterKey = `${kind}:${supplement ? 'S' : 'M'}`;
+    let chapter = 0;
+    if (perSection && !supplement) {
+      const assigned =
+        figure.sectionId === null || figure.sectionId === undefined
+          ? undefined
+          : chapterBySectionId.get(figure.sectionId);
+      if (assigned !== undefined && assigned > 0) lastChapter = assigned;
+      chapter = lastChapter;
+    }
+    const counterKey = supplement
+      ? `${kind}:S`
+      : perSection
+        ? `${kind}:M:${chapter}`
+        : `${kind}:M`;
     const next = (counters.get(counterKey) ?? 0) + 1;
     counters.set(counterKey, next);
 
-    const number = supplement ? `${supplementPrefix}${next}` : `${next}`;
+    const number = supplement
+      ? `${supplementPrefix}${next}`
+      : perSection
+        ? `${chapter}.${next}`
+        : `${next}`;
     const label = applyTemplate(labelFormatFor(kind, style), number);
     const crossRefLabel = applyTemplate(crossRefFormatFor(kind, style), number);
 

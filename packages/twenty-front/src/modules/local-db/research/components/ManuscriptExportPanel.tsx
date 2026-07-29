@@ -139,6 +139,12 @@ export const ManuscriptExportPanel = ({
       enqueueSuccessSnackBar({
         message: `Exported ${files.length} file(s) via ${exporter.label}`,
       });
+    } catch (error) {
+      enqueueErrorSnackBar({
+        message: `Export via ${exporter.label} failed${
+          error instanceof Error ? `: ${error.message}` : ''
+        }`,
+      });
     } finally {
       setActiveExportId(null);
     }

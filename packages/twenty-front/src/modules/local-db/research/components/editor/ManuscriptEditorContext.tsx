@@ -25,6 +25,7 @@ import {
   type JournalStyle,
   type NumberedFigure,
   type ReferenceLike,
+  type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 
 type ManuscriptEditorContextValue = {
@@ -45,6 +46,7 @@ type ManuscriptEditorContextProviderProps = {
   citationKeys: string[];
   figures: FigureLike[];
   references: ReferenceLike[];
+  sections?: SectionLike[];
   style: JournalStyle;
 };
 
@@ -56,6 +58,7 @@ export const ManuscriptEditorContextProvider = ({
   citationKeys,
   figures,
   references,
+  sections,
   style,
 }: ManuscriptEditorContextProviderProps) => {
   const [citationLabelsByKey, setCitationLabelsByKey] = useState(
@@ -81,14 +84,14 @@ export const ManuscriptEditorContextProvider = ({
       referencesByKey,
       style.citationMode,
     );
-    const numberedFigures = numberAssets(figures, style);
+    const numberedFigures = numberAssets(figures, style, sections);
     return {
       assetLookup: buildAssetLookup(numberedFigures),
       citationContext: context,
       figures: numberedFigures,
       references,
     };
-  }, [citationKeys, figures, references, style]);
+  }, [citationKeys, figures, references, sections, style]);
   const citationStyleId = style.citationStyleId;
   const referenceSignature = references
     .map((reference) => `${reference.id}:${reference.cslJson ?? ''}`)

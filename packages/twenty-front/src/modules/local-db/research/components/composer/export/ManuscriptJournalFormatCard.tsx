@@ -10,6 +10,7 @@ import {
   StyledExportCardTitle,
 } from '@/local-db/research/components/composer/export/ManuscriptExportCard';
 import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
+import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { Select } from '@/ui/input/components/Select';
 
 type JournalOption = { id: string; name: string };
@@ -22,7 +23,7 @@ type ManuscriptJournalFormatCardProps = {
   selectedJournalId: string | null;
   onCitationStyleChange: (citationStyleKey: string) => void;
   onResetStyleOverrides: () => void;
-  onSelectJournal: (journalId: string) => void;
+  onSelectJournal: (journalId: string) => void | Promise<void>;
 };
 
 const StyledFields = styled.div`
@@ -64,6 +65,7 @@ export const ManuscriptJournalFormatCard = ({
   onSelectJournal,
 }: ManuscriptJournalFormatCardProps) => {
   const { enqueueDialog } = useDialogManager();
+  const { enqueueErrorSnackBar } = useSnackBar();
   const journalOptions: SelectOption<string>[] = journals.map((journal) => ({
     value: journal.id,
     label: journal.name,
@@ -88,7 +90,13 @@ export const ManuscriptJournalFormatCard = ({
           fullWidth
           options={journalOptions}
           value={selectedJournalId ?? journalOptions[0]?.value}
-          onChange={onSelectJournal}
+          onChange={(journalId) =>
+            void Promise.resolve(onSelectJournal(journalId)).catch(() =>
+              enqueueErrorSnackBar({
+                message: 'Could not switch the journal format',
+              }),
+            )
+          }
         />
         <ManuscriptCitationStylePicker
           disabled={isSavingSettings}

@@ -305,7 +305,9 @@ export const Citation = createReactInlineContentSpec(
           replaceInlineNodeWithText(
             editor,
             element,
-            inlineContent.props.citationKey,
+            `[${citationKeysFromProp(inlineContent.props.citationKey)
+              .map((key) => `@${key}`)
+              .join('; ')}]`,
           )
         }
       />

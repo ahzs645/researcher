@@ -127,7 +127,7 @@ describe('buildBridgeDataSource', () => {
     expect(journalTemplates.totalCount).toBeGreaterThan(1);
   });
 
-  it('refreshes built-in journal styles for returning workspaces', async () => {
+  it('keeps user edits to built-in journal styles while backfilling new fields', async () => {
     setUrl('/');
     window.sessionStorage.clear();
     const dataSource = getBridgeDataSource();
@@ -140,12 +140,15 @@ describe('buildBridgeDataSource', () => {
     if (atmosphericEnvironment === undefined) {
       throw new Error('Expected Atmospheric Environment starter profile');
     }
+    const { lineSpacing: _seedLineSpacing, ...seedWithoutLineSpacing } =
+      atmosphericEnvironment as Record<string, unknown>;
     await dataSource.db.table('journalTemplate').bulkPut([
       {
-        ...atmosphericEnvironment,
-        frontMatterLayout: 'INLINE',
+        ...seedWithoutLineSpacing,
+        // A user edit from a previous session — must survive the boot sync.
         fontFamily: 'Inter',
-        lineSpacing: 1.5,
+        submissionRequirements:
+          '[{"key":"HIGHLIGHTS","required":false,"label":"Highlights"}]',
       },
     ]);
 
@@ -162,14 +165,15 @@ describe('buildBridgeDataSource', () => {
         'elsevier-atmospheric-environment',
     ) as
       | {
-          frontMatterLayout?: string;
           fontFamily?: string;
           lineSpacing?: number;
+          submissionRequirements?: string;
         }
       | undefined;
 
-    expect(refreshed?.frontMatterLayout).toBe('SEPARATE_TITLE_PAGE');
-    expect(refreshed?.fontFamily).toBe('Times New Roman');
+    // User-set fields survive; fields the record never set are backfilled.
+    expect(refreshed?.fontFamily).toBe('Inter');
+    expect(refreshed?.submissionRequirements).toContain('HIGHLIGHTS');
     expect(refreshed?.lineSpacing).toBe(2);
   });
 

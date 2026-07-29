@@ -40,6 +40,7 @@ type ManuscriptWriteTabProps = {
     placement: SectionPlacement,
   ) => void;
   onPersistSection: (markdown: string) => void;
+  onPersistSectionError: () => void;
   onAddSection: (draft?: ScaffoldSectionDraft) => void;
   onScaffoldSections: () => void;
   missingScaffold: ScaffoldSectionDraft[];
@@ -116,6 +117,7 @@ export const ManuscriptWriteTab = ({
   onSelectSection,
   onChangeSectionPlacement,
   onPersistSection,
+  onPersistSectionError,
   onAddSection,
   onScaffoldSections,
   missingScaffold,
@@ -188,9 +190,7 @@ export const ManuscriptWriteTab = ({
               const value = event.target.value;
               if (value === '') return;
               onAddSection(
-                value === 'blank'
-                  ? undefined
-                  : missingScaffold[Number(value)],
+                value === 'blank' ? undefined : missingScaffold[Number(value)],
               );
             }}
           >
@@ -240,6 +240,7 @@ export const ManuscriptWriteTab = ({
           minimumEditorHeight={minimumEditorHeight}
           onEditorReady={() => setMinimumEditorHeight(undefined)}
           onPersistSection={onPersistSection}
+          onPersistSectionError={onPersistSectionError}
           onSectionMetadataChanged={onSectionMetadataChanged}
           references={references}
           section={selectedWritingSection}

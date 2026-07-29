@@ -311,6 +311,92 @@ const startsEscapableToken = (markdown: string, index: number): boolean =>
   markdown.startsWith('[#', index) ||
   markdown[index] === '$';
 
+// --- Raw-block preservation ---------------------------------------------
+// BlockNote's Markdown parser deletes raw HTML (block tags, anchors, and
+// comments vanish entirely — probed against @blocknote/core). Before parsing,
+// runs of raw HTML are stashed inside a sentinel code block, which round-trips
+// verbatim; on serialize the sentinel blocks are unwrapped back to their exact
+// source lines. Anything else the parser normalizes (pipe-table separators,
+// footnote syntax, definition lists) keeps its content, so only true deletion
+// is stashed.
+export const RAW_BLOCK_SENTINEL = '<!--manuscript-raw-->';
+const RAW_BLOCK_END = '<!--/manuscript-raw-->';
+
+const RAW_BLOCK_TAG =
+  /^<(?:address|article|aside|blockquote|canvas|details|dialog|div|dl|embed|fieldset|figcaption|figure|footer|form|frame|frameset|header|hr|iframe|main|nav|object|ol|picture|pre|section|style|script|table|ul|video|audio)\b/i;
+const RAW_ANCHOR_LINE = /^<a\s[^>]*(?:><\/a>|\/>)\s*$/i;
+
+const isFenceLine = (line: string): boolean => /^\s*(```|~~~)/.test(line);
+
+const stashRawBlocks = (markdown: string): string => {
+  const lines = markdown.split('\n');
+  const out: string[] = [];
+  let index = 0;
+  let inFence = false;
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (isFenceLine(line)) {
+      inFence = !inFence;
+      out.push(line);
+      index += 1;
+      continue;
+    }
+    if (!inFence && trimmed.length > 0) {
+      const isComment = trimmed.startsWith('<!--');
+      const isRawHtml =
+        trimmed.startsWith('<') &&
+        (isComment || RAW_ANCHOR_LINE.test(trimmed) || RAW_BLOCK_TAG.test(trimmed));
+      if (isRawHtml) {
+        const rawLines: string[] = [];
+        // HTML blocks run to the first blank line; comments stop after `-->`.
+        while (index < lines.length) {
+          const current = lines[index];
+          if (current.trim().length === 0) break;
+          if (isFenceLine(current)) break;
+          rawLines.push(current);
+          index += 1;
+          if (isComment && current.includes('-->')) break;
+        }
+        out.push('```', RAW_BLOCK_SENTINEL, ...rawLines, RAW_BLOCK_END, '```');
+        continue;
+      }
+    }
+    out.push(line);
+    index += 1;
+  }
+  return out.join('\n');
+};
+
+const unstashRawBlocks = (markdown: string): string => {
+  const lines = markdown.split('\n');
+  const out: string[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (
+      /^```\w*\s*$/.test(lines[index]) &&
+      lines[index + 1]?.trim() === RAW_BLOCK_SENTINEL
+    ) {
+      index += 2;
+      while (
+        index < lines.length &&
+        lines[index].trim() !== RAW_BLOCK_END
+      ) {
+        out.push(lines[index]);
+        index += 1;
+      }
+      index += 1; // the end sentinel
+      if (index < lines.length && lines[index].trim().startsWith('```')) {
+        index += 1; // the closing fence
+      }
+      continue;
+    }
+    out.push(lines[index]);
+    index += 1;
+  }
+  return out.join('\n');
+};
+
 const protectEscapedTokens = (markdown: string): string => {
   let protectedMarkdown = '';
   for (let index = 0; index < markdown.length; index += 1) {
@@ -355,13 +441,17 @@ export const markdownToManuscriptBlocks = <TBlock>(
   markdown: string,
 ): TBlock[] =>
   manuscriptTokensToNodes(
-    editor.tryParseMarkdownToBlocks(protectEscapedTokens(markdown)),
+    editor.tryParseMarkdownToBlocks(
+      protectEscapedTokens(stashRawBlocks(markdown)),
+    ),
   );
 
 export const manuscriptBlocksToMarkdown = <TBlock>(
   editor: MarkdownEditor<TBlock>,
   document: TBlock[],
 ): string =>
-  restoreEscapedTokens(
-    editor.blocksToMarkdownLossy(manuscriptNodesToTokens(document)),
+  unstashRawBlocks(
+    restoreEscapedTokens(
+      editor.blocksToMarkdownLossy(manuscriptNodesToTokens(document)),
+    ),
   );

@@ -26,8 +26,10 @@ import {
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
+import { useDeleteOneRecord } from '@/object-record/hooks/useDeleteOneRecord';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
+import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
 const MANUSCRIPT_TABLE_STYLES: ManuscriptTableStyle[] = [
@@ -63,11 +65,15 @@ export const ManuscriptFigurePanel = ({
   const { createOneRecord } = useCreateOneRecord({
     objectNameSingular: 'figure',
   });
+  const { deleteOneRecord } = useDeleteOneRecord({
+    objectNameSingular: 'figure',
+  });
   const { records: datasetRecords } = useFindManyRecords({
     objectNameSingular: 'dataset',
     recordGqlFields: DATASET_GQL,
   });
   const { updateOneRecord } = useUpdateOneRecord();
+  const { enqueueDialog } = useDialogManager();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [caption, setCaption] = useState('');
   const [assetKind, setAssetKind] = useState('FIGURE');
@@ -98,8 +104,8 @@ export const ManuscriptFigurePanel = ({
   );
 
   const numbered = useMemo(
-    () => numberAssets(figures, style),
-    [figures, style],
+    () => numberAssets(figures, style, sections),
+    [figures, style, sections],
   );
 
   const persistFigure = (
@@ -110,7 +116,11 @@ export const ManuscriptFigurePanel = ({
       objectNameSingular: 'figure',
       idToUpdate: figure.id,
       updateOneRecordInput: values,
-    }).then(onChanged);
+    })
+      .then(onChanged)
+      .catch(() =>
+        enqueueErrorSnackBar({ message: 'Could not save figure changes' }),
+      );
   };
 
   const orderedPeers = (figure: FigureLike) =>
@@ -142,7 +152,38 @@ export const ManuscriptFigurePanel = ({
         idToUpdate: adjacent.id,
         updateOneRecordInput: { orderIndex: figureOrder },
       }),
-    ]).then(onChanged);
+    ])
+      .then(onChanged)
+      .catch(() =>
+        enqueueErrorSnackBar({ message: 'Could not reorder asset' }),
+      );
+  };
+
+  const deleteFigure = (figure: FigureLike) => {
+    const assetLabel = figure.assetKind?.toLowerCase() ?? 'asset';
+    enqueueDialog({
+      title: `Delete ${assetLabel}?`,
+      message: `Delete ${figure.name ?? `this ${assetLabel}`} permanently? Cross-reference tokens such as [#${figure.refKey ?? figure.id}] will remain as unresolved warnings.`,
+      buttons: [
+        { title: 'Cancel' },
+        {
+          title: 'Delete',
+          accent: 'danger',
+          role: 'confirm',
+          onClick: () =>
+            void deleteOneRecord(figure.id)
+              .then(onChanged)
+              .then(() =>
+                enqueueSuccessSnackBar({ message: 'Deleted figure or table' }),
+              )
+              .catch(() =>
+                enqueueErrorSnackBar({
+                  message: 'Could not delete figure or table',
+                }),
+              ),
+        },
+      ],
+    });
   };
 
   // Create a chart figure from a Markdown data table: store it as a numbered
@@ -237,6 +278,10 @@ export const ManuscriptFigurePanel = ({
       setTableEditorVersion((version) => version + 1);
       setIsCreateFormOpen(false);
       onChanged();
+    } catch {
+      enqueueErrorSnackBar({
+        message: `Could not add ${assetKind.toLowerCase()}`,
+      });
     } finally {
       setIsAdding(false);
     }
@@ -258,6 +303,8 @@ export const ManuscriptFigurePanel = ({
         enqueueSuccessSnackBar({ message: 'Plotted chart from table' });
         onChanged();
       }
+    } catch {
+      enqueueErrorSnackBar({ message: 'Could not plot chart from table' });
     } finally {
       setIsAdding(false);
     }
@@ -275,11 +322,15 @@ export const ManuscriptFigurePanel = ({
   };
 
   const replaceFigureImage = async (figure: FigureLike, file: File) => {
-    const imageDataUrl = await fileToDataUrl(file);
-    persistFigure(figure, {
-      imageUrl: imageDataUrl,
-      imageSource: 'UPLOAD',
-    });
+    try {
+      const imageDataUrl = await fileToDataUrl(file);
+      persistFigure(figure, {
+        imageUrl: imageDataUrl,
+        imageSource: 'UPLOAD',
+      });
+    } catch {
+      enqueueErrorSnackBar({ message: 'Could not replace figure image' });
+    }
   };
 
   return (
@@ -345,6 +396,7 @@ export const ManuscriptFigurePanel = ({
             }
             onSelectSection={onSelectSection}
             onPersist={(values) => persistFigure(figure, values)}
+            onDelete={() => deleteFigure(figure)}
             onMove={(direction) => moveFigure(figure, direction)}
             onPlotTable={() => {
               void plotExistingTable(figure);

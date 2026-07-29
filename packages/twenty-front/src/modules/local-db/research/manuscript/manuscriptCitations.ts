@@ -198,6 +198,77 @@ export type FormattedBibliographyEntry = {
   key: string;
   number?: number;
   text: string;
+  // Present on citeproc-rendered entries: the CSL markup (italics etc.).
+  html?: string;
+};
+
+// CSL HTML → Markdown inline markup for bibliography entries: italics and
+// bold survive, layout markup collapses to plain text.
+export const bibliographyHtmlToMarkdown = (html: string): string =>
+  decodeXmlEntities(
+    html
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<(\/?)i\b[^>]*>/gi, '*')
+      .replace(/<(\/?)em\b[^>]*>/gi, '*')
+      .replace(/<(\/?)b\b[^>]*>/gi, '**')
+      .replace(/<(\/?)strong\b[^>]*>/gi, '**')
+      .replace(/<sup\b[^>]*>([\s\S]*?)<\/sup>/gi, '^$1^')
+      .replace(/<sub\b[^>]*>([\s\S]*?)<\/sub>/gi, '~$1~')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
+
+const decodeXmlEntities = (value: string): string =>
+  value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'");
+
+// CSL HTML → BlockNote-style inline content runs (bold/italic styles kept).
+export type BibliographyInlineRun = {
+  type: 'text';
+  text: string;
+  styles: { bold?: true; italic?: true };
+};
+
+export const bibliographyHtmlToInlineRuns = (
+  html: string,
+): BibliographyInlineRun[] => {
+  const runs: BibliographyInlineRun[] = [];
+  const pattern = /<(i|em|b|strong)\b[^>]*>([\s\S]*?)<\/\1>|<[^>]*>|([^<]+)/gi;
+  for (const match of html.matchAll(pattern)) {
+    const [, tag, inner, plain] = match;
+    if (tag !== undefined) {
+      const text = decodeXmlEntities(
+        inner.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' '),
+      );
+      if (text.length === 0) continue;
+      runs.push({
+        type: 'text',
+        text,
+        styles:
+          tag === 'i' || tag === 'em' ? { italic: true } : { bold: true },
+      });
+      continue;
+    }
+    if (plain !== undefined) {
+      const text = decodeXmlEntities(plain);
+      if (text.trim().length === 0) {
+        // Keep inter-run spacing instead of dropping the run entirely.
+        if (runs.length > 0) {
+          runs.push({ type: 'text', text: ' ', styles: {} });
+        }
+        continue;
+      }
+      runs.push({ type: 'text', text, styles: {} });
+    }
+  }
+  return runs;
 };
 
 // The whole bibliography in final order.

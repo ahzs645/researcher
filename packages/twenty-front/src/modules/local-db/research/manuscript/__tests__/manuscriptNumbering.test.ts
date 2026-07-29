@@ -82,6 +82,54 @@ describe('numberAssets', () => {
   it('is deterministic across calls', () => {
     expect(numberAssets(figures)).toEqual(numberAssets(figures));
   });
+
+  it('numbers per top-level section when the journal scope is PER_SECTION', () => {
+    const sections = [
+      { id: 'intro', name: 'Introduction', placement: 'MAIN', orderIndex: 0, level: 1 },
+      { id: 'methods', name: 'Methods', placement: 'MAIN', orderIndex: 1, level: 1 },
+      { id: 'sub', name: 'Study site', placement: 'MAIN', orderIndex: 2, level: 2 },
+      { id: 'results', name: 'Results', placement: 'MAIN', orderIndex: 3, level: 1 },
+      { id: 'refs', name: 'References', placement: 'BACK_MATTER', orderIndex: 4, level: 1 },
+    ];
+    const chapterFigures: FigureLike[] = [
+      { id: 'a', refKey: 'a', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 0, sectionId: 'intro' },
+      { id: 'b', refKey: 'b', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 1, sectionId: 'sub' },
+      { id: 'c', refKey: 'c', assetKind: 'TABLE', placement: 'MAIN', orderIndex: 2, sectionId: 'results' },
+      { id: 'd', refKey: 'd', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 3, sectionId: 'results' },
+      { id: 'e', refKey: 'e', assetKind: 'FIGURE', placement: 'SUPPLEMENT', orderIndex: 4 },
+    ];
+    const numbered = numberAssets(
+      chapterFigures,
+      { numberingScope: 'PER_SECTION', supplementPrefix: 'S' },
+      sections,
+    );
+    const byId = Object.fromEntries(numbered.map((f) => [f.id, f.number]));
+
+    expect(byId.a).toBe('1.1'); // Introduction
+    expect(byId.b).toBe('2.1'); // level-2 subsection belongs to Methods
+    expect(byId.c).toBe('3.1'); // tables keep their own per-chapter sequence
+    expect(byId.d).toBe('3.1'); // figures restart in Results, so also 3.1
+    expect(byId.e).toBe('S1'); // supplement stays continuous
+  });
+
+  it('assigns unanchored figures to the preceding chapter', () => {
+    const sections = [
+      { id: 'intro', name: 'Introduction', placement: 'MAIN', orderIndex: 0, level: 1 },
+    ];
+    const numbered = numberAssets(
+      [
+        { id: 'a', refKey: 'a', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 0 },
+        { id: 'b', refKey: 'b', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 1, sectionId: 'intro' },
+        { id: 'c', refKey: 'c', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 2 },
+      ],
+      { numberingScope: 'PER_SECTION' },
+      sections,
+    );
+    const byId = Object.fromEntries(numbered.map((f) => [f.id, f.number]));
+    expect(byId.a).toBe('1.1');
+    expect(byId.b).toBe('1.2');
+    expect(byId.c).toBe('1.3');
+  });
 });
 
 describe('asset lookup', () => {

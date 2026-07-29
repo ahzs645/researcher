@@ -104,16 +104,43 @@ const seedMissingTables = async (
   );
 };
 
-// Built-in journal profiles are product-owned templates rather than user
-// records. Refresh their stable ids on every boot so returning workspaces gain
-// new typography and page-layout fields, while records with user-created ids
-// remain untouched.
+// Built-in journal profiles are product-owned templates, but a researcher can
+// edit them too (submission checklists, style tweaks). Merge additively on
+// every boot — fill only fields the record has never set — so returning
+// workspaces gain new typography and page-layout fields WITHOUT losing the
+// edits they made since. Records with user-created ids remain untouched.
+const isMissingValue = (value: unknown): boolean =>
+  value === undefined ||
+  value === null ||
+  (typeof value === 'string' && value.length === 0);
+
 const synchronizeBuiltInJournalTemplates = async (
   dataSource: ReturnType<typeof getBridgeDataSource>,
 ): Promise<void> => {
   const journalTemplates = buildStarterSeed().journalTemplate ?? [];
   if (journalTemplates.length === 0) return;
-  await dataSource.db.table('journalTemplate').bulkPut(journalTemplates);
+  const table = dataSource.db.table('journalTemplate');
+  for (const seed of journalTemplates) {
+    const existing = await table.get(seed.id);
+    if (existing === undefined) {
+      await table.put(seed);
+      continue;
+    }
+    const backfill: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(seed)) {
+      if (key === 'id' || key === 'createdAt' || key === 'updatedAt') continue;
+      if (isMissingValue(existing[key]) && !isMissingValue(value)) {
+        backfill[key] = value;
+      }
+    }
+    if (Object.keys(backfill).length > 0) {
+      await table.put({
+        ...existing,
+        ...backfill,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
 };
 
 export const getBridgeDataSource = () => {

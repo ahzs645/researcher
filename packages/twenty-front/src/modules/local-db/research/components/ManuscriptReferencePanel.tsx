@@ -24,6 +24,7 @@ import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
 type ManuscriptReferencePanelProps = {
   figures: FigureLike[];
+  onDeleteReference: (reference: ReferenceLike) => Promise<void>;
   onSelectSection: (sectionId: string) => void;
   onUpdateReference: (
     reference: ReferenceLike,
@@ -116,6 +117,7 @@ export const referenceSearchText = (reference: ReferenceLike): string =>
 
 export const ManuscriptReferencePanel = ({
   figures,
+  onDeleteReference,
   onSelectSection,
   onUpdateReference,
   references,
@@ -204,6 +206,34 @@ export const ManuscriptReferencePanel = ({
     await persistEdit(reference, update);
   };
 
+  const deleteReference = (reference: ReferenceLike) => {
+    const key = reference.citationKey?.trim() || reference.id;
+    const citationCount = usage.get(key)?.count ?? 0;
+    enqueueDialog({
+      title: `Delete [@${key}]?`,
+      message:
+        citationCount > 0
+          ? `Delete [@${key}]? Its ${citationCount} existing citation token${citationCount === 1 ? '' : 's'} will remain as unresolved warning${citationCount === 1 ? '' : 's'}.`
+          : `Delete the unused reference [@${key}]?`,
+      buttons: [
+        { title: 'Cancel' },
+        {
+          title: 'Delete',
+          accent: 'danger',
+          role: 'confirm',
+          onClick: () =>
+            void onDeleteReference(reference)
+              .then(() =>
+                enqueueSuccessSnackBar({ message: `Deleted [@${key}]` }),
+              )
+              .catch(() =>
+                enqueueErrorSnackBar({ message: 'Could not delete reference' }),
+              ),
+        },
+      ],
+    });
+  };
+
   return (
     <StyledPanel>
       <StyledControls>
@@ -244,6 +274,7 @@ export const ManuscriptReferencePanel = ({
             sections={sections}
             figures={figures}
             isEditing={isEditing}
+            onDelete={() => deleteReference(reference)}
             onEdit={() =>
               setEditingReferenceId((currentId) =>
                 currentId === reference.id ? null : reference.id,

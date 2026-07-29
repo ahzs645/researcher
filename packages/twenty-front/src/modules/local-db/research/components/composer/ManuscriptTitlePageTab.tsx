@@ -1,5 +1,5 @@
 import { styled } from '@linaria/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { H2Title } from 'twenty-ui/display';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
@@ -100,6 +100,43 @@ export const ManuscriptTitlePageTab = ({
   const [isSaving, setIsSaving] = useState(false);
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
 
+  // Cross-tab writes (an import, the submission checklist) land on the record
+  // while this form holds local state. Re-sync from the record whenever it
+  // changes underneath us — unless the user has unsaved local edits, which
+  // would silently clobber their typing either way.
+  const [isDirty, setIsDirty] = useState(false);
+  const recordSignature = JSON.stringify([
+    manuscript.name,
+    manuscript.authorLine,
+    manuscript.affiliations,
+    manuscript.correspondingAuthor,
+    manuscript.titlePageExtraLines,
+    keywordsSection?.content,
+  ]);
+  const [lastSyncedSignature, setLastSyncedSignature] =
+    useState(recordSignature);
+  useEffect(() => {
+    if (recordSignature === lastSyncedSignature) return;
+    setLastSyncedSignature(recordSignature);
+    if (isDirty) return;
+    setName(manuscript.name ?? '');
+    setContributors({
+      authorLine: manuscript.authorLine ?? '',
+      affiliations: manuscript.affiliations ?? '',
+      correspondingAuthor: manuscript.correspondingAuthor ?? '',
+    });
+    setExtraLines(
+      parseManuscriptTitlePageExtraLines(manuscript.titlePageExtraLines),
+    );
+    setKeywords(keywordsSection?.content ?? '');
+  }, [
+    isDirty,
+    keywordsSection?.content,
+    lastSyncedSignature,
+    manuscript,
+    recordSignature,
+  ]);
+
   const currentValues = (
     nextExtraLines = extraLines,
   ): ManuscriptTitlePageDetails => ({
@@ -117,6 +154,7 @@ export const ManuscriptTitlePageTab = ({
     setIsSaving(true);
     try {
       await onSave(values);
+      setIsDirty(false);
       enqueueSuccessSnackBar({ message: 'Front matter saved' });
       return true;
     } catch {
@@ -126,6 +164,13 @@ export const ManuscriptTitlePageTab = ({
       setIsSaving(false);
     }
   };
+
+  const markDirty =
+    <T,>(setter: (value: T) => void) =>
+    (value: T) => {
+      setIsDirty(true);
+      setter(value);
+    };
 
   return (
     <StyledTab>
@@ -139,10 +184,10 @@ export const ManuscriptTitlePageTab = ({
           keywords={keywords}
           name={name}
           onAddKeywordsSection={onAddKeywordsSection}
-          onChangeContributors={setContributors}
-          onChangeExtraLines={setExtraLines}
-          onChangeKeywords={setKeywords}
-          onChangeName={setName}
+          onChangeContributors={markDirty(setContributors)}
+          onChangeExtraLines={markDirty(setExtraLines)}
+          onChangeKeywords={markDirty(setKeywords)}
+          onChangeName={markDirty(setName)}
           onSave={() => void save()}
         />
         <ManuscriptTitlePagePreview

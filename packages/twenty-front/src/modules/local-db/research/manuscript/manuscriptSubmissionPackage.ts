@@ -10,6 +10,7 @@ import {
   isImageDataUrl,
   resolveFigureImage,
 } from './manuscriptImages';
+import { buildJatsArticle } from './manuscriptJatsExport';
 import { type PortableManuscriptSource } from './manuscriptPortableManifest';
 import { addPortableResearchPaperFiles } from './manuscriptPortableZip';
 import {
@@ -103,6 +104,72 @@ const zipFiles = async (files: Zippable): Promise<Uint8Array> =>
     });
   });
 
+// A MECA-aligned manifest (NISO RP-30-2023 structure): one typed <item> per
+// package file so publisher/preprint systems can walk the package
+// programmatically instead of guessing from filenames. The JATS article is
+// the machine-readable manuscript instance next to the human-editable DOCX.
+const MECA_TYPE_BY_FILENAME = (filename: string, base: string): string => {
+  if (filename === `${base}-manuscript.docx`) return 'manuscript';
+  if (filename === `${base}.jats.xml`) return 'manuscript';
+  if (filename.startsWith('figures/')) return 'figure';
+  if (filename.startsWith('portable-assets/')) return 'figure';
+  if (filename === 'cover-letter.docx') return 'cover-letter';
+  if (filename === 'metadata.json') return 'metadata';
+  if (filename === 'references.json') return 'metadata';
+  if (filename === 'research-paper.json') return 'metadata';
+  if (filename === 'submission-readiness.txt') return 'metadata';
+  return 'supporting-information';
+};
+
+const MEDIA_TYPE_BY_EXTENSION: Record<string, string> = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xml: 'application/xml',
+  json: 'application/json',
+  txt: 'text/plain',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  tif: 'image/tiff',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+};
+
+const escapeManifestXml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const buildMecaManifest = (
+  filenames: string[],
+  base: string,
+  bundle: ManuscriptBundle,
+): string => {
+  const items = filenames.map((filename, index) => {
+    const extension = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
+    const mediaType =
+      MEDIA_TYPE_BY_EXTENSION[extension] ?? 'application/octet-stream';
+    const type = MECA_TYPE_BY_FILENAME(filename, base);
+    return [
+      `  <item id="item-${index + 1}" type="${type}">`,
+      `   <instance href="${escapeManifestXml(filename)}" media-type="${mediaType}"/>`,
+      '  </item>',
+    ].join('\n');
+  });
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!-- MECA-aligned package manifest (NISO RP-30-2023 structure) -->',
+    `<manifest xmlns:xlink="http://www.w3.org/1999/xlink" version="MECA 1.0">`,
+    ` <title>${escapeManifestXml(bundle.metadata.title)}</title>`,
+    ...items,
+    '</manifest>',
+    '',
+  ].join('\n');
+};
+
 export const createPortableResearchPackage = async (
   bundle: ManuscriptBundle,
   materials: SubmissionMaterials,
@@ -190,6 +257,9 @@ export const createSubmissionPackage = async (
   files[`${base}-manuscript.docx`] = await blobToBytes(
     await exportManuscriptToDocxBlob(bundle),
   );
+  // The machine-readable article instance: publisher systems ingest JATS,
+  // humans edit the DOCX. Both are the same manuscript.
+  files[`${base}.jats.xml`] = strToU8(buildJatsArticle(bundle));
   addText(files, 'references.json', JSON.stringify(bundle.cslJson, null, 2));
   const submissionExtraFiles = addSubmissionExtras(files, bundle, materials);
   addText(
@@ -247,6 +317,9 @@ export const createSubmissionPackage = async (
       materials,
     );
   }
+  files['manifest.xml'] = strToU8(
+    buildMecaManifest(Object.keys(files).sort(), base, bundle),
+  );
 
   const zipped = await zipFiles(files);
   return {

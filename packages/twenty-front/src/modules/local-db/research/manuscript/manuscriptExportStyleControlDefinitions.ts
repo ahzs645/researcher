@@ -383,11 +383,11 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
         id: 'manuscript-export-numbering-scope-select',
         label: 'Asset numbering scope',
         field: 'numberingScope',
-        defaultValue: 'GLOBAL',
+        defaultValue: 'CONTINUOUS',
         valueType: 'STRING',
         options: [
-          { value: 'GLOBAL', label: 'Global sequence' },
-          { value: 'BY_SECTION', label: 'Restart by section' },
+          { value: 'CONTINUOUS', label: 'Global sequence' },
+          { value: 'PER_SECTION', label: 'Restart by section' },
         ],
       },
       {

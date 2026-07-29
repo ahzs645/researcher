@@ -149,4 +149,87 @@ describe('validateSubmission', () => {
     });
     expect(readiness.ready).toBe(true);
   });
+
+  it('does not double-report artifacts that are also journal requirements', () => {
+    const bundle = buildManuscriptBundle({
+      ...baseInput,
+      style: {
+        ...baseInput.style,
+        id: 'journal-id',
+        name: 'Test Journal',
+        profileKey: 'test-journal',
+        requiredArtifacts: ['COVER_LETTER'],
+        submissionRequirements: JSON.stringify([
+          { key: 'COVER_LETTER', required: true },
+        ]),
+      },
+    });
+    const readiness = validateSubmission(bundle, {});
+
+    const mentions = readiness.checks.filter(
+      (check) => check.label === 'Cover letter',
+    );
+    expect(mentions).toHaveLength(1);
+    expect(mentions[0].severity).toBe('ERROR');
+  });
+
+  it('satisfies separate-figure requirements only with shipped image files', () => {
+    const withStyle = {
+      ...baseInput.style,
+      requiredArtifacts: ['SEPARATE_FIGURES'],
+      submissionRequirements: JSON.stringify([
+        { key: 'SEPARATE_FIGURES', required: true },
+      ]),
+    };
+    const figureless = validateSubmission(
+      buildManuscriptBundle({
+        ...baseInput,
+        style: withStyle,
+        figures: [
+          {
+            id: 't1',
+            refKey: 'grid',
+            assetKind: 'TABLE',
+            placement: 'MAIN',
+            tableData: '| A |\n| --- |\n| 1 |',
+          },
+        ],
+      }),
+      {},
+    );
+    // Tables are not figure files — the requirement stays unmet, once.
+    const separateChecks = figureless.checks.filter(
+      (check) => check.label === 'Separate figure files',
+    );
+    expect(separateChecks).toHaveLength(1);
+    expect(separateChecks[0].severity).toBe('WARNING');
+
+    const withImage = validateSubmission(
+      buildManuscriptBundle({
+        ...baseInput,
+        style: withStyle,
+        figures: [
+          {
+            id: 'f1',
+            refKey: 'plot',
+            assetKind: 'FIGURE',
+            placement: 'MAIN',
+            imageUrl: 'data:image/png;base64,AAAA',
+            imageSource: 'UPLOAD',
+          },
+        ],
+      }),
+      {},
+    );
+    expect(
+      withImage.checks.find(
+        (check) => check.id === 'artifact-SEPARATE_FIGURES',
+      )?.severity,
+    ).toBe('READY');
+    expect(
+      withImage.checks.filter(
+        (check) => check.id === 'journal-requirement-SEPARATE_FIGURES',
+      ),
+    ).toHaveLength(0);
+  });
 });

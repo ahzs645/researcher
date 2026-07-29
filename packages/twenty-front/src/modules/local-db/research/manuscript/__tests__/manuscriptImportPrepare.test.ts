@@ -32,6 +32,30 @@ const section = (
 });
 
 describe('prepareManuscriptImport', () => {
+  it('keeps review-step edits to section type and placement', () => {
+    // The wizard's review step edits the drafts in place (e.g. moving a
+    // mis-classified "Consent for Publication" to ethics back matter); the
+    // extraction/citation passes must not re-classify or drop those edits.
+    const document: ImportedDocument = {
+      sections: [
+        section('INTRODUCTION', 'Introduction', 'Body.', 0),
+        {
+          ...section('OTHER', 'Consent for Publication', 'All consented.', 1),
+          sectionType: 'ETHICS',
+          placement: 'BACK_MATTER',
+        },
+      ],
+    };
+
+    const prepared = prepareManuscriptImport(document, true);
+
+    expect(prepared.sections[1]).toMatchObject({
+      name: 'Consent for Publication',
+      sectionType: 'ETHICS',
+      placement: 'BACK_MATTER',
+    });
+  });
+
   it('demotes an imported title page when author metadata was extracted', () => {
     const document: ImportedDocument = {
       authorLine: 'Alice Example; Bob Example',

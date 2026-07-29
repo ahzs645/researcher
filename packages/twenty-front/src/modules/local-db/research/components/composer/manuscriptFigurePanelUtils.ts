@@ -1,6 +1,7 @@
 import {
   renderChartSvg,
   tableMarkdownToChartData,
+  type ChartKind,
 } from '@/local-db/research/manuscript/manuscriptChart';
 import { rasterizeSvgToPngDataUrl } from '@/local-db/research/manuscript/manuscriptChartImage';
 
@@ -52,13 +53,18 @@ export const syncFigureNameFromCaption = ({
 
 export const chartPngFromTable = async (
   tableMarkdown: string,
+  kind: ChartKind = 'bar',
+  title?: string,
 ): Promise<string | null> => {
   const data = tableMarkdownToChartData(tableMarkdown);
   if (data === null) return null;
   const svg = renderChartSvg(data, {
-    kind: 'bar',
+    kind,
     width: CHART_WIDTH,
     height: CHART_HEIGHT,
+    ...(title !== undefined && title.trim().length > 0
+      ? { title: title.trim() }
+      : {}),
   });
   return rasterizeSvgToPngDataUrl(svg, CHART_WIDTH, CHART_HEIGHT);
 };

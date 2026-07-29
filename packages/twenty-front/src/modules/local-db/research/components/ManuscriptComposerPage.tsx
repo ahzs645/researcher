@@ -269,8 +269,9 @@ export const ManuscriptComposerPage = () => {
               void composer.changeSectionPlacement(sectionId, placement)
             }
             onPersistSection={composer.persistSection}
-            onAddSection={() => void composer.addSection()}
+            onAddSection={(draft) => void composer.addSection(draft)}
             onScaffoldSections={() => void composer.scaffoldSections()}
+            missingScaffold={composer.missingScaffold}
             onSectionMetadataChanged={() =>
               void composer.refetchSectionsAndFigures()
             }

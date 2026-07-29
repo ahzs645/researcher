@@ -1,6 +1,6 @@
 import { styled } from '@linaria/react';
 import { useEffect, useRef, useState } from 'react';
-import { H2Title, IconPlus } from 'twenty-ui/display';
+import { H2Title } from 'twenty-ui/display';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
@@ -10,6 +10,7 @@ import { ManuscriptSectionOutline } from '@/local-db/research/components/compose
 import { ManuscriptWriteEditor } from '@/local-db/research/components/composer/ManuscriptWriteEditor';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { extractCitationKeys } from '@/local-db/research/manuscript/manuscriptCrossReference';
+import { type ScaffoldSectionDraft } from '@/local-db/research/manuscript/manuscriptScaffold';
 import { findDuplicateSectionGroups } from '@/local-db/research/manuscript/manuscriptSectionDedupe';
 import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 import {
@@ -39,8 +40,9 @@ type ManuscriptWriteTabProps = {
     placement: SectionPlacement,
   ) => void;
   onPersistSection: (markdown: string) => void;
-  onAddSection: () => void;
+  onAddSection: (draft?: ScaffoldSectionDraft) => void;
   onScaffoldSections: () => void;
+  missingScaffold: ScaffoldSectionDraft[];
   onSectionMetadataChanged: () => void;
   onImported: () => void;
   onDeleteDuplicateSections: (sectionIds: string[]) => Promise<void>;
@@ -89,6 +91,15 @@ const StyledOutlineColumn = styled.div`
   min-width: 0;
 `;
 
+const StyledAddSectionSelect = styled.select`
+  background: ${themeCssVariables.background.secondary};
+  border: 1px solid ${themeCssVariables.border.color.medium};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.secondary};
+  font-size: ${themeCssVariables.font.size.sm};
+  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
+`;
+
 export const ManuscriptWriteTab = ({
   manuscriptId,
   manuscriptName,
@@ -107,6 +118,7 @@ export const ManuscriptWriteTab = ({
   onPersistSection,
   onAddSection,
   onScaffoldSections,
+  missingScaffold,
   onSectionMetadataChanged,
   onImported,
   onDeleteDuplicateSections,
@@ -169,18 +181,38 @@ export const ManuscriptWriteTab = ({
             competingInterests={competingInterests}
             onChanged={onImported}
           />
+          <StyledAddSectionSelect
+            aria-label="Add section"
+            value=""
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === '') return;
+              onAddSection(
+                value === 'blank'
+                  ? undefined
+                  : missingScaffold[Number(value)],
+              );
+            }}
+          >
+            <option value="" disabled>
+              Add section…
+            </option>
+            {missingScaffold.map((draft, index) => (
+              <option key={`${draft.sectionType}-${draft.name}`} value={index}>
+                {draft.name}
+              </option>
+            ))}
+            <option value="blank">Blank section</option>
+          </StyledAddSectionSelect>
           <Button
-            title="Add section"
-            Icon={IconPlus}
+            title={
+              sections.length === 0
+                ? 'Scaffold sections'
+                : `Add missing sections (${missingScaffold.length})`
+            }
             variant="secondary"
             size="small"
-            onClick={onAddSection}
-          />
-          <Button
-            title="Scaffold sections"
-            variant="secondary"
-            size="small"
-            disabled={sections.length > 0}
+            disabled={missingScaffold.length === 0}
             onClick={onScaffoldSections}
           />
         </StyledActions>

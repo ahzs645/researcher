@@ -165,3 +165,28 @@ the chosen `journalTemplate`.
 
 *Screenshots `01`–`04` and `sample-export.docx` in this folder are the captured
 evidence from the live demo run.*
+
+---
+
+## 6. Status update (2026-07-29)
+
+The gap list above is historical. Current state:
+
+1. **Manuscript importer — built.** `.docx`/`.pdf`/`.md`/`.zip` import wizard
+   (upload → block map → section review → commit), including portable
+   research-package round-trips with figures, tables, and references.
+2. **Blank first-run — fixed.** `getResearchStarterRecords` seeds the journal
+   template library into blank workspaces; built-in templates refresh on boot.
+3. **Template library — 15 seeded journals**, and every seeded `citationStyleId`
+   now resolves to a vendored CSL style (offline formatting; no jsDelivr fetch).
+4. **Journal-driven scaffolding — built.** Journal templates can carry a
+   `sectionSkeleton` JSON (ACS ships a merged "Results and discussion"
+   skeleton); "Scaffold sections" appends only missing sections and "Add
+   section" offers typed skeleton entries.
+5. **Figures — charts exist** (Markdown grid → bar/line SVG → PNG figure), and
+   datasets carry a `dataGrid` table that chart figures can plot and link to
+   (`imageSource: DATASET`, re-plottable after edits).
+6. **Network — CSL is fully offline** (15 vendored styles). DOI and Zotero
+   lookups inherently need connectivity and now fail with explicit messages.
+7. **Persistence/collaboration — unchanged** (IndexedDB locally; Convex is
+   still the planned backend, and its `recordSchema` lags the frontend model).

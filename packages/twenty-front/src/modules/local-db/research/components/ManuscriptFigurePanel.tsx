@@ -8,11 +8,16 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { ManuscriptFigureCreateForm } from '@/local-db/research/components/ManuscriptFigureCreateForm';
 import { ManuscriptFigureListItem } from '@/local-db/research/components/ManuscriptFigureListItem';
 import {
+  DATASET_GQL,
+  type DatasetRecord,
+} from '@/local-db/research/components/composer/manuscriptComposerData';
+import {
   chartPngFromTable,
   deriveFigureNameFromCaption,
   fileToDataUrl,
   slugifyFigureKey,
 } from '@/local-db/research/components/composer/manuscriptFigurePanelUtils';
+import { type ChartKind } from '@/local-db/research/manuscript/manuscriptChart';
 import { numberAssets } from '@/local-db/research/manuscript/manuscriptNumbering';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
@@ -21,6 +26,7 @@ import {
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
+import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
@@ -57,6 +63,10 @@ export const ManuscriptFigurePanel = ({
   const { createOneRecord } = useCreateOneRecord({
     objectNameSingular: 'figure',
   });
+  const { records: datasetRecords } = useFindManyRecords({
+    objectNameSingular: 'dataset',
+    recordGqlFields: DATASET_GQL,
+  });
   const { updateOneRecord } = useUpdateOneRecord();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [caption, setCaption] = useState('');
@@ -65,6 +75,8 @@ export const ManuscriptFigurePanel = ({
   const [imageUrl, setImageUrl] = useState('');
   const [tableData, setTableData] = useState('');
   const [equationLatex, setEquationLatex] = useState('');
+  const [chartKind, setChartKind] = useState<ChartKind>('bar');
+  const [chartDatasetId, setChartDatasetId] = useState<string | null>(null);
   const [tableEditorVersion, setTableEditorVersion] = useState(0);
   const [isAdding, setIsAdding] = useState(false);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
@@ -73,6 +85,17 @@ export const ManuscriptFigurePanel = ({
     MANUSCRIPT_TABLE_STYLES.find(
       (candidate) => candidate === style.tableStyle,
     ) ?? 'ACADEMIC';
+
+  // Only datasets that actually carry a plottable grid are offered.
+  const plottableDatasets = useMemo(
+    () =>
+      (datasetRecords as unknown as DatasetRecord[]).filter(
+        (dataset) =>
+          typeof dataset.dataGrid === 'string' &&
+          dataset.dataGrid.trim().length > 0,
+      ),
+    [datasetRecords],
+  );
 
   const numbered = useMemo(
     () => numberAssets(figures, style),
@@ -123,15 +146,21 @@ export const ManuscriptFigurePanel = ({
   };
 
   // Create a chart figure from a Markdown data table: store it as a numbered
-  // FIGURE (GENERATED source) with the rendered PNG, and keep the source table
-  // in `tableData` so it can be re-plotted after edits.
+  // FIGURE (GENERATED source, or DATASET when plotting a dataset record) with
+  // the rendered PNG, and keep the source table in `tableData` so it can be
+  // re-plotted after edits.
   const createChartFigure = async (
     sourceTable: string,
     captionText: string,
     refKeyBase: string,
     orderIndex: number,
+    options?: { kind?: ChartKind; datasetId?: string | null },
   ): Promise<boolean> => {
-    const png = await chartPngFromTable(sourceTable);
+    const png = await chartPngFromTable(
+      sourceTable,
+      options?.kind ?? 'bar',
+      captionText,
+    );
     if (png === null) {
       enqueueErrorSnackBar({
         message: 'No numeric columns to plot — add a data table first',
@@ -147,8 +176,11 @@ export const ManuscriptFigurePanel = ({
         slugifyFigureKey(refKeyBase).slice(0, 24) || `chart-${Date.now()}`,
       caption: captionText,
       imageUrl: png,
-      imageSource: 'GENERATED',
+      imageSource: isDefined(options?.datasetId) ? 'DATASET' : 'GENERATED',
       tableData: sourceTable,
+      ...(isDefined(options?.datasetId)
+        ? { datasetId: options.datasetId }
+        : {}),
       orderIndex,
     });
     return true;
@@ -166,6 +198,7 @@ export const ManuscriptFigurePanel = ({
           trimmedCaption,
           trimmedCaption || 'chart',
           figures.length,
+          { kind: chartKind, datasetId: chartDatasetId },
         );
         if (!created) return;
         enqueueSuccessSnackBar({ message: 'Plotted chart from table' });
@@ -200,6 +233,7 @@ export const ManuscriptFigurePanel = ({
       setImageUrl('');
       setTableData('');
       setEquationLatex('');
+      setChartDatasetId(null);
       setTableEditorVersion((version) => version + 1);
       setIsCreateFormOpen(false);
       onChanged();
@@ -218,6 +252,7 @@ export const ManuscriptFigurePanel = ({
         `Chart — ${figure.caption || figure.name || 'table'}`,
         `chart-${figure.refKey ?? figure.id}`,
         figures.length,
+        { kind: chartKind, datasetId: figure.datasetId ?? null },
       );
       if (created) {
         enqueueSuccessSnackBar({ message: 'Plotted chart from table' });
@@ -226,6 +261,17 @@ export const ManuscriptFigurePanel = ({
     } finally {
       setIsAdding(false);
     }
+  };
+
+  const selectChartDataset = (datasetId: string | null) => {
+    setChartDatasetId(datasetId);
+    if (datasetId === null) return;
+    const dataset = plottableDatasets.find(
+      (candidate) => candidate.id === datasetId,
+    );
+    if (dataset === undefined) return;
+    setTableData(dataset.dataGrid ?? '');
+    setTableEditorVersion((version) => version + 1);
   };
 
   const replaceFigureImage = async (figure: FigureLike, file: File) => {
@@ -256,6 +302,9 @@ export const ManuscriptFigurePanel = ({
           equationLatex={equationLatex}
           tableStyle={tableStyle}
           tableEditorVersion={tableEditorVersion}
+          chartKind={chartKind}
+          chartDatasets={plottableDatasets}
+          chartDatasetId={chartDatasetId}
           isAdding={isAdding}
           onCaptionChange={setCaption}
           onAssetKindChange={setAssetKind}
@@ -263,6 +312,8 @@ export const ManuscriptFigurePanel = ({
           onImageUrlChange={setImageUrl}
           onTableDataChange={setTableData}
           onEquationLatexChange={setEquationLatex}
+          onChartKindChange={setChartKind}
+          onChartDatasetChange={selectChartDataset}
           onAdd={() => {
             void addFigure();
           }}

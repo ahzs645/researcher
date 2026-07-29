@@ -2,14 +2,21 @@ import { isNonEmptyString } from '@sniptt/guards';
 import { type Engine } from 'citeproc';
 
 import airQualityAtmosphereAndHealthXml from './csl-styles/air-quality-atmosphere-and-health.csl?raw';
+import americanChemicalSocietyXml from './csl-styles/american-chemical-society.csl?raw';
 import americanMedicalAssociationXml from './csl-styles/american-medical-association.csl?raw';
 import apaXml from './csl-styles/apa.csl?raw';
 import archivesOfEnvironmentalContaminationAndToxicologyXml from './csl-styles/archives-of-environmental-contamination-and-toxicology.csl?raw';
 import atmosphericEnvironmentXml from './csl-styles/atmospheric-environment.csl?raw';
+import chicagoAuthorDateXml from './csl-styles/chicago-author-date.csl?raw';
 import elsevierHarvardXml from './csl-styles/elsevier-harvard.csl?raw';
 import environmentalScienceAndPollutionResearchXml from './csl-styles/environmental-science-and-pollution-research.csl?raw';
+import ieeeXml from './csl-styles/ieee.csl?raw';
 import localeEnUsXml from './csl-styles/locales-en-US.xml?raw';
+import multidisciplinaryDigitalPublishingInstituteXml from './csl-styles/multidisciplinary-digital-publishing-institute.csl?raw';
+import natureXml from './csl-styles/nature.csl?raw';
+import scienceXml from './csl-styles/science.csl?raw';
 import springerBasicAuthorDateXml from './csl-styles/springer-basic-author-date.csl?raw';
+import vancouverXml from './csl-styles/vancouver.csl?raw';
 import { type ReferenceLike } from './manuscriptTypes';
 
 export type VendoredCslStyle = {
@@ -40,8 +47,19 @@ const vendoredStyle = (id: string, xml: string): VendoredCslStyle => ({
 export const VENDORED_CSL_STYLES: VendoredCslStyle[] = [
   vendoredStyle('apa', apaXml),
   vendoredStyle('american-medical-association', americanMedicalAssociationXml),
+  vendoredStyle('american-chemical-society', americanChemicalSocietyXml),
+  vendoredStyle('chicago-author-date', chicagoAuthorDateXml),
   vendoredStyle('elsevier-harvard', elsevierHarvardXml),
+  vendoredStyle('ieee', ieeeXml),
+  vendoredStyle(
+    'multidisciplinary-digital-publishing-institute',
+    multidisciplinaryDigitalPublishingInstituteXml,
+  ),
+  vendoredStyle('nature', natureXml),
+  vendoredStyle('science', scienceXml),
   vendoredStyle('springer-basic-author-date', springerBasicAuthorDateXml),
+  // Dependent style — resolves to its vendored AMA parent at format time.
+  vendoredStyle('vancouver', vancouverXml),
   vendoredStyle(
     'environmental-science-and-pollution-research',
     environmentalScienceAndPollutionResearchXml,

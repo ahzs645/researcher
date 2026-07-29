@@ -68,6 +68,7 @@ export type PortableResearchPaperManifest = {
     key: string;
     name: string;
     refKey: string;
+    sourceLabel?: string;
     caption: string;
     assetKind: string;
     placement: string;
@@ -188,6 +189,9 @@ export const buildPortableResearchPaperManifest = (
         key: `figure-${index + 1}`,
         name: figure.name ?? `Figure ${index + 1}`,
         refKey,
+        ...(figure.sourceLabel !== null && figure.sourceLabel !== undefined
+          ? { sourceLabel: figure.sourceLabel }
+          : {}),
         caption: figure.caption ?? '',
         assetKind: figure.assetKind ?? 'FIGURE',
         placement: figure.placement ?? 'MAIN',

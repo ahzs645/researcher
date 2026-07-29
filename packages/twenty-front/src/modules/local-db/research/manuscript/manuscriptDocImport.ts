@@ -1657,10 +1657,61 @@ export const extractCaptionOnlyFigures = (
   return { sections: nextSections, figures };
 };
 
-const IMPORTED_FIGURE_REFERENCE =
-  /\b(?:fig(?:ure)?s?)\.?\s+(S?\d+(?:\.\d+)*)([a-z])?/gi;
-const IMPORTED_TABLE_REFERENCE =
-  /\b(?:tables?|tbls?)\.?\s+(S?\d+(?:\.\d+)*)([a-z])?/gi;
+// A reference is a keyword plus a label list: "Fig. 2.6b", "Figures 8 & 9",
+// "Tables 1, 3 and 5", "Figures 8–10". The list tail stays inside the match so
+// every number links individually — a half-linked list ("[#…] & 9") leaves the
+// unlinked number rendering the *source* number, which renumbering then makes
+// wrong.
+const ASSET_REFERENCE_LIST =
+  /S?\d+(?:\.\d+)*[a-z]?(?:(?:\s*(?:,|&|and|–|—))+\s*S?\d+(?:\.\d+)*[a-z]?)*/i;
+const IMPORTED_FIGURE_REFERENCE = new RegExp(
+  `\\b(?:fig(?:ure)?s?)\\.?\\s+(${ASSET_REFERENCE_LIST.source})`,
+  'gi',
+);
+const IMPORTED_TABLE_REFERENCE = new RegExp(
+  `\\b(?:tables?|tbls?)\\.?\\s+(${ASSET_REFERENCE_LIST.source})`,
+  'gi',
+);
+const LIST_TOKEN = /S?\d+(?:\.\d+)*[a-z]?/gi;
+const LIST_TOKEN_PARTS = /^(S?\d+(?:\.\d+)*)([a-z])?$/i;
+const RANGE_GAP = /^\s*[–—]\s*$/;
+
+// Ranges only expand when every intermediate integer exists as a label — a
+// gappy range ("Figures 8–12" with no 9 in the source) stays literal rather
+// than inventing links.
+const MAX_RANGE_EXPANSION = 20;
+
+type AssetReferenceToken = {
+  text: string;
+  index: number;
+  label: string;
+  panel?: string;
+};
+
+const assetReferenceTokens = (listText: string): AssetReferenceToken[] => {
+  LIST_TOKEN.lastIndex = 0;
+  const tokens: AssetReferenceToken[] = [];
+  for (
+    let match = LIST_TOKEN.exec(listText);
+    match !== null;
+    match = LIST_TOKEN.exec(listText)
+  ) {
+    const parts = LIST_TOKEN_PARTS.exec(match[0]);
+    if (parts === null) continue;
+    tokens.push({
+      text: match[0],
+      index: match.index,
+      label: parts[1],
+      ...(parts[2] !== undefined ? { panel: parts[2] } : {}),
+    });
+  }
+  return tokens;
+};
+
+const plainRangeValue = (token: AssetReferenceToken): number | null =>
+  token.panel === undefined && /^\d+$/.test(token.label)
+    ? Number.parseInt(token.label, 10)
+    : null;
 
 // Convert source-visible labels ("Fig. 2.6b", "Fig. S2.18") into stable
 // asset references. The optional panel suffix remains outside the token, so a
@@ -1698,24 +1749,84 @@ export const linkImportedAssetReferences = (
     if (target !== undefined) byKind.set(aliasKey, target);
   }
 
+  const linkToken = (
+    kind: 'FIGURE' | 'TABLE',
+    label: string,
+    panel: string | undefined,
+  ): string | null => {
+    const fullLabel = `${label}${panel ?? ''}`.toLowerCase();
+    const exact = byKind.get(`${kind}:${fullLabel}`);
+    const base = byKind.get(`${kind}:${label.toLowerCase()}`);
+    const target = exact ?? base;
+    if (target === undefined) return null;
+    return `[#${target.refKey}]${exact === undefined ? (panel ?? '') : ''}`;
+  };
+
   let linkedCount = 0;
   const replace = (
     content: string,
     kind: 'FIGURE' | 'TABLE',
     pattern: RegExp,
   ): string =>
-    content.replace(
-      pattern,
-      (original: string, rawLabel: string, panel: string | undefined) => {
-        const fullLabel = `${rawLabel}${panel ?? ''}`.toLowerCase();
-        const exact = byKind.get(`${kind}:${fullLabel}`);
-        const base = byKind.get(`${kind}:${rawLabel.toLowerCase()}`);
-        const target = exact ?? base;
-        if (target === undefined) return original;
-        linkedCount += 1;
-        return `[#${target.refKey}]${exact === undefined ? (panel ?? '') : ''}`;
-      },
-    );
+    content.replace(pattern, (original: string, rawList: string) => {
+      const keyword = original.slice(0, original.length - rawList.length);
+      const tokens = assetReferenceTokens(rawList);
+      if (tokens.length === 0) return original;
+
+      const linkedByIndex = new Map<number, string>();
+      tokens.forEach((token, tokenIndex) => {
+        const linked = linkToken(kind, token.label, token.panel);
+        if (linked !== null) linkedByIndex.set(tokenIndex, linked);
+      });
+
+      let result = '';
+      let cursor = 0;
+      tokens.forEach((token, tokenIndex) => {
+        const gapText = rawList.slice(cursor, token.index);
+        result += gapText;
+        // Expand en/em-dash ranges, but only when both endpoints linked and
+        // every integer in the span resolves — otherwise the gap stays as the
+        // source wrote it.
+        if (tokenIndex > 0 && RANGE_GAP.test(gapText)) {
+          const previous = tokens[tokenIndex - 1];
+          const start = plainRangeValue(previous);
+          const end = plainRangeValue(token);
+          if (
+            start !== null &&
+            end !== null &&
+            end > start &&
+            end - start <= MAX_RANGE_EXPANSION &&
+            linkedByIndex.has(tokenIndex - 1) &&
+            linkedByIndex.has(tokenIndex)
+          ) {
+            const middles: string[] = [];
+            let allResolve = true;
+            for (let value = start + 1; value < end; value += 1) {
+              const linked = linkToken(kind, String(value), undefined);
+              if (linked === null) {
+                allResolve = false;
+                break;
+              }
+              middles.push(linked);
+            }
+            if (allResolve && middles.length > 0) {
+              const dash = gapText.trim();
+              result += middles.map((linked) => `${linked}${dash}`).join('');
+              linkedCount += middles.length;
+            }
+          }
+        }
+        const linked = linkedByIndex.get(tokenIndex);
+        if (linked !== undefined) linkedCount += 1;
+        result += linked ?? token.text;
+        cursor = token.index + token.text.length;
+      });
+      result += rawList.slice(cursor);
+      // The keyword ("Fig.") is replaced by the linked token, which renders
+      // the full label ("Figure 1") — keep it only when the head number
+      // itself didn't resolve.
+      return linkedByIndex.has(0) ? result : keyword + result;
+    });
 
   const linkedSections = sections.map((section) => {
     const withFigures = replace(

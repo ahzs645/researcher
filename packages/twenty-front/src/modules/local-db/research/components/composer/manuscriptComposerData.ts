@@ -9,9 +9,18 @@ export type WithManuscript = {
   manuscript?: { id?: string | null } | null;
 };
 
+export type DatasetRecord = {
+  id: string;
+  name?: string | null;
+  dataGrid?: string | null;
+};
+
 export type SectionRecord = SectionLike & WithManuscript;
 export type FigureRecord = Omit<FigureLike, 'sectionId'> &
-  WithManuscript & { section?: { id?: string | null } | null };
+  WithManuscript & {
+    section?: { id?: string | null } | null;
+    dataset?: { id?: string | null } | null;
+  };
 export type ReferenceRecord = ReferenceLike &
   WithManuscript & { project?: { id?: string | null } | null };
 
@@ -82,6 +91,7 @@ export const FIGURE_GQL = {
   id: true,
   name: true,
   refKey: true,
+  sourceLabel: true,
   caption: true,
   assetKind: true,
   placement: true,
@@ -95,6 +105,13 @@ export const FIGURE_GQL = {
   equationLatex: true,
   manuscript: { id: true },
   section: { id: true },
+  dataset: { id: true },
+};
+
+export const DATASET_GQL = {
+  id: true,
+  name: true,
+  dataGrid: true,
 };
 
 export const REFERENCE_GQL = {
@@ -137,6 +154,7 @@ export const JOURNAL_GQL = {
   supplementCoverPage: true,
   abstractWordLimit: true,
   abstractWordMinimum: true,
+  sectionSkeleton: true,
   keywordMinimum: true,
   keywordMaximum: true,
   requiredArtifacts: true,

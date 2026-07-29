@@ -1,3 +1,5 @@
+import { isDefined } from 'twenty-shared/utils';
+
 import {
   type ImportedFigureDraft,
   type ImportedSectionDraft,
@@ -45,6 +47,9 @@ export const preparePortableResearchPaperImport = (
       assetKind: portableAssetKind(figure.assetKind),
       placement: figure.placement === 'SUPPLEMENT' ? 'SUPPLEMENT' : 'MAIN',
       refKey: figure.refKey,
+      ...(figure.sourceLabel !== undefined
+        ? { sourceLabel: figure.sourceLabel }
+        : {}),
       caption: figure.caption,
       ...(figure.sectionKey !== undefined
         ? { sectionOrderIndex: sectionOrderByKey.get(figure.sectionKey) }
@@ -113,7 +118,7 @@ export type PortableManuscriptRecordUpdate = {
   supplementTitle?: string;
   supplementAuthorLine?: string;
   supplementAffiliations?: string;
-  exportStyleOverrides: string;
+  exportStyleOverrides?: string;
   coverLetter?: string;
   highlights?: string;
   competingInterests?: string;
@@ -159,9 +164,15 @@ export const portableManuscriptRecordUpdate = (
     ...(metadata.supplementAffiliations !== undefined
       ? { supplementAffiliations: metadata.supplementAffiliations }
       : {}),
-    exportStyleOverrides: serializeManuscriptExportStyleOverrides(
-      manifest.exportStyle,
-    ),
+    // A package with no style info (exported before a journal was picked)
+    // must not wipe the target manuscript's saved overrides.
+    ...(Object.keys(manifest.exportStyle).length > 0
+      ? {
+          exportStyleOverrides: serializeManuscriptExportStyleOverrides(
+            manifest.exportStyle,
+          ),
+        }
+      : {}),
     ...(isDefined(submissionMaterials.coverLetter)
       ? { coverLetter: submissionMaterials.coverLetter }
       : {}),
@@ -176,4 +187,3 @@ export const portableManuscriptRecordUpdate = (
       : {}),
   };
 };
-import { isDefined } from 'twenty-shared/utils';

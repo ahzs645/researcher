@@ -4,7 +4,9 @@ import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
+import { type DatasetRecord } from '@/local-db/research/components/composer/manuscriptComposerData';
 import { ManuscriptEquationEditor } from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
+import { type ChartKind } from '@/local-db/research/manuscript/manuscriptChart';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { Select } from '@/ui/input/components/Select';
 
@@ -17,6 +19,9 @@ type ManuscriptFigureCreateFormProps = {
   equationLatex: string;
   tableStyle: ManuscriptTableStyle;
   tableEditorVersion: number;
+  chartKind: ChartKind;
+  chartDatasets: DatasetRecord[];
+  chartDatasetId: string | null;
   isAdding: boolean;
   onCaptionChange: (value: string) => void;
   onAssetKindChange: (value: string) => void;
@@ -24,6 +29,8 @@ type ManuscriptFigureCreateFormProps = {
   onImageUrlChange: (value: string) => void;
   onTableDataChange: (value: string) => void;
   onEquationLatexChange: (value: string) => void;
+  onChartKindChange: (value: ChartKind) => void;
+  onChartDatasetChange: (value: string | null) => void;
   onAdd: () => void;
   onUpload: (file: File) => void;
 };
@@ -45,6 +52,13 @@ const PLACEMENT_OPTIONS: SelectOption<string>[] = [
   { value: 'MAIN', label: 'Main' },
   { value: 'SUPPLEMENT', label: 'Supplement' },
 ];
+
+const CHART_KIND_OPTIONS: SelectOption<ChartKind>[] = [
+  { value: 'bar', label: 'Bar chart' },
+  { value: 'line', label: 'Line chart' },
+];
+
+const NO_DATASET = '__NONE__';
 
 const StyledForm = styled.div`
   border-top: 1px solid ${themeCssVariables.border.color.light};
@@ -78,6 +92,9 @@ export const ManuscriptFigureCreateForm = ({
   equationLatex,
   tableStyle,
   tableEditorVersion,
+  chartKind,
+  chartDatasets,
+  chartDatasetId,
   isAdding,
   onCaptionChange,
   onAssetKindChange,
@@ -85,6 +102,8 @@ export const ManuscriptFigureCreateForm = ({
   onImageUrlChange,
   onTableDataChange,
   onEquationLatexChange,
+  onChartKindChange,
+  onChartDatasetChange,
   onAdd,
   onUpload,
 }: ManuscriptFigureCreateFormProps) => {
@@ -94,6 +113,13 @@ export const ManuscriptFigureCreateForm = ({
     if (file !== undefined) onUpload(file);
     event.target.value = '';
   };
+  const datasetOptions: SelectOption<string>[] = [
+    { value: NO_DATASET, label: 'Table below (no dataset link)' },
+    ...chartDatasets.map((dataset) => ({
+      value: dataset.id,
+      label: dataset.name ?? 'Untitled dataset',
+    })),
+  ];
 
   return (
     <StyledForm>
@@ -116,6 +142,24 @@ export const ManuscriptFigureCreateForm = ({
           onChange={onPlacementChange}
         />
       </StyledActions>
+      {assetKind === 'CHART' ? (
+        <StyledActions>
+          <Select
+            dropdownId="chart-kind-select"
+            options={CHART_KIND_OPTIONS}
+            value={chartKind}
+            onChange={(value) => onChartKindChange(value as ChartKind)}
+          />
+          <Select
+            dropdownId="chart-dataset-select"
+            options={datasetOptions}
+            value={chartDatasetId ?? NO_DATASET}
+            onChange={(value) =>
+              onChartDatasetChange(value === NO_DATASET ? null : value)
+            }
+          />
+        </StyledActions>
+      ) : null}
       {assetKind === 'TABLE' || assetKind === 'CHART' ? (
         <ManuscriptTableEditor
           key={tableEditorVersion}

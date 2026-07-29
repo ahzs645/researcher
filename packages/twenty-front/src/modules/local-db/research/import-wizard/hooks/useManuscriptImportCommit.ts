@@ -148,11 +148,7 @@ export const useManuscriptImportCommit = ({
         }
 
         for (const figure of preparedImport.figures) {
-          const {
-            sectionOrderIndex,
-            sourceLabel: _sourceLabel,
-            ...record
-          } = figure;
+          const { sectionOrderIndex, ...record } = figure;
           await createFigure({
             ...record,
             manuscriptId,

@@ -34,7 +34,7 @@ import {
   parseManuscriptTitlePageExtraLines,
   serializeManuscriptTitlePageExtraLines,
 } from '@/local-db/research/manuscript/manuscriptTitlePage';
-import { buildSectionSkeleton } from '@/local-db/research/manuscript/manuscriptScaffold';
+import { buildSectionSkeleton, missingScaffoldSections, type ScaffoldSectionDraft } from '@/local-db/research/manuscript/manuscriptScaffold';
 import {
   type JournalStyle,
   type ReferenceLike,
@@ -182,6 +182,7 @@ export const useManuscriptComposer = () => {
         .map((figure) => ({
           ...figure,
           sectionId: figure.section?.id ?? null,
+          datasetId: figure.dataset?.id ?? null,
         })),
     [figureRecords, manuscript],
   );
@@ -324,29 +325,40 @@ export const useManuscriptComposer = () => {
     await refetchSections();
   };
 
-  const addSection = async () => {
+  const addSection = async (draft?: ScaffoldSectionDraft) => {
     if (!isDefined(manuscript)) return;
     const created = await createSection({
-      name: 'New section',
+      name: draft?.name ?? 'New section',
       manuscriptId: manuscript.id,
-      sectionType: 'OTHER',
-      placement: 'MAIN',
+      sectionType: draft?.sectionType ?? 'OTHER',
+      placement: draft?.placement ?? 'MAIN',
       orderIndex: sections.length,
       level: 1,
       status: 'NOT_STARTED',
       includeInExport: true,
       content: '',
+      ...(isDefined(draft?.wordLimit) ? { wordLimit: draft.wordLimit } : {}),
     });
     await refetchSections();
     const createdId = (created as { id?: string } | undefined)?.id;
     if (isDefined(createdId)) selectSection(createdId);
   };
 
+  // Skeleton entries the manuscript still lacks — drives both the "add
+  // missing sections" action and the typed add-section picker.
+  const missingScaffold = useMemo(
+    () =>
+      missingScaffoldSections(
+        buildSectionSkeleton(manuscript?.manuscriptType, effectiveStyle),
+        sections,
+      ),
+    [manuscript?.manuscriptType, sections, effectiveStyle],
+  );
+
   const scaffoldSections = async () => {
     if (!isDefined(manuscript)) return;
-    const skeleton = buildSectionSkeleton(manuscript.manuscriptType, style);
     let firstId: string | undefined;
-    for (const draft of skeleton) {
+    for (const draft of missingScaffold) {
       const created = await createSection({
         name: draft.name,
         manuscriptId: manuscript.id,
@@ -852,6 +864,7 @@ export const useManuscriptComposer = () => {
     persistCitationLinkedSections,
     addSection,
     scaffoldSections,
+    missingScaffold,
     saveSubmissionDetails,
     saveTitlePageDetails,
     addKeywordsSection,

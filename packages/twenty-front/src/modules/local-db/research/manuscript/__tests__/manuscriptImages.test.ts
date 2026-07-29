@@ -36,6 +36,30 @@ describe('describeImageSource', () => {
     };
     expect(describeImageSource(dataset)).toMatch(/dataset/i);
   });
+
+  it('describes rendered charts instead of calling them uploads', () => {
+    expect(
+      describeImageSource({
+        id: 'a',
+        imageUrl: 'data:image/png;base64,AAA',
+        imageSource: 'DATASET',
+      }),
+    ).toBe('Plotted from dataset');
+    expect(
+      describeImageSource({
+        id: 'b',
+        imageUrl: 'data:image/png;base64,AAA',
+        imageSource: 'GENERATED',
+      }),
+    ).toBe('Generated chart');
+    expect(
+      describeImageSource({
+        id: 'c',
+        imageUrl: 'data:image/png;base64,AAA',
+        imageSource: 'UPLOAD',
+      }),
+    ).toBe('Uploaded image');
+  });
 });
 
 describe('figureToMarkdown', () => {

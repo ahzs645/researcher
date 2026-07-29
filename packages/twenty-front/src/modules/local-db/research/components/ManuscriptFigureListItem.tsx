@@ -188,6 +188,11 @@ export const ManuscriptFigureListItem = ({
                 <span>End of document</span>
               )}
               <span>· {describeImageSource(figure)}</span>
+              {typeof figure.sourceLabel === 'string' &&
+              figure.sourceLabel.trim().length > 0 &&
+              figure.sourceLabel.trim() !== figure.number ? (
+                <span>· source: {figure.sourceLabel.trim()}</span>
+              ) : null}
             </StyledMeta>
           </StyledMain>
         </StyledSummary>

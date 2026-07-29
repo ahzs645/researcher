@@ -7,10 +7,12 @@ import { ManuscriptFigureMetadataFields } from '@/local-db/research/components/M
 import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
 import { ManuscriptEquationEditor } from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
 import {
+  chartPngFromTable,
   deriveFigureNameFromCaption,
   syncFigureNameFromCaption,
 } from '@/local-db/research/components/composer/manuscriptFigurePanelUtils';
 import { assetPlacementMarker } from '@/local-db/research/manuscript/manuscriptAssetPlacement';
+import { type ChartKind } from '@/local-db/research/manuscript/manuscriptChart';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
   type NumberedFigure,
@@ -36,7 +38,21 @@ const PLACEMENT_OPTIONS: SelectOption<string>[] = [
   { value: 'MAIN', label: 'Main' },
   { value: 'SUPPLEMENT', label: 'Supplement' },
 ];
+
+const CHART_KIND_OPTIONS: SelectOption<ChartKind>[] = [
+  { value: 'bar', label: 'Bar chart' },
+  { value: 'line', label: 'Line chart' },
+];
+
 const UNASSIGNED_SECTION = '__UNASSIGNED__';
+
+// A chart figure is a FIGURE-kind record whose pixels we rendered from a data
+// grid — those stay re-plottable instead of becoming a dead PNG.
+const isChartFigure = (figure: NumberedFigure): boolean =>
+  figure.assetKind === 'FIGURE' &&
+  (figure.imageSource === 'GENERATED' || figure.imageSource === 'DATASET') &&
+  typeof figure.tableData === 'string' &&
+  figure.tableData.trim().length > 0;
 
 const StyledExpanded = styled.div`
   background: ${themeCssVariables.background.primary};
@@ -147,8 +163,10 @@ export const ManuscriptFigureExpandedEditor = ({
   onPlotTable,
   onReplaceImage,
 }: ManuscriptFigureExpandedEditorProps) => {
-  const { enqueueSuccessSnackBar } = useSnackBar();
+  const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [tableDraft, setTableDraft] = useState(figure.tableData ?? '');
+  const [chartKindDraft, setChartKindDraft] = useState<ChartKind>('bar');
+  const [isReplotting, setIsReplotting] = useState(false);
   const [equationDraft, setEquationDraft] = useState(
     figure.equationLatex ?? '',
   );
@@ -328,6 +346,50 @@ export const ManuscriptFigureExpandedEditor = ({
               size="small"
               disabled={isAdding}
               onClick={onPlotTable}
+            />
+          </StyledActions>
+        </>
+      ) : null}
+      {isChartFigure(figure) ? (
+        <>
+          <ManuscriptTableEditor
+            markdown={tableDraft}
+            tableStyle={tableStyle}
+            onChange={setTableDraft}
+          />
+          <StyledActions>
+            <Select
+              dropdownId={`chart-kind-${figure.id}`}
+              options={CHART_KIND_OPTIONS}
+              value={chartKindDraft}
+              onChange={(value) => setChartKindDraft(value as ChartKind)}
+            />
+            <Button
+              title="Save data & re-plot"
+              variant="primary"
+              accent="blue"
+              size="small"
+              disabled={isReplotting}
+              onClick={() => {
+                setIsReplotting(true);
+                void chartPngFromTable(
+                  tableDraft,
+                  chartKindDraft,
+                  figure.caption ?? figure.name ?? undefined,
+                )
+                  .then((png) => {
+                    if (png === null) {
+                      enqueueErrorSnackBar({
+                        message:
+                          'No numeric columns to plot — keep at least one numeric column',
+                      });
+                      return;
+                    }
+                    onPersist({ tableData: tableDraft, imageUrl: png });
+                    enqueueSuccessSnackBar({ message: 'Chart re-plotted' });
+                  })
+                  .finally(() => setIsReplotting(false));
+              }}
             />
           </StyledActions>
         </>

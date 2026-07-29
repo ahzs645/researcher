@@ -64,6 +64,7 @@ const source: PortableManuscriptSource = {
       id: 'figure-id',
       name: 'Absorption plot',
       refKey: 'absorption-plot',
+      sourceLabel: '9',
       caption: 'Measured absorption.',
       assetKind: 'FIGURE',
       placement: 'MAIN',
@@ -165,6 +166,7 @@ describe('portable research-paper ZIP', () => {
     expect(restored.sections[0].level).toBe(2);
     expect(restored.figures[0]).toMatchObject({
       refKey: 'absorption-plot',
+      sourceLabel: '9',
       sectionKey: 'section-1',
       altText: 'Absorption over time',
       widthPercent: 80,
@@ -188,6 +190,7 @@ describe('portable research-paper ZIP', () => {
     );
     expect(prepared.figures[0]).toMatchObject({
       refKey: 'absorption-plot',
+      sourceLabel: '9',
       sectionOrderIndex: 0,
       imageSource: 'UPLOAD',
     });
@@ -207,6 +210,29 @@ describe('portable research-paper ZIP', () => {
     expect(() =>
       readPortableResearchPaperZip(zipSync({ 'notes.txt': new Uint8Array() })),
     ).toThrow(`ZIP does not contain ${PORTABLE_MANUSCRIPT_FILENAME}`);
+  });
+
+  it('keeps existing style overrides when the package carries no style', () => {
+    const manifest = buildPortableResearchPaperManifest(source, {}, {});
+    const update = portableManuscriptRecordUpdate(
+      parsePortableResearchPaperManifest(JSON.stringify(manifest)),
+    );
+
+    expect(manifest.exportStyle).toEqual({});
+    expect(update).not.toHaveProperty('exportStyleOverrides');
+
+    const styled = portableManuscriptRecordUpdate(
+      parsePortableResearchPaperManifest(
+        JSON.stringify(
+          buildPortableResearchPaperManifest(
+            source,
+            { citationMode: 'AUTHOR_DATE' },
+            {},
+          ),
+        ),
+      ),
+    );
+    expect(styled.exportStyleOverrides).toBeDefined();
   });
 
   it('defaults legacy section levels without changing explicit placements', () => {

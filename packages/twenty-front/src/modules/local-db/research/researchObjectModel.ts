@@ -1247,6 +1247,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconFolder',
       },
       {
+        name: 'dataGrid',
+        label: 'Tabular data',
+        type: 'TEXT',
+        icon: 'IconTable',
+        description:
+          'Small result tables as a Markdown grid (| col | … |) — chart figures can plot this',
+      },
+      {
         name: 'sizeGb',
         label: 'Size (GB)',
         type: 'NUMBER',
@@ -1862,6 +1870,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         description: 'Slug used in cross-refs, e.g. arpes → [#fig:arpes]',
       },
       {
+        name: 'sourceLabel',
+        label: 'Source label',
+        type: 'TEXT',
+        icon: 'IconTag',
+        description:
+          'The label the imported source used (e.g. "2.6") before renumbering',
+      },
+      {
         name: 'caption',
         label: 'Caption',
         type: 'TEXT',
@@ -2130,6 +2146,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         label: 'Abstract word limit',
         type: 'NUMBER',
         icon: 'IconRuler2',
+      },
+      {
+        name: 'sectionSkeleton',
+        label: 'Section skeleton',
+        type: 'TEXT',
+        icon: 'IconList',
+        description:
+          'JSON list of { name, sectionType, placement, wordLimit? } — overrides the default IMRaD/thesis skeleton',
       },
       {
         name: 'abstractWordMinimum',

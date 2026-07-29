@@ -94,8 +94,18 @@ export const figureToMarkdown = (figure: NumberedFigure): string => {
 // A short, human description of where a figure's image comes from, for the UI.
 export const describeImageSource = (figure: FigureLike): string => {
   const resolved = resolveFigureImage(figure);
-  if (resolved.kind === 'dataurl') return 'Uploaded image';
-  if (resolved.kind === 'url') return 'Linked image';
+  if (resolved.kind === 'dataurl' || resolved.kind === 'url') {
+    switch (figure.imageSource) {
+      case 'DATASET':
+        return 'Plotted from dataset';
+      case 'GENERATED':
+        return 'Generated chart';
+      case 'URL':
+        return 'Linked image';
+      default:
+        return resolved.kind === 'dataurl' ? 'Uploaded image' : 'Linked image';
+    }
+  }
   switch (figure.imageSource) {
     case 'DATASET':
       return 'From a dataset (no render yet)';

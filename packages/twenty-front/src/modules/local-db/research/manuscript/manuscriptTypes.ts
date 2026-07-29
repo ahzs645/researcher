@@ -35,6 +35,9 @@ export type FigureLike = {
   id: string;
   name?: string | null;
   refKey?: string | null;
+  // The label the source document used ("2.6", "S2.18") before our numbering —
+  // kept so original-numbering inconsistencies stay auditable downstream.
+  sourceLabel?: string | null;
   caption?: string | null;
   assetKind?: string | null;
   placement?: string | null;
@@ -45,6 +48,8 @@ export type FigureLike = {
   widthPercent?: number | null;
   orderIndex?: number | null;
   sectionId?: string | null;
+  // Set when the figure renders (a chart of) a dataset record's table.
+  datasetId?: string | null;
   // For TABLE assets: the grid as a GFM Markdown table string.
   tableData?: string | null;
   // For EQUATION assets: the body as LaTeX, without delimiters.
@@ -94,6 +99,9 @@ export type JournalStyle = {
   supplementCoverPage?: boolean | null;
   abstractWordLimit?: number | null;
   abstractWordMinimum?: number | null;
+  // JSON section skeleton: [{ name, sectionType, placement, wordLimit? }] —
+  // overrides the manuscript-type default when the journal shapes sections.
+  sectionSkeleton?: string | null;
   keywordMinimum?: number | null;
   keywordMaximum?: number | null;
   requiredArtifacts?: string[] | null;

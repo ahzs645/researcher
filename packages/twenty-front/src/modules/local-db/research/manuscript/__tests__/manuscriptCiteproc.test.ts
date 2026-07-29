@@ -9,6 +9,7 @@ import {
 import { buildManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
 import { prepareManuscriptBundleWithCsl } from '@/local-db/research/manuscript/manuscriptCslIntegration';
 import { type ReferenceLike } from '@/local-db/research/manuscript/manuscriptTypes';
+import { getResearchSeedRecords } from '@/local-db/research/researchSeedRecords';
 
 const reference = (
   id: string,
@@ -85,6 +86,46 @@ describe('manuscript citeproc', () => {
     expect(resolveCslStyleXml('air-quality-atmosphere-and-health')).toBe(
       resolveCslStyleXml('springer-basic-author-date'),
     );
+    expect(resolveCslStyleXml('vancouver')).toBe(
+      resolveCslStyleXml('american-medical-association'),
+    );
+  });
+
+  it('covers every citation style the seeded journal templates point at', () => {
+    const seededStyleIds = getResearchSeedRecords()
+      .journalTemplate.map((template) => template.citationStyleId)
+      .filter(
+        (styleId): styleId is string =>
+          typeof styleId === 'string' && styleId.trim().length > 0,
+      );
+
+    expect(new Set(seededStyleIds).size).toBeGreaterThan(0);
+    for (const styleId of new Set(seededStyleIds)) {
+      expect(resolveCslStyleXml(styleId)).not.toBeNull();
+    }
+  });
+
+  it('builds an engine for every vendored style', async () => {
+    for (const style of VENDORED_CSL_STYLES) {
+      const engine = await createCiteprocEngine({
+        styleId: style.id,
+        references: [reference('doe', 'Doe', 2020, 'First')],
+      });
+      expect(engine).not.toBeNull();
+    }
+  }, 30000);
+
+  it('formats numeric citations for the newly vendored house styles', async () => {
+    const engine = await createCiteprocEngine({
+      styleId: 'nature',
+      references: [
+        reference('doe', 'Doe', 2020, 'First'),
+        reference('roe', 'Roe', 2021, 'Second'),
+      ],
+    });
+
+    expect(engine).not.toBeNull();
+    expect(formatCslCitations(engine!, [['doe'], ['roe']])).toEqual(['1', '2']);
   });
 
   it('constructs a fallback CSL item from structured fields', () => {

@@ -426,6 +426,110 @@ describe('extractImagesToFigures', () => {
     expect(linked.linkedCount).toBe(4);
   });
 
+  it('links every number in a multi-number cross-reference', () => {
+    const figures = [
+      {
+        name: 'a',
+        assetKind: 'FIGURE' as const,
+        placement: 'MAIN' as const,
+        refKey: 'imported-figure-8',
+        caption: '',
+        imageSource: 'NONE' as const,
+        orderIndex: 0,
+        sourceLabel: '8',
+      },
+      {
+        name: 'b',
+        assetKind: 'FIGURE' as const,
+        placement: 'MAIN' as const,
+        refKey: 'imported-figure-9',
+        caption: '',
+        imageSource: 'NONE' as const,
+        orderIndex: 1,
+        sourceLabel: '9',
+      },
+      {
+        name: 'c',
+        assetKind: 'FIGURE' as const,
+        placement: 'MAIN' as const,
+        refKey: 'imported-figure-10',
+        caption: '',
+        imageSource: 'NONE' as const,
+        orderIndex: 2,
+        sourceLabel: '10',
+      },
+    ];
+    const sections = [
+      {
+        name: 'Results',
+        sectionType: 'RESULTS',
+        placement: 'MAIN',
+        content:
+          'Presented in Figures 8 & 9. More in Figures 8, 9, and 10. Unknown in Figures 8 & 99. Plain Figure 8 here.',
+        orderIndex: 0,
+        wordCount: 0,
+        includeInExport: true,
+      },
+    ];
+    const linked = linkImportedAssetReferences(sections, figures);
+
+    expect(linked.sections[0].content).toContain(
+      'Presented in [#imported-figure-8] & [#imported-figure-9].',
+    );
+    expect(linked.sections[0].content).toContain(
+      'More in [#imported-figure-8], [#imported-figure-9], and [#imported-figure-10].',
+    );
+    expect(linked.sections[0].content).toContain(
+      'Unknown in [#imported-figure-8] & 99.',
+    );
+    expect(linked.sections[0].content).toContain(
+      'Plain [#imported-figure-8] here.',
+    );
+    expect(linked.linkedCount).toBe(7);
+  });
+
+  it('expands an en-dash range only when every number in it resolves', () => {
+    const figure = (label: string) => ({
+      name: label,
+      assetKind: 'FIGURE' as const,
+      placement: 'MAIN' as const,
+      refKey: `imported-figure-${label}`,
+      caption: '',
+      imageSource: 'NONE' as const,
+      orderIndex: Number(label),
+      sourceLabel: label,
+    });
+    const sections = (content: string) => [
+      {
+        name: 'Results',
+        sectionType: 'RESULTS',
+        placement: 'MAIN',
+        content,
+        orderIndex: 0,
+        wordCount: 0,
+        includeInExport: true,
+      },
+    ];
+
+    const full = linkImportedAssetReferences(
+      sections('Compare Figures 8–10 side by side.'),
+      [figure('8'), figure('9'), figure('10')],
+    );
+    expect(full.sections[0].content).toContain(
+      'Compare [#imported-figure-8]–[#imported-figure-9]–[#imported-figure-10] side by side.',
+    );
+
+    const gappy = linkImportedAssetReferences(
+      sections('Compare Figures 8–10 side by side.'),
+      [figure('8'), figure('10')],
+    );
+    expect(gappy.sections[0].content).toContain(
+      'Compare [#imported-figure-8]–[#imported-figure-10] side by side.',
+    );
+    expect(gappy.sections[0].content).not.toContain('imported-figure-9]');
+  });
+
+
   it('keeps refKeys unique across embedded and caption-only extractors', () => {
     const sections = parseMarkdownDocument(
       [

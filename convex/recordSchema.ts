@@ -9,6 +9,7 @@ import { v } from 'convex/values';
 export const recordTables = {
   calendarEvent: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     isCanceled: v.optional(v.boolean()),
     isFullDay: v.optional(v.boolean()),
     startsAt: v.optional(v.string()),
@@ -35,6 +36,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   calendarChannelEventAssociation: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -54,6 +56,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   dashboard: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -70,6 +73,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   opportunity: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -94,6 +98,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   calendarChannel: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -121,6 +126,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   messageThread: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -136,6 +142,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   messageChannel: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -169,6 +176,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   timelineActivity: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -191,6 +199,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   connectedAccount: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -217,6 +226,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   workflow: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -234,6 +244,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   surveyResult: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -258,6 +269,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   noteTarget: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -274,6 +286,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   messageParticipant: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -297,6 +310,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   attachment: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -315,6 +329,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   workflowAutomatedTrigger: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -333,6 +348,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   calendarEventParticipant: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -357,6 +373,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   messageChannelMessageAssociation: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -379,6 +396,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   rocket: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -396,6 +414,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   workflowRun: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -420,6 +439,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   workspaceMember: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -445,6 +465,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   pet: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     name: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -476,6 +497,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   petCareAgreement: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
     deletedAt: v.optional(v.string()),
@@ -492,6 +514,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   messageChannelMessageAssociationMessageFolder: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     searchVector: v.optional(v.string()),
     messageFolderId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
@@ -509,6 +532,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   task: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -529,6 +553,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   workflowVersion: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -549,6 +574,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   person: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -578,6 +604,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   taskTarget: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -594,6 +621,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   company: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -622,6 +650,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   note: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -638,6 +667,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   message: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     text: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
@@ -658,6 +688,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   blocklist: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -675,6 +706,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   messageFolder: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
@@ -697,6 +729,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   employmentHistory: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     deletedAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -715,6 +748,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   researchTeam: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -737,6 +771,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   researcher: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -760,6 +795,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   project: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -785,6 +821,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   grant: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -822,6 +859,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   grantSource: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -849,6 +887,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   grantOpportunity: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -883,6 +922,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   grantApplication: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -916,6 +956,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   applicationCycle: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -937,6 +978,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   milestone: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -960,6 +1002,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   dataset: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -985,6 +1028,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   manuscript: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -996,6 +1040,19 @@ export const recordTables = {
     manuscriptType: v.optional(v.string()),
     status: v.optional(v.string()),
     targetVenue: v.optional(v.string()),
+    authorLine: v.optional(v.string()),
+    affiliations: v.optional(v.string()),
+    titlePageExtraLines: v.optional(v.string()),
+    correspondingAuthor: v.optional(v.string()),
+    supplementTitle: v.optional(v.string()),
+    supplementAuthorLine: v.optional(v.string()),
+    supplementAffiliations: v.optional(v.string()),
+    exportStyleOverrides: v.optional(v.string()),
+    submissionExtras: v.optional(v.string()),
+    coverLetter: v.optional(v.string()),
+    highlights: v.optional(v.string()),
+    competingInterests: v.optional(v.string()),
+    suggestedReviewers: v.optional(v.string()),
     progress: v.optional(v.number()),
     targetDate: v.optional(v.string()),
     doi: v.optional(v.string()),
@@ -1013,6 +1070,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   applicationRequirement: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1035,6 +1093,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   applicantProfile: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1071,6 +1130,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   applicationSection: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1096,6 +1156,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   reusableAnswer: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1123,6 +1184,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   manuscriptSection: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1136,6 +1198,7 @@ export const recordTables = {
     content: v.optional(v.string()),
     status: v.optional(v.string()),
     orderIndex: v.optional(v.number()),
+    level: v.optional(v.number()),
     wordLimit: v.optional(v.number()),
     wordCount: v.optional(v.number()),
     includeInExport: v.optional(v.boolean()),
@@ -1149,6 +1212,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   figure: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1184,6 +1248,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   reference: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1216,6 +1281,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   journalTemplate: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1225,6 +1291,7 @@ export const recordTables = {
     updatedAt: v.optional(v.string()),
     updatedBy: v.optional(v.any()),
     citationMode: v.optional(v.string()),
+    profileKey: v.optional(v.string()),
     citationStyleId: v.optional(v.string()),
     figureLabelFormat: v.optional(v.string()),
     tableLabelFormat: v.optional(v.string()),
@@ -1232,10 +1299,43 @@ export const recordTables = {
     numberingScope: v.optional(v.string()),
     crossRefFormat: v.optional(v.string()),
     figureCaptionPosition: v.optional(v.string()),
+    figureCaptionFontSize: v.optional(v.number()),
+    figureCaptionLineSpacing: v.optional(v.number()),
+    figureCaptionGap: v.optional(v.number()),
+    figureCaptionSpacingAfter: v.optional(v.number()),
     tableCaptionPosition: v.optional(v.string()),
+    figurePageLayout: v.optional(v.string()),
+    supplementStartLayout: v.optional(v.string()),
+    supplementCoverPage: v.optional(v.boolean()),
     abstractWordLimit: v.optional(v.number()),
     sectionSkeleton: v.optional(v.string()),
+    abstractWordMinimum: v.optional(v.number()),
+    keywordMinimum: v.optional(v.number()),
+    keywordMaximum: v.optional(v.number()),
+    requiredArtifacts: v.optional(v.array(v.string())),
+    submissionRequirements: v.optional(v.string()),
+    lineNumbering: v.optional(v.boolean()),
+    pageNumbering: v.optional(v.boolean()),
+    sectionNumbering: v.optional(v.boolean()),
     twoColumn: v.optional(v.boolean()),
+    frontMatterLayout: v.optional(v.string()),
+    fontFamily: v.optional(v.string()),
+    bodyFontSize: v.optional(v.number()),
+    titleFontSize: v.optional(v.number()),
+    headingFontSize: v.optional(v.number()),
+    subheadingFontSize: v.optional(v.number()),
+    headingColor: v.optional(v.string()),
+    lineSpacing: v.optional(v.number()),
+    abstractLineSpacing: v.optional(v.number()),
+    paragraphSpacingAfter: v.optional(v.number()),
+    bodyAlignment: v.optional(v.string()),
+    affiliationAlignment: v.optional(v.string()),
+    affiliationLineSpacing: v.optional(v.number()),
+    affiliationNumberStyle: v.optional(v.string()),
+    affiliationSpacingAfter: v.optional(v.number()),
+    tableStyle: v.optional(v.string()),
+    tableFontSize: v.optional(v.number()),
+    tableLineSpacing: v.optional(v.number()),
     referenceDocUrl: v.optional(v.string()),
     outputFormats: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
@@ -1246,6 +1346,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   projectMembership: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1272,6 +1373,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   obligation: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),
@@ -1305,6 +1407,7 @@ export const recordTables = {
 .index('by_deletedAt', ['deletedAt']),
   obligationDocument: defineTable({
     id: v.string(),
+    workspaceId: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.optional(v.string()),
     createdBy: v.optional(v.any()),

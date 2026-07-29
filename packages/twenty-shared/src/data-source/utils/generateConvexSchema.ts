@@ -79,6 +79,10 @@ const renderIndexes = (object: DataSourceObject): string[] => {
 const renderTable = (object: DataSourceObject): string => {
   const fieldLines = [
     `    id: v.string()`,
+    // The bridge scopes records per workspace when the deployment is
+    // multi-tenant (`context.workspaceId` is injected on write), so every
+    // table must tolerate the column even when single-tenant never sets it.
+    `    workspaceId: v.optional(v.string())`,
     ...object.fields
       .map(renderField)
       .filter((line): line is string => line !== null),

@@ -10,7 +10,10 @@ import {
   StyledExportCardTitle,
 } from '@/local-db/research/components/composer/export/ManuscriptExportCard';
 import { type ManuscriptExporter } from '@/local-db/research/manuscript/manuscriptExport';
-import { type SubmissionReadiness } from '@/local-db/research/manuscript/manuscriptSubmission';
+import {
+  type SubmissionCheckTarget,
+  type SubmissionReadiness,
+} from '@/local-db/research/manuscript/manuscriptSubmission';
 
 type ManuscriptExportActionsCardProps = {
   activeExportId: string | null;
@@ -20,6 +23,7 @@ type ManuscriptExportActionsCardProps = {
   onExport: (exporterId: string) => void;
   onPortableResearchExport: () => void;
   onSubmissionPackageExport: () => void;
+  onNavigateToFix?: (target: SubmissionCheckTarget) => void;
 };
 
 type ExportAction = {
@@ -28,6 +32,7 @@ type ExportAction = {
   busyLabel: string;
   description: string;
   onClick: () => void;
+  disabled?: boolean;
 };
 
 const EXPORTER_PRESENTATION: Record<
@@ -107,6 +112,7 @@ export const ManuscriptExportActionsCard = ({
   onExport,
   onPortableResearchExport,
   onSubmissionPackageExport,
+  onNavigateToFix,
 }: ManuscriptExportActionsCardProps) => {
   const actions: ExportAction[] = [
     ...exporters.map((exporter) => ({
@@ -130,9 +136,11 @@ export const ManuscriptExportActionsCard = ({
       id: 'submission-package',
       label: 'Submission package',
       busyLabel: 'Packaging…',
-      description:
-        'Journal-ready ZIP with the manuscript, materials, figures, and readiness manifest.',
+      description: readiness.ready
+        ? 'Journal-ready ZIP with the manuscript, materials, figures, and readiness manifest.'
+        : `Resolve ${readiness.errorCount} required item${readiness.errorCount === 1 ? '' : 's'} before creating the submission package.`,
       onClick: onSubmissionPackageExport,
+      disabled: !readiness.ready,
     },
   ];
 
@@ -145,7 +153,10 @@ export const ManuscriptExportActionsCard = ({
           submission.
         </StyledExportCardDescription>
       </StyledExportCardHeader>
-      <ManuscriptSubmissionReadinessPanel readiness={readiness} />
+      <ManuscriptSubmissionReadinessPanel
+        readiness={readiness}
+        onNavigate={onNavigateToFix}
+      />
       <StyledActions>
         {actions.map((action) => (
           <StyledAction key={action.id}>
@@ -162,7 +173,7 @@ export const ManuscriptExportActionsCard = ({
               variant="primary"
               accent="blue"
               size="small"
-              disabled={activeExportId !== null}
+              disabled={activeExportId !== null || action.disabled === true}
               onClick={action.onClick}
             />
           </StyledAction>
@@ -175,7 +186,7 @@ export const ManuscriptExportActionsCard = ({
             {warnings.length === 1 ? '' : 's'} to review
           </summary>
           <StyledWarningList>
-            {warnings.slice(0, 6).map((warning) => (
+            {warnings.map((warning) => (
               <div key={warning}>• {warning}</div>
             ))}
           </StyledWarningList>

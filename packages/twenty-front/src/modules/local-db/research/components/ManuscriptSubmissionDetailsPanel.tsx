@@ -12,6 +12,7 @@ import {
   StyledTitlePageTextarea,
 } from '@/local-db/research/components/composer/manuscriptTitlePageStyles';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { useManuscriptSaveStatus } from '@/local-db/research/components/composer/ManuscriptSaveStatusContext';
 
 export type ManuscriptSubmissionDetails = {
   supplementTitle?: string | null;
@@ -51,16 +52,20 @@ export const ManuscriptSubmissionDetailsPanel = ({
   const [values, setValues] = useState(initialValues);
   const [isSaving, setIsSaving] = useState(false);
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
+  const { markUnsaved, trackSave } = useManuscriptSaveStatus();
   const updateValue = (
     field: keyof ManuscriptSubmissionDetails,
     value: string,
-  ) => setValues((current) => ({ ...current, [field]: value }));
+  ) => {
+    markUnsaved();
+    setValues((current) => ({ ...current, [field]: value }));
+  };
 
   const save = async () => {
     if (isSaving) return;
     setIsSaving(true);
     try {
-      await onSave(values);
+      await trackSave(() => onSave(values));
       enqueueSuccessSnackBar({ message: 'Supplement details saved' });
     } catch {
       enqueueErrorSnackBar({ message: 'Could not save supplement details' });

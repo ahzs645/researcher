@@ -20,6 +20,7 @@ import {
 } from '@/local-db/research/manuscript/manuscriptExport';
 import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import {
+  type SubmissionCheckTarget,
   type SubmissionMaterials,
   validateSubmission,
 } from '@/local-db/research/manuscript/manuscriptSubmission';
@@ -28,6 +29,7 @@ import {
   createSubmissionPackage,
 } from '@/local-db/research/manuscript/manuscriptSubmissionPackage';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { useManuscriptSaveStatus } from '@/local-db/research/components/composer/ManuscriptSaveStatusContext';
 
 type JournalOption = { id: string; name: string };
 
@@ -42,6 +44,7 @@ type ManuscriptExportPanelProps = {
   ) => Promise<void>;
   materials: SubmissionMaterials;
   portableSource: PortableManuscriptSource;
+  onNavigateToFix?: (target: SubmissionCheckTarget) => void;
 };
 
 const StyledPanel = styled.div`
@@ -59,8 +62,10 @@ export const ManuscriptExportPanel = ({
   onSaveStyleOverrides,
   materials,
   portableSource,
+  onNavigateToFix,
 }: ManuscriptExportPanelProps) => {
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
+  const { markUnsaved, trackSave } = useManuscriptSaveStatus();
   const [activeExportId, setActiveExportId] = useState<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [styleOverrides, setStyleOverrides] =
@@ -71,7 +76,8 @@ export const ManuscriptExportPanel = ({
   const exporters = getManuscriptExporters();
   const readiness = validateSubmission(exportBundle, materials);
 
-  const updateStyleOverrides = (updates: ManuscriptExportStyleOverrides) =>
+  const updateStyleOverrides = (updates: ManuscriptExportStyleOverrides) => {
+    markUnsaved();
     setStyleOverrides((current) => {
       let next = { ...current, ...updates };
       for (const key of CITATION_MODE_SETTING_KEYS) {
@@ -83,6 +89,7 @@ export const ManuscriptExportPanel = ({
       }
       return next;
     });
+  };
 
   const changeCitationStyle = async (nextStyleKey: string) => {
     if (isSavingSettings || nextStyleKey === citationStyleKey) return;
@@ -91,7 +98,7 @@ export const ManuscriptExportPanel = ({
     setStyleOverrides(next);
     setIsSavingSettings(true);
     try {
-      await onSaveStyleOverrides(next);
+      await trackSave(() => onSaveStyleOverrides(next));
       enqueueSuccessSnackBar({ message: 'Citation style updated' });
     } catch {
       setStyleOverrides(previous);
@@ -105,7 +112,7 @@ export const ManuscriptExportPanel = ({
     if (isSavingSettings) return;
     setIsSavingSettings(true);
     try {
-      await onSaveStyleOverrides(styleOverrides);
+      await trackSave(() => onSaveStyleOverrides(styleOverrides));
       enqueueSuccessSnackBar({ message: 'Export settings saved' });
     } catch {
       enqueueErrorSnackBar({ message: 'Could not save export settings' });
@@ -118,7 +125,7 @@ export const ManuscriptExportPanel = ({
     if (isSavingSettings) return;
     setIsSavingSettings(true);
     try {
-      await onSaveStyleOverrides({});
+      await trackSave(() => onSaveStyleOverrides({}));
       setStyleOverrides({});
       enqueueSuccessSnackBar({ message: 'Journal defaults restored' });
     } catch {
@@ -177,7 +184,7 @@ export const ManuscriptExportPanel = ({
   };
 
   const runSubmissionPackageExport = async () => {
-    if (activeExportId !== null) return;
+    if (activeExportId !== null || !readiness.ready) return;
     setActiveExportId('submission-package');
     try {
       const submissionPackage = await createSubmissionPackage(
@@ -212,6 +219,7 @@ export const ManuscriptExportPanel = ({
         onExport={(exporterId) => void runExport(exporterId)}
         onPortableResearchExport={() => void runPortableResearchExport()}
         onSubmissionPackageExport={() => void runSubmissionPackageExport()}
+        onNavigateToFix={onNavigateToFix}
       />
       <ManuscriptJournalFormatCard
         citationStyleKey={citationStyleKey}

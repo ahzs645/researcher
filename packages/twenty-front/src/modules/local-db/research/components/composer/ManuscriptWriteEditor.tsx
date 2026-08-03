@@ -19,6 +19,8 @@ type ManuscriptWriteEditorProps = {
   figures: FigureLike[];
   minimumEditorHeight?: number;
   onEditorReady: () => void;
+  onDeleteSection: (sectionId: string) => Promise<void>;
+  onDuplicateSection: (sectionId: string) => Promise<void>;
   onPersistSection: (markdown: string) => void | Promise<void>;
   onPersistSectionError: () => void;
   onSectionMetadataChanged: () => void;
@@ -70,6 +72,8 @@ export const ManuscriptWriteEditor = ({
   figures,
   minimumEditorHeight,
   onEditorReady,
+  onDeleteSection,
+  onDuplicateSection,
   onPersistSection,
   onPersistSectionError,
   onSectionMetadataChanged,
@@ -94,6 +98,8 @@ export const ManuscriptWriteEditor = ({
               sections={sections}
               figures={figures}
               onChanged={onSectionMetadataChanged}
+              onDelete={() => onDeleteSection(section.id)}
+              onDuplicate={() => onDuplicateSection(section.id)}
             />
           </StyledDetails>
           <ManuscriptSectionEditor

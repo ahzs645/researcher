@@ -17,6 +17,7 @@ type ManuscriptImportReviewStepProps = {
   options: ManuscriptImportWizardOptions;
   onClose: () => void;
   registerCommitState: (isCommitting: boolean) => void;
+  onBack: () => void;
 };
 
 const StyledContainer = styled.div`
@@ -109,6 +110,7 @@ export const ManuscriptImportReviewStep = ({
   options,
   onClose,
   registerCommitState,
+  onBack,
 }: ManuscriptImportReviewStepProps) => {
   const [areSectionsExpanded, setAreSectionsExpanded] = useState(false);
   const {
@@ -122,6 +124,7 @@ export const ManuscriptImportReviewStep = ({
     updateSection,
     setImportAnyway,
     confirmImport,
+    rollbackImport,
     isCommitting,
     failed,
     createdCounts,
@@ -202,32 +205,53 @@ export const ManuscriptImportReviewStep = ({
 
       <StyledFooter>
         {failed ? (
-          <StyledFailure>
-            Import stopped after creating {createdCounts.references} references,{' '}
-            {createdCounts.sections} sections, and {createdCounts.figures}{' '}
-            figures/tables. Close this wizard before trying again.
-          </StyledFailure>
+          <div>
+            <StyledFailure role="alert">
+              Import stopped after creating {createdCounts.references}{' '}
+              references, {createdCounts.sections} sections, and{' '}
+              {createdCounts.figures} figures/tables.
+            </StyledFailure>
+            <Button
+              title={
+                isCommitting ? 'Rolling back…' : 'Roll back partial import'
+              }
+              variant="secondary"
+              accent="danger"
+              size="small"
+              disabled={isCommitting}
+              onClick={() => void rollbackImport()}
+            />
+          </div>
         ) : (
           <StyledSummary>
             Nothing is written until you confirm this import.
           </StyledSummary>
         )}
-        <Button
-          title={
-            isCommitting
-              ? 'Importing…'
-              : isPortable
-                ? 'Import'
-                : 'Confirm import'
-          }
-          variant="primary"
-          accent="blue"
-          size="small"
-          disabled={
-            isCommitting || failed || preparedImport.sections.length === 0
-          }
-          onClick={() => void confirmImport()}
-        />
+        <div>
+          <Button
+            title="Back"
+            variant="secondary"
+            size="small"
+            disabled={isCommitting || failed}
+            onClick={onBack}
+          />
+          <Button
+            title={
+              isCommitting
+                ? 'Importing…'
+                : isPortable
+                  ? 'Import'
+                  : 'Confirm import'
+            }
+            variant="primary"
+            accent="blue"
+            size="small"
+            disabled={
+              isCommitting || failed || preparedImport.sections.length === 0
+            }
+            onClick={() => void confirmImport()}
+          />
+        </div>
       </StyledFooter>
     </StyledContainer>
   );

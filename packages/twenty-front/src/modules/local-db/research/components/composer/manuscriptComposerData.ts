@@ -4,6 +4,10 @@ import {
   type ReferenceLike,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
+import { parseManuscriptSubmissionExtras } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
+
+export const SUBMISSION_TRACKING_EXTRAS_KEY =
+  '__researcher_submission_tracking__';
 
 export type WithManuscript = {
   manuscript?: { id?: string | null } | null;
@@ -26,6 +30,7 @@ export type ReferenceRecord = ReferenceLike &
 
 export type ManuscriptRecord = {
   id: string;
+  updatedAt?: string | null;
   name?: string | null;
   status?: string | null;
   manuscriptType?: string | null;
@@ -45,12 +50,34 @@ export type ManuscriptRecord = {
   competingInterests?: string | null;
   suggestedReviewers?: string | null;
   targetJournal?: { id?: string | null } | null;
+  submissionTracking?: {
+    journalConfirmed: boolean;
+    submittedAt: string;
+    version: string;
+  };
+};
+
+export const withSubmissionTracking = (
+  manuscript: ManuscriptRecord,
+): ManuscriptRecord => {
+  const values = parseManuscriptSubmissionExtras(manuscript.submissionExtras)[
+    SUBMISSION_TRACKING_EXTRAS_KEY
+  ];
+  return {
+    ...manuscript,
+    submissionTracking: {
+      journalConfirmed: values?.journalConfirmed === 'true',
+      submittedAt: values?.submittedAt ?? '',
+      version: values?.version ?? '',
+    },
+  };
 };
 
 export type JournalRecord = JournalStyle & { id: string };
 
 export const MANUSCRIPT_GQL = {
   id: true,
+  updatedAt: true,
   name: true,
   status: true,
   manuscriptType: true,
@@ -81,6 +108,19 @@ export const SECTION_GQL = {
   orderIndex: true,
   level: true,
   wordLimit: true,
+  wordCount: true,
+  includeInExport: true,
+  status: true,
+  manuscript: { id: true },
+};
+
+export const SECTION_SUMMARY_GQL = {
+  id: true,
+  name: true,
+  sectionType: true,
+  placement: true,
+  orderIndex: true,
+  level: true,
   wordCount: true,
   includeInExport: true,
   status: true,
@@ -129,6 +169,7 @@ export const REFERENCE_GQL = {
   doi: true,
   url: true,
   cslJson: true,
+  notes: true,
   manuscript: { id: true },
   project: { id: true },
 };

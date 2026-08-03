@@ -6,8 +6,12 @@ import { useDebouncedCallback } from 'use-debounce';
 import { ThemeContext, themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptEditorContextProvider } from '@/local-db/research/components/editor/ManuscriptEditorContext';
+import { useManuscriptSaveStatus } from '@/local-db/research/components/composer/ManuscriptSaveStatusContext';
 import { ManuscriptEditorPopover } from '@/local-db/research/components/editor/ManuscriptEditorPopover';
-import { ManuscriptReferencePicker } from '@/local-db/research/components/editor/ManuscriptEditorPickers';
+import {
+  ManuscriptCrossRefPicker,
+  ManuscriptReferencePicker,
+} from '@/local-db/research/components/editor/ManuscriptEditorPickers';
 import { MANUSCRIPT_EDITOR_SCHEMA } from '@/local-db/research/components/editor/ManuscriptEditorSchema';
 import {
   getManuscriptReferenceSuggestionItems,
@@ -86,10 +90,13 @@ export const ManuscriptSectionEditor = ({
   style,
 }: ManuscriptSectionEditorProps) => {
   const { colorScheme } = useContext(ThemeContext);
+  const { trackSave } = useManuscriptSaveStatus();
   const editor = useCreateBlockNote({ schema: MANUSCRIPT_EDITOR_SCHEMA });
-  const citationPickerAnchorRef = useRef<HTMLDivElement>(null);
+  const insertionPickerAnchorRef = useRef<HTMLDivElement>(null);
   const [mountedOnPersist] = useState(() => onPersist);
-  const [isCitationPickerOpen, setIsCitationPickerOpen] = useState(false);
+  const [insertionPicker, setInsertionPicker] = useState<
+    'citation' | 'crossReference' | 'asset' | null
+  >(null);
   // Don't persist the (lossy) re-serialization while loading the initial
   // content — only once the user actually edits.
   const [isLoaded, setIsLoaded] = useState(false);
@@ -111,8 +118,10 @@ export const ManuscriptSectionEditor = ({
   }, []);
 
   const persist = useDebouncedCallback(() => {
-    void Promise.resolve(
-      mountedOnPersist(manuscriptBlocksToMarkdown(editor, editor.document)),
+    void trackSave(() =>
+      Promise.resolve(
+        mountedOnPersist(manuscriptBlocksToMarkdown(editor, editor.document)),
+      ),
     ).catch(onPersistError);
   }, 800);
 
@@ -151,7 +160,9 @@ export const ManuscriptSectionEditor = ({
             getItems={async (query) =>
               getManuscriptSlashMenuItems(
                 editor,
-                () => setIsCitationPickerOpen(true),
+                () => setInsertionPicker('citation'),
+                () => setInsertionPicker('crossReference'),
+                () => setInsertionPicker('asset'),
                 query,
               )
             }
@@ -163,21 +174,41 @@ export const ManuscriptSectionEditor = ({
             }
           />
         </BlockNoteView>
-        {isCitationPickerOpen ? (
-          <StyledInsertionPopoverAnchor ref={citationPickerAnchorRef}>
+        {insertionPicker !== null ? (
+          <StyledInsertionPopoverAnchor ref={insertionPickerAnchorRef}>
             <ManuscriptEditorPopover
-              anchorRef={citationPickerAnchorRef}
-              onClose={() => setIsCitationPickerOpen(false)}
+              anchorRef={insertionPickerAnchorRef}
+              onClose={() => setInsertionPicker(null)}
             >
-              <ManuscriptReferencePicker
-                onSelect={(citationKey) => {
-                  editor.insertInlineContent([
-                    { type: 'citation', props: { citationKey } },
-                    ' ',
-                  ]);
-                  setIsCitationPickerOpen(false);
-                }}
-              />
+              {insertionPicker === 'citation' ? (
+                <ManuscriptReferencePicker
+                  onSelect={(citationKey) => {
+                    editor.insertInlineContent([
+                      { type: 'citation', props: { citationKey } },
+                      ' ',
+                    ]);
+                    setInsertionPicker(null);
+                  }}
+                />
+              ) : (
+                <ManuscriptCrossRefPicker
+                  onSelect={(refKey) => {
+                    if (insertionPicker === 'asset') {
+                      const block = editor.getTextCursorPosition().block;
+                      editor.updateBlock(block, {
+                        type: 'assetPlacement',
+                        props: { refKey },
+                      });
+                    } else {
+                      editor.insertInlineContent([
+                        { type: 'crossRef', props: { refKey } },
+                        ' ',
+                      ]);
+                    }
+                    setInsertionPicker(null);
+                  }}
+                />
+              )}
             </ManuscriptEditorPopover>
           </StyledInsertionPopoverAnchor>
         ) : null}

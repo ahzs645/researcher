@@ -11,6 +11,10 @@ import {
   type ManuscriptRecord,
 } from '@/local-db/research/components/composer/manuscriptComposerData';
 import { ManuscriptSubmissionRequirementsPanel } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementsPanel';
+import {
+  ManuscriptSubmissionTrackingPanel,
+  type ManuscriptSubmissionTracking,
+} from '@/local-db/research/components/composer/ManuscriptSubmissionTrackingPanel';
 import { type SectionLike } from '@/local-db/research/manuscript/manuscriptTypes';
 import {
   type JournalSubmissionRequirement,
@@ -24,6 +28,7 @@ type ManuscriptSubmissionTabProps = {
   onConfirmTargetJournal: () => Promise<void>;
   sections: SectionLike[];
   onSave: (values: ManuscriptSubmissionDetails) => Promise<void>;
+  onSaveTracking: (values: ManuscriptSubmissionTracking) => Promise<void>;
   onPickTargetJournal: () => void;
   onSaveRequirementValues: (
     values: SubmissionRequirementValues,
@@ -51,12 +56,24 @@ export const ManuscriptSubmissionTab = ({
   onConfirmTargetJournal,
   sections,
   onSave,
+  onSaveTracking,
   onPickTargetJournal,
   onSaveRequirementValues,
   onSaveRequirements,
   onKeepJournalValue,
 }: ManuscriptSubmissionTabProps) => (
   <StyledTab>
+    <ManuscriptSubmissionTrackingPanel
+      key={`${manuscript.id}-tracking`}
+      initialValues={{
+        status: manuscript.status ?? 'DRAFTING',
+        submittedAt: manuscript.submissionTracking?.submittedAt ?? '',
+        version: manuscript.submissionTracking?.version ?? '',
+        journalConfirmed:
+          manuscript.submissionTracking?.journalConfirmed === true,
+      }}
+      onSave={onSaveTracking}
+    />
     <ManuscriptSubmissionRequirementsPanel
       key={`${manuscript.id}-${template?.id ?? 'no-journal'}`}
       manuscript={{ ...manuscript, sections }}

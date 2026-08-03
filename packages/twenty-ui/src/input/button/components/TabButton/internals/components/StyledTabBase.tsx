@@ -24,6 +24,11 @@ export const StyledTabButton = styled.button<{
   pointer-events: ${({ disabled }) => (disabled ? 'none' : '')};
   text-decoration: none;
   position: relative;
+  &:focus-visible {
+    border-radius: ${themeCssVariables.border.radius.sm};
+    outline: 2px solid ${themeCssVariables.color.blue};
+    outline-offset: 2px;
+  }
   &::after {
     content: '';
     position: absolute;

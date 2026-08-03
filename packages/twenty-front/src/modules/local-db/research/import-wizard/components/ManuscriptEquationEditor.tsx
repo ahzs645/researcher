@@ -8,6 +8,16 @@ type ManuscriptEquationEditorProps = {
   onChange: (markdown: string) => void;
 };
 
+export const equationValidationError = (source: string): string | null => {
+  if (source.trim().length === 0) return 'Enter a LaTeX equation.';
+  try {
+    katex.renderToString(source, { displayMode: true, throwOnError: true });
+    return null;
+  } catch (caughtError) {
+    return caughtError instanceof Error ? caughtError.message : 'Invalid LaTeX';
+  }
+};
+
 const StyledEditor = styled.div`
   display: flex;
   flex-direction: column;
@@ -46,20 +56,12 @@ export const ManuscriptEquationEditor = ({
 }: ManuscriptEquationEditorProps) => {
   const source = equationSource(markdown);
   const { rendered, error } = useMemo(() => {
-    let validationError: string | null = null;
-    try {
-      katex.renderToString(source, { displayMode: true, throwOnError: true });
-    } catch (caughtError) {
-      validationError =
-        caughtError instanceof Error ? caughtError.message : 'Invalid LaTeX';
-    }
-
     return {
       rendered: katex.renderToString(source, {
         displayMode: true,
         throwOnError: false,
       }),
-      error: validationError,
+      error: equationValidationError(source),
     };
   }, [source]);
 
@@ -67,6 +69,8 @@ export const ManuscriptEquationEditor = ({
     <StyledEditor>
       <StyledTextarea
         aria-label="LaTeX equation source"
+        aria-invalid={error !== null}
+        aria-describedby={error === null ? undefined : 'equation-error'}
         value={source}
         onChange={(event) => onChange(`$$${event.target.value}$$`)}
       />
@@ -74,7 +78,11 @@ export const ManuscriptEquationEditor = ({
         // KaTeX returns escaped, presentation-only markup.
         dangerouslySetInnerHTML={{ __html: rendered }}
       />
-      {error === null ? null : <StyledError>{error}</StyledError>}
+      {error === null ? null : (
+        <StyledError id="equation-error" role="alert">
+          {error}
+        </StyledError>
+      )}
     </StyledEditor>
   );
 };

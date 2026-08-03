@@ -131,6 +131,7 @@ type ManuscriptSectionOutlineRowProps = {
   selectedSectionId?: string;
   onChangePlacement: (sectionId: string, placement: SectionPlacement) => void;
   onSelectSection: (sectionId: string) => void;
+  onReorderSection: (sourceId: string, targetId: string) => void;
   onToggleExpanded: (sectionId: string) => void;
 };
 
@@ -141,6 +142,7 @@ export const ManuscriptSectionOutlineRow = ({
   selectedSectionId,
   onChangePlacement,
   onSelectSection,
+  onReorderSection,
   onToggleExpanded,
 }: ManuscriptSectionOutlineRowProps) => {
   const { section, children } = node;
@@ -150,8 +152,26 @@ export const ManuscriptSectionOutlineRow = ({
   return (
     <StyledNode depth={depth}>
       <StyledRow
+        draggable
         active={section.id === selectedSectionId}
         excludedFromExport={section.includeInExport === false}
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/manuscript-section-id', section.id);
+        }}
+        onDragOver={(event) => {
+          if (event.dataTransfer.types.includes('text/manuscript-section-id')) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+          }
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const sourceId = event.dataTransfer.getData(
+            'text/manuscript-section-id',
+          );
+          if (sourceId.length > 0) onReorderSection(sourceId, section.id);
+        }}
       >
         {hasChildren ? (
           <StyledChevron
@@ -202,6 +222,7 @@ export const ManuscriptSectionOutlineRow = ({
               selectedSectionId={selectedSectionId}
               onChangePlacement={onChangePlacement}
               onSelectSection={onSelectSection}
+              onReorderSection={onReorderSection}
               onToggleExpanded={onToggleExpanded}
             />
           ))

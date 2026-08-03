@@ -13,9 +13,13 @@ import {
   REFERENCE_GQL,
   type ReferenceRecord,
   SECTION_GQL,
+  SECTION_SUMMARY_GQL,
   type SectionRecord,
   sortSections,
+  SUBMISSION_TRACKING_EXTRAS_KEY,
+  withSubmissionTracking,
 } from '@/local-db/research/components/composer/manuscriptComposerData';
+import { type ManuscriptSubmissionTracking } from '@/local-db/research/components/composer/ManuscriptSubmissionTrackingPanel';
 import { type ManuscriptSubmissionDetails } from '@/local-db/research/components/ManuscriptSubmissionDetailsPanel';
 import { type ManuscriptTitlePageDetails } from '@/local-db/research/components/composer/ManuscriptTitlePageTab';
 import {
@@ -50,6 +54,8 @@ import {
   CANONICAL_REQUIREMENT_FIELDS,
   preserveCorrespondingAuthorContact,
   serializeJournalSubmissionRequirements,
+  parseManuscriptSubmissionExtras,
+  serializeManuscriptSubmissionExtras,
   type JournalSubmissionRequirement,
   type SubmissionRequirementValues,
 } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
@@ -60,6 +66,13 @@ import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 
 export const useManuscriptComposer = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [manuscriptId, setManuscriptId] = useState<string | null>(() =>
+    searchParams.get('manuscript'),
+  );
+  const [sectionId, setSectionId] = useState<string | null>(() =>
+    searchParams.get('section'),
+  );
   const { records: manuscriptRecords, refetch: refetchManuscripts } =
     useFindManyRecords({
       objectNameSingular: 'manuscript',
@@ -73,17 +86,30 @@ export const useManuscriptComposer = () => {
   const { records: sectionRecords, refetch: refetchSections } =
     useFindManyRecords({
       objectNameSingular: 'manuscriptSection',
-      recordGqlFields: SECTION_GQL,
+      recordGqlFields: isDefined(manuscriptId)
+        ? SECTION_GQL
+        : SECTION_SUMMARY_GQL,
+      filter: isDefined(manuscriptId)
+        ? { manuscriptId: { eq: manuscriptId } }
+        : undefined,
     });
   const { records: figureRecords, refetch: refetchFigures } =
     useFindManyRecords({
       objectNameSingular: 'figure',
       recordGqlFields: FIGURE_GQL,
+      filter: isDefined(manuscriptId)
+        ? { manuscriptId: { eq: manuscriptId } }
+        : undefined,
+      skip: !isDefined(manuscriptId),
     });
   const { records: referenceRecords, refetch: refetchReferences } =
     useFindManyRecords({
       objectNameSingular: 'reference',
       recordGqlFields: REFERENCE_GQL,
+      filter: isDefined(manuscriptId)
+        ? { manuscriptId: { eq: manuscriptId } }
+        : undefined,
+      skip: !isDefined(manuscriptId),
     });
   const { createOneRecord: createSection } = useCreateOneRecord({
     objectNameSingular: 'manuscriptSection',
@@ -104,15 +130,10 @@ export const useManuscriptComposer = () => {
     objectNameSingular: 'reference',
   });
   const { updateOneRecord } = useUpdateOneRecord();
-  const manuscripts = manuscriptRecords as unknown as ManuscriptRecord[];
+  const manuscripts = (manuscriptRecords as unknown as ManuscriptRecord[]).map(
+    withSubmissionTracking,
+  );
   const journals = journalRecords as unknown as JournalRecord[];
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [manuscriptId, setManuscriptId] = useState<string | null>(() =>
-    searchParams.get('manuscript'),
-  );
-  const [sectionId, setSectionId] = useState<string | null>(() =>
-    searchParams.get('section'),
-  );
   const [journalId, setJournalId] = useState<string | null>(null);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [enqueueSubmissionSave] = useState(() => {
@@ -361,6 +382,17 @@ export const useManuscriptComposer = () => {
     if (isDefined(createdId)) selectSection(createdId);
   };
 
+  const createBlankManuscript = async () => {
+    const created = await createManuscript({
+      name: 'Untitled manuscript',
+      manuscriptType: 'JOURNAL_PAPER',
+      status: 'DRAFTING',
+    });
+    await refetchManuscripts();
+    const createdId = (created as { id?: string } | undefined)?.id;
+    if (isDefined(createdId)) selectManuscript(createdId);
+  };
+
   // Skeleton entries the manuscript still lacks — drives both the "add
   // missing sections" action and the typed add-section picker.
   const missingScaffold = useMemo(
@@ -401,6 +433,27 @@ export const useManuscriptComposer = () => {
       objectNameSingular: 'manuscript',
       idToUpdate: manuscript.id,
       updateOneRecordInput: values,
+    });
+    await refetchManuscripts();
+  };
+
+  const saveSubmissionTracking = async (
+    values: ManuscriptSubmissionTracking,
+  ) => {
+    if (!isDefined(manuscript)) return;
+    const extras = parseManuscriptSubmissionExtras(manuscript.submissionExtras);
+    extras[SUBMISSION_TRACKING_EXTRAS_KEY] = {
+      journalConfirmed: String(values.journalConfirmed),
+      submittedAt: values.submittedAt,
+      version: values.version,
+    };
+    await updateOneRecord({
+      objectNameSingular: 'manuscript',
+      idToUpdate: manuscript.id,
+      updateOneRecordInput: {
+        status: values.status,
+        submissionExtras: serializeManuscriptSubmissionExtras(extras),
+      },
     });
     await refetchManuscripts();
   };
@@ -621,6 +674,34 @@ export const useManuscriptComposer = () => {
       setSectionId(null);
       updateSelectionParams(manuscript.id, null);
     }
+  };
+
+  const duplicateSection = async (sectionIdToDuplicate: string) => {
+    if (!isDefined(manuscript)) return;
+    const section = sections.find(({ id }) => id === sectionIdToDuplicate);
+    if (!isDefined(section)) return;
+    const created = await createSection({
+      name: `${section.name ?? 'Untitled section'} (copy)`,
+      manuscriptId: manuscript.id,
+      sectionType: section.sectionType ?? 'OTHER',
+      placement: section.placement ?? 'MAIN',
+      orderIndex:
+        Math.max(
+          -1,
+          ...sections
+            .filter((candidate) => candidate.placement === section.placement)
+            .map((candidate) => candidate.orderIndex ?? -1),
+        ) + 1,
+      level: section.level ?? 1,
+      status: 'DRAFTING',
+      includeInExport: section.includeInExport !== false,
+      content: section.content ?? '',
+      wordCount: countWords(section.content ?? ''),
+      ...(isDefined(section.wordLimit) ? { wordLimit: section.wordLimit } : {}),
+    });
+    await refetchSections();
+    const createdId = (created as { id?: string } | undefined)?.id;
+    if (isDefined(createdId)) selectSection(createdId);
   };
 
   const deleteSections = async (sectionIdsToDelete: string[]) => {
@@ -990,6 +1071,32 @@ export const useManuscriptComposer = () => {
     await Promise.all([refetchSections(), refetchFigures()]);
   };
 
+  const reorderSection = async (sourceId: string, targetId: string) => {
+    const source = sections.find(({ id }) => id === sourceId);
+    const target = sections.find(({ id }) => id === targetId);
+    if (
+      !isDefined(source) ||
+      !isDefined(target) ||
+      source.id === target.id ||
+      source.placement !== target.placement
+    ) {
+      return;
+    }
+    await Promise.all([
+      updateOneRecord({
+        objectNameSingular: 'manuscriptSection',
+        idToUpdate: source.id,
+        updateOneRecordInput: { orderIndex: target.orderIndex ?? 0 },
+      }),
+      updateOneRecord({
+        objectNameSingular: 'manuscriptSection',
+        idToUpdate: target.id,
+        updateOneRecordInput: { orderIndex: source.orderIndex ?? 0 },
+      }),
+    ]);
+    await refetchSections();
+  };
+
   const changeSectionIncludeInExport = async (
     sectionIdToUpdate: string,
     includeInExport: boolean,
@@ -1049,12 +1156,15 @@ export const useManuscriptComposer = () => {
     persistSectionById,
     persistCitationLinkedSections,
     addSection,
+    createBlankManuscript,
     scaffoldSections,
     missingScaffold,
     saveSubmissionDetails,
+    saveSubmissionTracking,
     saveTitlePageDetails,
     addKeywordsSection,
     duplicateCurrentManuscript,
+    duplicateSection,
     deleteSection,
     deleteSections,
     deleteReferences,
@@ -1065,6 +1175,7 @@ export const useManuscriptComposer = () => {
     keepJournalSubmissionValue,
     selectJournal,
     changeSectionPlacement,
+    reorderSection,
     changeSectionIncludeInExport,
     saveStyleOverrides,
     refetchImportedRecords,

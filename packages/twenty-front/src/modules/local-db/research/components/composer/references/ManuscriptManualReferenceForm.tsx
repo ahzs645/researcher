@@ -49,7 +49,6 @@ export const ManuscriptManualReferenceForm = ({
           { ...values, citationKey },
           undefined,
         ),
-        cslType: 'OTHER',
         manuscriptId,
         ...(projectId ? { projectId } : {}),
       });

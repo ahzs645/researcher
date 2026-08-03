@@ -5,7 +5,10 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
 import { type DatasetRecord } from '@/local-db/research/components/composer/manuscriptComposerData';
-import { ManuscriptEquationEditor } from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
+import {
+  equationValidationError,
+  ManuscriptEquationEditor,
+} from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
 import { type ChartKind } from '@/local-db/research/manuscript/manuscriptChart';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { Select } from '@/ui/input/components/Select';
@@ -120,6 +123,10 @@ export const ManuscriptFigureCreateForm = ({
       label: dataset.name ?? 'Untitled dataset',
     })),
   ];
+  const equationError = equationValidationError(equationLatex);
+  const canAdd =
+    caption.trim().length > 0 &&
+    (assetKind !== 'EQUATION' || equationError === null);
 
   return (
     <StyledForm>
@@ -187,7 +194,7 @@ export const ManuscriptFigureCreateForm = ({
           variant="primary"
           accent="blue"
           size="small"
-          disabled={isAdding || caption.trim().length === 0}
+          disabled={isAdding || !canAdd}
           onClick={onAdd}
         />
         {assetKind === 'EQUATION' ? null : (
@@ -195,7 +202,7 @@ export const ManuscriptFigureCreateForm = ({
             title="Upload image…"
             variant="secondary"
             size="small"
-            disabled={isAdding || caption.trim().length === 0}
+            disabled={isAdding || !canAdd}
             onClick={() => fileInputRef.current?.click()}
           />
         )}

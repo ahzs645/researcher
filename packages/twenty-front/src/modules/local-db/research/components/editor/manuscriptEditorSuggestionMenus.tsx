@@ -12,6 +12,8 @@ import { type ReferenceLike } from '@/local-db/research/manuscript/manuscriptTyp
 export const getManuscriptSlashMenuItems = (
   editor: ManuscriptEditor,
   openCitationPicker: () => void,
+  openCrossReferencePicker: () => void,
+  openAssetPicker: () => void,
   query: string,
 ): DefaultReactSuggestionItem[] => {
   const items: DefaultReactSuggestionItem[] = [
@@ -46,6 +48,20 @@ export const getManuscriptSlashMenuItems = (
       group: 'Manuscript',
       icon: <IconAt />,
       onItemClick: openCitationPicker,
+    },
+    {
+      title: 'Cross-reference',
+      aliases: ['figure reference', 'table reference', 'equation reference'],
+      group: 'Manuscript',
+      icon: <IconLink />,
+      onItemClick: openCrossReferencePicker,
+    },
+    {
+      title: 'Insert asset',
+      aliases: ['figure', 'table', 'equation', 'place asset'],
+      group: 'Manuscript',
+      icon: <IconLink />,
+      onItemClick: openAssetPicker,
     },
   ];
   return filterSuggestionItems(items, query);

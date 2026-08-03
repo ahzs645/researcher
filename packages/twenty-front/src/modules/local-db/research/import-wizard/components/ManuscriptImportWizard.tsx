@@ -12,6 +12,7 @@ import { MANUSCRIPT_IMPORT_WIZARD_STEPS } from '@/local-db/research/import-wizar
 import { type ManuscriptImportWizardOptions } from '@/local-db/research/import-wizard/states/manuscriptImportWizardState';
 import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
 import { type ImportedDocumentSource } from '@/local-db/research/manuscript/manuscriptDocxFile';
+import { type ImportBlockOverrides } from '@/local-db/research/manuscript/manuscriptImportBlocks';
 import { type PreparedManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
 import { ModalStatefulWrapper } from '@/ui/layout/modal/components/ModalStatefulWrapper';
@@ -38,6 +39,13 @@ const StyledModalContent = styled.div`
   height: min(800px, calc(100vh - 64px));
   min-height: 600px;
   min-width: 800px;
+
+  @media (max-width: 900px), (max-height: 700px) {
+    height: calc(100dvh - 24px);
+    min-height: 0;
+    min-width: 0;
+    width: calc(100vw - 24px);
+  }
 `;
 
 const StyledHeaderContent = styled.div`
@@ -80,6 +88,7 @@ export const ManuscriptImportWizard = ({
     (() => boolean) | null
   >(null);
   const [isCommitting, setIsCommitting] = useState(false);
+  const [mapOverrides, setMapOverrides] = useState<ImportBlockOverrides>({});
 
   const registerEnterHandler = useCallback((handler: (() => void) | null) => {
     setEnterHandler(() => handler);
@@ -154,6 +163,9 @@ export const ManuscriptImportWizard = ({
     },
     [],
   );
+  const handleReviewBack = () => {
+    setActiveStep(blocksSource === null ? 0 : 1);
+  };
 
   return (
     <ModalStatefulWrapper
@@ -165,6 +177,7 @@ export const ManuscriptImportWizard = ({
       onEnter={handleEnter}
       shouldCloseModalOnClickOutsideOrEscape={false}
       renderInDocumentBody
+      accessibilityLabel="Import manuscript"
     >
       <StyledModalContent>
         <ModalHeader
@@ -207,6 +220,9 @@ export const ManuscriptImportWizard = ({
               existingReferences={options.existingReferences}
               existingFigureRefKeys={options.existingFigureRefKeys}
               tableStyle={options.exportTableStyle ?? 'ACADEMIC'}
+              initialOverrides={mapOverrides}
+              onOverridesChange={setMapOverrides}
+              onBack={() => setActiveStep(0)}
               onContinue={handleMapContinue}
               registerEnterHandler={registerEnterHandler}
               registerCloseInterception={registerCloseInterception}
@@ -219,6 +235,7 @@ export const ManuscriptImportWizard = ({
               options={options}
               onClose={onClose}
               registerCommitState={setIsCommitting}
+              onBack={handleReviewBack}
             />
           ) : null}
         </StyledStepContent>

@@ -97,6 +97,7 @@ type ManuscriptSectionOutlineProps = {
   onChangePlacement: (sectionId: string, placement: SectionPlacement) => void;
   onEditFrontMatter: () => void;
   onSelectSection: (sectionId: string) => void;
+  onReorderSection: (sourceId: string, targetId: string) => void;
   sections: SectionLike[];
   selectedSectionId?: string;
 };
@@ -105,6 +106,7 @@ export const ManuscriptSectionOutline = ({
   onChangePlacement,
   onEditFrontMatter,
   onSelectSection,
+  onReorderSection,
   sections,
   selectedSectionId,
 }: ManuscriptSectionOutlineProps) => {
@@ -219,6 +221,7 @@ export const ManuscriptSectionOutline = ({
                       selectedSectionId={selectedSectionId}
                       onChangePlacement={onChangePlacement}
                       onSelectSection={onSelectSection}
+                      onReorderSection={onReorderSection}
                       onToggleExpanded={toggleSectionExpanded}
                     />
                   ))}

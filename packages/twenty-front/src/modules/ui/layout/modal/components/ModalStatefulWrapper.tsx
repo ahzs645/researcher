@@ -30,6 +30,7 @@ export const ModalStatefulWrapper = ({
   smallBorderRadius,
   narrowWidth,
   autoHeight,
+  accessibilityLabel,
 }: ModalStatefulWrapperProps) => {
   const isMobile = useIsMobile();
   const modalRef = useRef<HTMLDivElement>(null);
@@ -87,6 +88,7 @@ export const ModalStatefulWrapper = ({
           backdropClickOutsideId={MODAL_BACKDROP_CLICK_OUTSIDE_ID}
           preventClickOutside={dataGloballyPreventClickOutside}
           modalRef={modalRef}
+          accessibilityLabel={accessibilityLabel}
         >
           {children}
         </Modal>

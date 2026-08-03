@@ -82,3 +82,26 @@ export const slugifyFigureKey = (value: string): string =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
+
+export const uniqueFigureKey = (
+  value: string,
+  existingKeys: Array<string | null | undefined>,
+  fallback: string,
+): string => {
+  const usedKeys = new Set(
+    existingKeys
+      .map((key) => key?.trim().toLowerCase())
+      .filter((key): key is string => key !== undefined && key.length > 0),
+  );
+  const base = slugifyFigureKey(value).slice(0, 24) || fallback;
+  if (!usedKeys.has(base.toLowerCase())) return base;
+
+  let suffix = 2;
+  let candidate = '';
+  do {
+    const suffixText = `-${suffix}`;
+    candidate = `${base.slice(0, 24 - suffixText.length)}${suffixText}`;
+    suffix += 1;
+  } while (usedKeys.has(candidate));
+  return candidate;
+};

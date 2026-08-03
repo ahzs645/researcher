@@ -1,6 +1,6 @@
 import { styled } from '@linaria/react';
 import { AnimatePresence, motion } from 'framer-motion';
-import React, { useContext, useRef } from 'react';
+import React, { useContext, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { isDefined } from 'twenty-shared/utils';
 import { ThemeContext, themeCssVariables } from '@ui/theme-constants';
@@ -126,6 +126,7 @@ export const Modal = ({
   preventClickOutside,
   onBackdropMouseDown,
   modalRef: externalRef,
+  accessibilityLabel = 'Dialog',
 }: ModalProps) => {
   const { theme } = useContext(ThemeContext);
   const internalRef = useRef<HTMLDivElement>(null);
@@ -135,6 +136,46 @@ export const Modal = ({
     e.stopPropagation();
     onBackdropMouseDown?.(e);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement;
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const frameId = requestAnimationFrame(() => {
+      const modal = resolvedRef.current;
+      if (modal === null) return;
+      (modal.querySelector<HTMLElement>(focusableSelector) ?? modal).focus();
+    });
+    const keepFocusInside = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const modal = resolvedRef.current;
+      if (modal === null) return;
+      const focusable = Array.from(
+        modal.querySelectorAll<HTMLElement>(focusableSelector),
+      ).filter((element) => !element.hidden);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        modal.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', keepFocusInside);
+    return () => {
+      cancelAnimationFrame(frameId);
+      document.removeEventListener('keydown', keepFocusInside);
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+    };
+  }, [isOpen, resolvedRef]);
 
   const content = (
     <AnimatePresence mode="wait">
@@ -167,6 +208,10 @@ export const Modal = ({
             autoHeight={autoHeight}
             modalZIndex={modalZIndex}
             data-globally-prevent-click-outside={preventClickOutside}
+            role="dialog"
+            aria-modal="true"
+            aria-label={accessibilityLabel}
+            tabIndex={-1}
           >
             {children}
           </AnimatedModalDiv>

@@ -12,16 +12,17 @@ import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { useManuscriptEditorContext } from '@/local-db/research/components/editor/ManuscriptEditorContext';
+import { ManuscriptCitationClusterEditor } from '@/local-db/research/components/editor/ManuscriptCitationClusterEditor';
 import { ManuscriptEditorPopover } from '@/local-db/research/components/editor/ManuscriptEditorPopover';
+import { ManuscriptCrossRefPicker } from '@/local-db/research/components/editor/ManuscriptEditorPickers';
 import {
-  ManuscriptCrossRefPicker,
-  ManuscriptReferencePicker,
-} from '@/local-db/research/components/editor/ManuscriptEditorPickers';
-import { ManuscriptEquationEditor } from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
+  equationValidationError,
+  ManuscriptEquationEditor,
+} from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
 import { formatInTextCitation } from '@/local-db/research/manuscript/manuscriptCitations';
 import {
   citationKeysFromProp,
-  citationKeysToProp,
+  citationTokenFromProp,
 } from '@/local-db/research/manuscript/manuscriptEditorContent';
 import { resolveAssetKey } from '@/local-db/research/manuscript/manuscriptNumbering';
 
@@ -69,13 +70,6 @@ const StyledFallback = styled.code`
 const StyledActions = styled.div`
   display: flex;
   justify-content: flex-end;
-`;
-
-const StyledPopoverHint = styled.span`
-  color: ${themeCssVariables.font.color.tertiary};
-  display: block;
-  font-size: ${themeCssVariables.font.size.xs};
-  padding-bottom: ${themeCssVariables.spacing[1]};
 `;
 
 const renderInlineKatex = (latex: string): string | undefined => {
@@ -150,6 +144,7 @@ const InlineEquationNode = ({ latex, onSave }: InlineEquationNodeProps) => {
             <Button
               title="Save equation"
               size="small"
+              disabled={equationValidationError(draft) !== null}
               onClick={() => {
                 onSave(draft);
                 setIsOpen(false);
@@ -179,7 +174,7 @@ export const ManuscriptCitationChip = ({
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const keys = citationKeysFromProp(citationKey);
-  const rawToken = `[${keys.map((key) => `@${key}`).join('; ')}]`;
+  const rawToken = citationTokenFromProp(citationKey);
   const resolved =
     keys.length > 0 &&
     keys.every((key) => citationContext.referencesByKey.has(key));
@@ -209,20 +204,10 @@ export const ManuscriptCitationChip = ({
           anchorRef={anchorRef}
           onClose={() => setIsOpen(false)}
         >
-          {keys.length > 1 ? (
-            <StyledPopoverHint>
-              {`Cluster of ${keys.length}: ${keys.join('; ')}. Picking a reference adds it to this cluster.`}
-            </StyledPopoverHint>
-          ) : null}
-          <ManuscriptReferencePicker
-            onSelect={(key) => {
-              // Replacing a multi-source cluster with one key would silently
-              // drop the other sources, so a cluster gains the picked key.
-              onSave(
-                keys.length > 1
-                  ? citationKeysToProp([...new Set([...keys, key])])
-                  : key,
-              );
+          <ManuscriptCitationClusterEditor
+            citationKey={citationKey}
+            onSave={(nextCitationKey) => {
+              onSave(nextCitationKey);
               setIsOpen(false);
             }}
             onRemove={() => onRemove(anchorRef.current)}

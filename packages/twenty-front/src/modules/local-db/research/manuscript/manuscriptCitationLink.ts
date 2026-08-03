@@ -11,6 +11,17 @@ export type CitationLinkSuggestion = {
   score: number;
 };
 
+export const isCitationLinkSuggestionUnambiguous = (
+  suggestions: CitationLinkSuggestion[],
+): boolean => {
+  const [first, second] = suggestions;
+  return (
+    first !== undefined &&
+    first.score >= 0.9 &&
+    (second === undefined || first.score - second.score >= 0.15)
+  );
+};
+
 export type UnlinkedCitationPart = {
   marker: string;
   suggestions: CitationLinkSuggestion[];

@@ -11,6 +11,7 @@ import { type ManuscriptBundle } from '@/local-db/research/manuscript/manuscript
 import { type ManuscriptExportStyleOverrides } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
+import { type SubmissionCheckTarget } from '@/local-db/research/manuscript/manuscriptSubmission';
 
 type ManuscriptExportTabProps = {
   manuscript: ManuscriptRecord;
@@ -24,6 +25,7 @@ type ManuscriptExportTabProps = {
   onSaveStyleOverrides: (
     overrides: ManuscriptExportStyleOverrides,
   ) => Promise<void>;
+  onNavigateToFix: (target: SubmissionCheckTarget) => void;
 };
 
 const StyledTab = styled.div`
@@ -42,6 +44,7 @@ export const ManuscriptExportTab = ({
   styleOverrides,
   onSelectJournal,
   onSaveStyleOverrides,
+  onNavigateToFix,
 }: ManuscriptExportTabProps) => (
   <StyledTab>
     <ManuscriptExportPanel
@@ -63,6 +66,7 @@ export const ManuscriptExportTab = ({
         submissionExtras: manuscript.submissionExtras,
       }}
       portableSource={portableSource}
+      onNavigateToFix={onNavigateToFix}
     />
     <ManuscriptBibliographyPreview
       citationKeys={bundle.citedKeys}

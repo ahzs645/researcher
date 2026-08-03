@@ -1,4 +1,5 @@
 import {
+  EMPTY_REFERENCE_FORM_VALUES,
   referenceFormValuesWithEditedCsl,
   referenceFormValuesToRecordUpdate,
   validateReferenceCslJson,
@@ -26,6 +27,7 @@ describe('referenceFormValuesToRecordUpdate', () => {
   it('synchronizes edited structured fields into the preserved CSL object', () => {
     const update = referenceFormValuesToRecordUpdate(
       {
+        ...EMPTY_REFERENCE_FORM_VALUES,
         authors: 'Smith, Jane',
         citationKey: 'smith2025',
         containerTitle: 'Updated Journal',
@@ -40,6 +42,7 @@ describe('referenceFormValuesToRecordUpdate', () => {
         issue: '2',
         name: 'Updated title',
         pages: '10–20',
+        publisher: 'Preserved Publisher',
         url: '',
         volume: '5',
         year: '2025',
@@ -66,6 +69,7 @@ describe('referenceFormValuesWithEditedCsl', () => {
   it('applies known fields from an edited advanced CSL object', () => {
     const values = referenceFormValuesWithEditedCsl(
       {
+        ...EMPTY_REFERENCE_FORM_VALUES,
         authors: 'Old, Author',
         citationKey: 'old2020',
         containerTitle: '',

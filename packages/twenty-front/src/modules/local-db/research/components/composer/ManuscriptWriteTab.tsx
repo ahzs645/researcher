@@ -34,6 +34,8 @@ type ManuscriptWriteTabProps = {
   submissionExtras?: string | null;
   competingInterests?: string | null;
   onEditFrontMatter: () => void;
+  onDeleteSection: (sectionId: string) => Promise<void>;
+  onDuplicateSection: (sectionId: string) => Promise<void>;
   onSelectSection: (sectionId: string) => void;
   onChangeSectionPlacement: (
     sectionId: string,
@@ -43,6 +45,7 @@ type ManuscriptWriteTabProps = {
   onPersistSectionError: () => void;
   onAddSection: (draft?: ScaffoldSectionDraft) => void;
   onScaffoldSections: () => void;
+  onReorderSection: (sourceId: string, targetId: string) => void;
   missingScaffold: ScaffoldSectionDraft[];
   onSectionMetadataChanged: () => void;
   onImported: () => void;
@@ -114,12 +117,15 @@ export const ManuscriptWriteTab = ({
   submissionExtras,
   competingInterests,
   onEditFrontMatter,
+  onDeleteSection,
+  onDuplicateSection,
   onSelectSection,
   onChangeSectionPlacement,
   onPersistSection,
   onPersistSectionError,
   onAddSection,
   onScaffoldSections,
+  onReorderSection,
   missingScaffold,
   onSectionMetadataChanged,
   onImported,
@@ -230,6 +236,7 @@ export const ManuscriptWriteTab = ({
             onChangePlacement={onChangeSectionPlacement}
             onEditFrontMatter={onEditFrontMatter}
             onSelectSection={selectSection}
+            onReorderSection={onReorderSection}
           />
         </StyledOutlineColumn>
 
@@ -239,6 +246,8 @@ export const ManuscriptWriteTab = ({
           figures={figures}
           minimumEditorHeight={minimumEditorHeight}
           onEditorReady={() => setMinimumEditorHeight(undefined)}
+          onDeleteSection={onDeleteSection}
+          onDuplicateSection={onDuplicateSection}
           onPersistSection={onPersistSection}
           onPersistSectionError={onPersistSectionError}
           onSectionMetadataChanged={onSectionMetadataChanged}

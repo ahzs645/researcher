@@ -16,6 +16,7 @@ type ManuscriptImportMapSidebarProps = {
   overrides: ImportBlockOverrides;
   sourceName: string;
   isPreparing: boolean;
+  onBack: () => void;
   onContinue: () => void;
 };
 
@@ -27,6 +28,12 @@ const StyledSidebar = styled.aside`
   min-height: 0;
   overflow-y: auto;
   padding: ${themeCssVariables.spacing[4]};
+
+  @media (max-width: 720px) {
+    border-left: 0;
+    border-top: 1px solid ${themeCssVariables.border.color.medium};
+    overflow-y: visible;
+  }
 `;
 
 const StyledTitle = styled.h3`
@@ -146,6 +153,7 @@ export const ManuscriptImportMapSidebar = ({
   overrides,
   sourceName,
   isPreparing,
+  onBack,
   onContinue,
 }: ManuscriptImportMapSidebarProps) => {
   const activeBlocks = blocks.filter(
@@ -256,6 +264,14 @@ export const ManuscriptImportMapSidebar = ({
           {reviewCount} {reviewCount === 1 ? 'block needs' : 'blocks need'}{' '}
           review
         </StyledReviewCount>
+        <Button
+          title="Back"
+          variant="secondary"
+          size="small"
+          fullWidth
+          disabled={isPreparing}
+          onClick={onBack}
+        />
         <Button
           id="manuscript-import-continue-button"
           title={isPreparing ? 'Preparing review…' : 'Continue'}

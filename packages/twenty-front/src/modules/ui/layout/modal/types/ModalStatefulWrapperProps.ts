@@ -10,6 +10,7 @@ export type ModalStatefulWrapperProps = Pick<
   | 'smallBorderRadius'
   | 'narrowWidth'
   | 'autoHeight'
+  | 'accessibilityLabel'
 > &
   React.PropsWithChildren & {
     modalInstanceId: string;

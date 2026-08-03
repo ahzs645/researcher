@@ -15,7 +15,7 @@ import {
   chartPngFromTable,
   deriveFigureNameFromCaption,
   fileToDataUrl,
-  slugifyFigureKey,
+  uniqueFigureKey,
 } from '@/local-db/research/components/composer/manuscriptFigurePanelUtils';
 import { type ChartKind } from '@/local-db/research/manuscript/manuscriptChart';
 import { numberAssets } from '@/local-db/research/manuscript/manuscriptNumbering';
@@ -123,6 +123,58 @@ export const ManuscriptFigurePanel = ({
       );
   };
 
+  const changeFigureReferenceKey = (
+    figure: FigureLike,
+    nextReferenceKey: string,
+  ) => {
+    const currentReferenceKey = figure.refKey?.trim() || figure.id;
+    if (
+      figures.some(
+        (candidate) =>
+          candidate.id !== figure.id &&
+          (candidate.refKey?.trim() || candidate.id) === nextReferenceKey,
+      )
+    ) {
+      enqueueErrorSnackBar({ message: 'That reference key is already in use' });
+      return;
+    }
+    const rewriteTokens = (content: string) =>
+      content
+        .replaceAll(`[#${currentReferenceKey}]`, `[#${nextReferenceKey}]`)
+        .replaceAll(
+          `[[asset:${currentReferenceKey}]]`,
+          `[[asset:${nextReferenceKey}]]`,
+        );
+    const changedSections = sections.filter((section) =>
+      (section.content ?? '').includes(currentReferenceKey),
+    );
+    void Promise.all([
+      updateOneRecord({
+        objectNameSingular: 'figure',
+        idToUpdate: figure.id,
+        updateOneRecordInput: { refKey: nextReferenceKey },
+      }),
+      ...changedSections.map((section) =>
+        updateOneRecord({
+          objectNameSingular: 'manuscriptSection',
+          idToUpdate: section.id,
+          updateOneRecordInput: {
+            content: rewriteTokens(section.content ?? ''),
+          },
+        }),
+      ),
+    ])
+      .then(onChanged)
+      .then(() =>
+        enqueueSuccessSnackBar({
+          message: `Updated reference key to #${nextReferenceKey}`,
+        }),
+      )
+      .catch(() =>
+        enqueueErrorSnackBar({ message: 'Could not update reference key' }),
+      );
+  };
+
   const orderedPeers = (figure: FigureLike) =>
     numbered.filter(
       (candidate) =>
@@ -213,8 +265,11 @@ export const ManuscriptFigurePanel = ({
       manuscriptId,
       assetKind: 'FIGURE',
       placement,
-      refKey:
-        slugifyFigureKey(refKeyBase).slice(0, 24) || `chart-${Date.now()}`,
+      refKey: uniqueFigureKey(
+        refKeyBase,
+        figures.map((figure) => figure.refKey),
+        `chart-${Date.now()}`,
+      ),
       caption: captionText,
       imageUrl: png,
       imageSource: isDefined(options?.datasetId) ? 'DATASET' : 'GENERATED',
@@ -244,9 +299,11 @@ export const ManuscriptFigurePanel = ({
         if (!created) return;
         enqueueSuccessSnackBar({ message: 'Plotted chart from table' });
       } else {
-        const refKey =
-          slugifyFigureKey(trimmedCaption).slice(0, 24) ||
-          `asset-${Date.now()}`;
+        const refKey = uniqueFigureKey(
+          trimmedCaption,
+          figures.map((figure) => figure.refKey),
+          `asset-${Date.now()}`,
+        );
         await createOneRecord({
           name:
             deriveFigureNameFromCaption(trimmedCaption) || 'Untitled figure',
@@ -404,6 +461,9 @@ export const ManuscriptFigurePanel = ({
             onReplaceImage={(file) => {
               void replaceFigureImage(figure, file);
             }}
+            onChangeReferenceKey={(refKey) =>
+              changeFigureReferenceKey(figure, refKey)
+            }
           />
         );
       })}

@@ -28,6 +28,7 @@ type ManuscriptFigureListItemProps = {
   onMove: (direction: -1 | 1) => void;
   onPlotTable: () => void;
   onReplaceImage: (file: File) => void;
+  onChangeReferenceKey: (refKey: string) => void;
 };
 
 const StyledItem = styled.div`
@@ -141,6 +142,7 @@ export const ManuscriptFigureListItem = ({
   onMove,
   onPlotTable,
   onReplaceImage,
+  onChangeReferenceKey,
 }: ManuscriptFigureListItemProps) => {
   const image = resolveFigureImage(figure);
   const linkedSection = sections.find(({ id }) => id === figure.sectionId);
@@ -214,6 +216,7 @@ export const ManuscriptFigureListItem = ({
           onMove={onMove}
           onPlotTable={onPlotTable}
           onReplaceImage={onReplaceImage}
+          onChangeReferenceKey={onChangeReferenceKey}
         />
       ) : null}
     </StyledItem>

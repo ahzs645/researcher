@@ -24,7 +24,12 @@ import {
   useFloating,
 } from '@floating-ui/react';
 import { styled } from '@linaria/react';
-import { type MouseEvent, type ReactNode, useCallback } from 'react';
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  useCallback,
+} from 'react';
 import { flushSync } from 'react-dom';
 import { type Keys } from 'react-hotkeys-hook';
 import { isDefined } from 'twenty-shared/utils';
@@ -191,6 +196,29 @@ export const Dropdown = ({
     ],
   );
 
+  const handleClickableComponentKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (
+        disableClickForClickableComponent ||
+        !['Enter', ' ', 'ArrowDown'].includes(event.key)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      toggleDropdown({
+        dropdownComponentInstanceIdFromProps: dropdownId,
+        globalHotkeysConfig,
+      });
+    },
+    [
+      disableClickForClickableComponent,
+      dropdownId,
+      globalHotkeysConfig,
+      toggleDropdown,
+    ],
+  );
+
   return (
     <DropdownComponentInstanceContext.Provider
       value={{ instanceId: dropdownId }}
@@ -199,10 +227,12 @@ export const Dropdown = ({
         <StyledClickableComponent
           ref={refs.setReference}
           onClick={handleClickableComponentClick}
+          onKeyDown={handleClickableComponentKeyDown}
           aria-controls={`${dropdownId}-options`}
           aria-expanded={isDropdownOpen}
           aria-haspopup={true}
           role="button"
+          tabIndex={disableClickForClickableComponent ? -1 : 0}
           width={clickableComponentWidth}
         >
           {clickableComponent}

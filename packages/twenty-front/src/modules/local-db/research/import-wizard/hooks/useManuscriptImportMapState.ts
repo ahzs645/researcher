@@ -24,6 +24,8 @@ type UseManuscriptImportMapStateProps = {
   reconcile: boolean;
   existingReferences: PrepareManuscriptImportOptions['existingReferences'];
   existingFigureRefKeys: string[];
+  initialOverrides?: ImportBlockOverrides;
+  onOverridesChange?: (overrides: ImportBlockOverrides) => void;
   onContinue: (
     document: ImportedDocument,
     preparedImport: PreparedManuscriptImport,
@@ -45,12 +47,15 @@ export const useManuscriptImportMapState = ({
   reconcile,
   existingReferences,
   existingFigureRefKeys,
+  initialOverrides = {},
+  onOverridesChange,
   onContinue,
   registerEnterHandler,
   registerCloseInterception,
 }: UseManuscriptImportMapStateProps) => {
   const firstBlockId = blocks[0]?.id ?? null;
-  const [overrides, setOverrides] = useState<ImportBlockOverrides>({});
+  const [overrides, setOverrides] =
+    useState<ImportBlockOverrides>(initialOverrides);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(
     firstBlockId,
   );
@@ -338,6 +343,10 @@ export const useManuscriptImportMapState = ({
     setActiveBlockId(nextReviewId);
     setAnchorBlockId(nextReviewId);
   }, [activeBlockId, blocks, confirmLink, overrides]);
+
+  useEffect(() => {
+    onOverridesChange?.(overrides);
+  }, [onOverridesChange, overrides]);
 
   useEffect(() => {
     registerEnterHandler(handleEnter);

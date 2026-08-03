@@ -1,10 +1,15 @@
 import { styled } from '@linaria/react';
+import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { type SubmissionReadiness } from '@/local-db/research/manuscript/manuscriptSubmission';
+import {
+  type SubmissionCheckTarget,
+  type SubmissionReadiness,
+} from '@/local-db/research/manuscript/manuscriptSubmission';
 
 type ManuscriptSubmissionReadinessPanelProps = {
   readiness: SubmissionReadiness;
+  onNavigate?: (target: SubmissionCheckTarget) => void;
 };
 
 const StyledReadiness = styled.details`
@@ -22,8 +27,12 @@ const StyledReadiness = styled.details`
 `;
 
 const StyledCheck = styled.div`
+  align-items: center;
   color: ${themeCssVariables.font.color.secondary};
+  display: flex;
   font-size: ${themeCssVariables.font.size.xs};
+  gap: ${themeCssVariables.spacing[2]};
+  justify-content: space-between;
 
   &[data-severity='ERROR'] {
     color: ${themeCssVariables.font.color.danger};
@@ -32,6 +41,10 @@ const StyledCheck = styled.div`
   &[data-severity='READY'] {
     color: ${themeCssVariables.font.color.tertiary};
   }
+`;
+
+const StyledCheckCopy = styled.span`
+  min-width: 0;
 `;
 
 const StyledChecks = styled.div`
@@ -45,8 +58,9 @@ const StyledChecks = styled.div`
 
 export const ManuscriptSubmissionReadinessPanel = ({
   readiness,
+  onNavigate,
 }: ManuscriptSubmissionReadinessPanelProps) => (
-  <StyledReadiness>
+  <StyledReadiness open={!readiness.ready}>
     <summary>
       Submission readiness · {readiness.readyCount} ready /{' '}
       {readiness.warningCount} warnings
@@ -57,12 +71,24 @@ export const ManuscriptSubmissionReadinessPanel = ({
     <StyledChecks>
       {readiness.checks.map((check) => (
         <StyledCheck key={check.id} data-severity={check.severity}>
-          {check.severity === 'READY'
-            ? '✓'
-            : check.severity === 'ERROR'
-              ? '!'
-              : '•'}{' '}
-          {check.label}: {check.detail}
+          <StyledCheckCopy>
+            {check.severity === 'READY'
+              ? '✓'
+              : check.severity === 'ERROR'
+                ? '!'
+                : '•'}{' '}
+            {check.label}: {check.detail}
+          </StyledCheckCopy>
+          {check.severity !== 'READY' &&
+          check.target !== undefined &&
+          onNavigate !== undefined ? (
+            <Button
+              title="Go fix"
+              variant="tertiary"
+              size="small"
+              onClick={() => onNavigate(check.target!)}
+            />
+          ) : null}
         </StyledCheck>
       ))}
     </StyledChecks>

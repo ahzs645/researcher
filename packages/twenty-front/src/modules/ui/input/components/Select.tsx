@@ -184,7 +184,6 @@ export const Select = <Value extends SelectValue>({
     <StyledContainer
       className={className}
       fullWidth={fullWidth}
-      tabIndex={0}
       onBlur={onBlur}
       ref={selectContainerRef}
     >

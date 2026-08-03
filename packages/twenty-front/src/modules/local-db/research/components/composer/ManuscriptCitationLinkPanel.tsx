@@ -6,6 +6,7 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { ManuscriptCitationReferenceSelect } from '@/local-db/research/components/composer/ManuscriptCitationReferenceSelect';
 import {
   type CitationLinkDecision,
+  isCitationLinkSuggestionUnambiguous,
   type UnlinkedCitationOccurrence,
 } from '@/local-db/research/manuscript/manuscriptCitationLink';
 import { type ReferenceLike } from '@/local-db/research/manuscript/manuscriptTypes';
@@ -107,6 +108,14 @@ const StyledPartLabel = styled.span`
   font-size: ${themeCssVariables.font.size.xs};
 `;
 
+const StyledConfidence = styled.span<{ ambiguous: boolean }>`
+  color: ${({ ambiguous }) =>
+    ambiguous
+      ? themeCssVariables.font.color.danger
+      : themeCssVariables.font.color.secondary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
 const ContextWithMarker = ({
   occurrence,
 }: {
@@ -135,8 +144,10 @@ export const ManuscriptCitationLinkPanel = ({
         occurrences.map((occurrence) => [
           occurrenceKey(occurrence),
           {
-            citationKeys: occurrence.parts.map(
-              (part) => part.suggestions[0]?.citationKey ?? '',
+            citationKeys: occurrence.parts.map((part) =>
+              isCitationLinkSuggestionUnambiguous(part.suggestions)
+                ? (part.suggestions[0]?.citationKey ?? '')
+                : '',
             ),
             skip: false,
           },
@@ -236,6 +247,24 @@ export const ManuscriptCitationLinkPanel = ({
                     {occurrence.parts.length > 1 ? (
                       <StyledPartLabel>{part.marker}</StyledPartLabel>
                     ) : null}
+                    {part.suggestions[0] === undefined ? (
+                      <StyledConfidence ambiguous>
+                        No automatic match — choose a reference to continue.
+                      </StyledConfidence>
+                    ) : (
+                      <StyledConfidence
+                        ambiguous={
+                          !isCitationLinkSuggestionUnambiguous(part.suggestions)
+                        }
+                      >
+                        Suggested @{part.suggestions[0].citationKey} ·{' '}
+                        {Math.round(part.suggestions[0].score * 100)}%
+                        confidence
+                        {isCitationLinkSuggestionUnambiguous(part.suggestions)
+                          ? ''
+                          : ' — confirmation required'}
+                      </StyledConfidence>
+                    )}
                     <ManuscriptCitationReferenceSelect
                       label={part.marker}
                       references={references}

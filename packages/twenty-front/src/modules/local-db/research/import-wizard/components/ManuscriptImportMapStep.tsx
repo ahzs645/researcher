@@ -27,6 +27,9 @@ type ManuscriptImportMapStepProps = {
   existingReferences: PrepareManuscriptImportOptions['existingReferences'];
   existingFigureRefKeys: string[];
   tableStyle: ManuscriptTableStyle;
+  initialOverrides: ImportBlockOverrides;
+  onOverridesChange: (overrides: ImportBlockOverrides) => void;
+  onBack: () => void;
   onContinue: (
     document: ImportedDocument,
     preparedImport: PreparedManuscriptImport,
@@ -48,6 +51,11 @@ const StyledGrid = styled.div`
   flex: 1;
   grid-template-columns: minmax(0, 1fr) 320px;
   min-height: 0;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
 `;
 
 const StyledBlockList = styled.div`
@@ -80,6 +88,9 @@ export const ManuscriptImportMapStep = ({
   existingReferences,
   existingFigureRefKeys,
   tableStyle,
+  initialOverrides,
+  onOverridesChange,
+  onBack,
   onContinue,
   registerEnterHandler,
   registerCloseInterception,
@@ -91,6 +102,8 @@ export const ManuscriptImportMapStep = ({
     reconcile,
     existingReferences,
     existingFigureRefKeys,
+    initialOverrides,
+    onOverridesChange,
     onContinue,
     registerEnterHandler,
     registerCloseInterception,
@@ -156,6 +169,7 @@ export const ManuscriptImportMapStep = ({
           overrides={mapState.overrides}
           sourceName={sourceName}
           isPreparing={mapState.isPreparing}
+          onBack={onBack}
           onContinue={mapState.handleContinue}
         />
       </StyledGrid>

@@ -6,7 +6,10 @@ import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptEditorPopover } from '@/local-db/research/components/editor/ManuscriptEditorPopover';
-import { ManuscriptEquationEditor } from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
+import {
+  equationValidationError,
+  ManuscriptEquationEditor,
+} from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
 
 const StyledDisplayEquation = styled.div`
   cursor: pointer;
@@ -93,6 +96,7 @@ const ManuscriptDisplayEquationNode = ({
             <Button
               title="Save equation"
               size="small"
+              disabled={equationValidationError(draft) !== null}
               onClick={(event) => {
                 event.stopPropagation();
                 onSave(draft);

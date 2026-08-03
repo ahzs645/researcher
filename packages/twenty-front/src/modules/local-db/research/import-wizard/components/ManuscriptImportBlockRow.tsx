@@ -84,11 +84,11 @@ const StyledRow = styled.div<{
   }
 `;
 
-const StyledRoleBadge = styled.span<{ role: ImportBlockRole }>`
+const StyledRoleBadge = styled.span<{ blockRole: ImportBlockRole }>`
   align-self: start;
-  border: 1px solid ${({ role }) => roleColor(role)};
+  border: 1px solid ${({ blockRole }) => roleColor(blockRole)};
   border-radius: ${themeCssVariables.border.radius.sm};
-  color: ${({ role }) => roleColor(role)};
+  color: ${({ blockRole }) => roleColor(blockRole)};
   font-size: ${themeCssVariables.font.size.xs};
   font-weight: ${themeCssVariables.font.weight.semiBold};
   overflow: hidden;
@@ -239,9 +239,17 @@ export const ManuscriptImportBlockRow = ({
       isInferred={block.roleConfidence === 'inferred' && override === undefined}
       isExcluded={override?.excluded === true}
       headingLevel={headingLevel}
+      role="option"
+      tabIndex={0}
+      aria-selected={isSelected}
       onClick={(event) => onSelect(event.shiftKey)}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        onSelect(event.shiftKey);
+      }}
     >
-      <StyledRoleBadge role={effectiveRole}>
+      <StyledRoleBadge blockRole={effectiveRole}>
         {effectiveRole === 'heading'
           ? `Heading ${headingLevel}`
           : effectiveRole}

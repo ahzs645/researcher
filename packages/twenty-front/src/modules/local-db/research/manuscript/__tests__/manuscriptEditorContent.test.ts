@@ -1,4 +1,6 @@
 import {
+  citationClusterFromProp,
+  citationClusterToProp,
   citationKeysFromProp,
   citationKeysToProp,
   manuscriptBlocksToMarkdown,
@@ -111,6 +113,27 @@ describe('manuscript editor content', () => {
       props: { latex: 'E = mc^2' },
     });
     expect(manuscriptNodesToTokens(converted)).toEqual(blocks);
+  });
+
+  it('renders a standalone asset placement as a semantic editor block', () => {
+    const block = {
+      type: 'paragraph',
+      props: {
+        backgroundColor: 'default',
+        textColor: 'default',
+        textAlignment: 'left',
+      },
+      content: [{ type: 'text', text: '[[asset:study-workflow]]', styles: {} }],
+      children: [],
+    };
+
+    const converted = manuscriptTokensToNodes([block]);
+
+    expect(converted[0]).toMatchObject({
+      type: 'assetPlacement',
+      props: { refKey: 'study-workflow' },
+    });
+    expect(manuscriptNodesToTokens(converted)).toEqual([block]);
   });
 
   it('round-trips token-heavy Markdown byte-for-byte through the editor adapter', () => {
@@ -252,7 +275,7 @@ describe('manuscript editor content', () => {
     expect(manuscriptNodesToTokens(converted)).toEqual(blocks);
   });
 
-  it('normalizes cluster spacing and leaves locator forms as text', () => {
+  it('normalizes clusters, preserves locators, and leaves malformed forms as text', () => {
     const blocks = [
       {
         type: 'paragraph',
@@ -274,9 +297,17 @@ describe('manuscript editor content', () => {
       { type: 'citation', props: { citationKey: 'a; b' } },
       {
         type: 'text',
-        text: ' but [@a, p. 33] and [@a; b] stay text',
+        text: ' but ',
         styles: {},
       },
+      {
+        type: 'citation',
+        props: {
+          citationKey:
+            '__citation_cluster__:[{"citationKey":"a","locator":"p. 33","prefix":"","suffix":"","suppressAuthor":false}]',
+        },
+      },
+      { type: 'text', text: ' and [@a; b] stay text', styles: {} },
     ]);
     expect(manuscriptNodesToTokens(converted)).toEqual([
       {
@@ -300,6 +331,24 @@ describe('manuscript editor content', () => {
     expect(citationKeysFromProp('@li2017;@manisalidis2020')).toEqual([
       'li2017',
       'manisalidis2020',
+    ]);
+    const structured = citationClusterToProp([
+      {
+        citationKey: 'li2017',
+        prefix: 'see',
+        locator: 'p. 42',
+        suffix: 'emphasis added',
+        suppressAuthor: true,
+      },
+    ]);
+    expect(citationClusterFromProp(structured)).toEqual([
+      {
+        citationKey: 'li2017',
+        prefix: 'see',
+        locator: 'p. 42',
+        suffix: 'emphasis added',
+        suppressAuthor: true,
+      },
     ]);
     expect(citationKeysFromProp('')).toEqual([]);
     expect(citationKeysToProp(['li2017', 'manisalidis2020'])).toBe(

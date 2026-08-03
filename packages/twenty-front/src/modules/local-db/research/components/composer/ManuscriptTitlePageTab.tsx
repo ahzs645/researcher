@@ -16,6 +16,7 @@ import {
   type SectionPlacement,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { useManuscriptSaveStatus } from '@/local-db/research/components/composer/ManuscriptSaveStatusContext';
 
 import { type ManuscriptContributorValues } from './ManuscriptContributorsEditor';
 import { ManuscriptTitlePageFields } from './ManuscriptTitlePageFields';
@@ -99,6 +100,7 @@ export const ManuscriptTitlePageTab = ({
   const [keywords, setKeywords] = useState(keywordsSection?.content ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
+  const { markUnsaved, trackSave } = useManuscriptSaveStatus();
 
   // Cross-tab writes (an import, the submission checklist) land on the record
   // while this form holds local state. Re-sync from the record whenever it
@@ -153,7 +155,7 @@ export const ManuscriptTitlePageTab = ({
     if (isSaving) return false;
     setIsSaving(true);
     try {
-      await onSave(values);
+      await trackSave(() => onSave(values));
       setIsDirty(false);
       enqueueSuccessSnackBar({ message: 'Front matter saved' });
       return true;
@@ -169,6 +171,7 @@ export const ManuscriptTitlePageTab = ({
     <T,>(setter: (value: T) => void) =>
     (value: T) => {
       setIsDirty(true);
+      markUnsaved();
       setter(value);
     };
 

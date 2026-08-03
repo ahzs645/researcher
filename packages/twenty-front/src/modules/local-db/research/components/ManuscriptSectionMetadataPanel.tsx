@@ -9,6 +9,7 @@ import {
 } from '@/local-db/research/manuscript/manuscriptTypes';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
 import { Select } from '@/ui/input/components/Select';
 
 type ManuscriptSectionMetadataPanelProps = {
@@ -16,6 +17,8 @@ type ManuscriptSectionMetadataPanelProps = {
   sections: SectionLike[];
   figures: FigureLike[];
   onChanged: () => void;
+  onDelete: () => Promise<void>;
+  onDuplicate: () => Promise<void>;
 };
 
 const SECTION_TYPE_OPTIONS: SelectOption<string>[] = [
@@ -112,9 +115,12 @@ export const ManuscriptSectionMetadataPanel = ({
   sections,
   figures,
   onChanged,
+  onDelete,
+  onDuplicate,
 }: ManuscriptSectionMetadataPanelProps) => {
   const { updateOneRecord } = useUpdateOneRecord();
   const { enqueueErrorSnackBar } = useSnackBar();
+  const { enqueueDialog } = useDialogManager();
   const peers = sections.filter(
     (candidate) => candidate.placement === section.placement,
   );
@@ -253,6 +259,59 @@ export const ManuscriptSectionMetadataPanel = ({
           size="small"
           disabled={peerIndex < 0 || peerIndex === peers.length - 1}
           onClick={() => moveSection(1)}
+        />
+        <Button
+          title="Promote heading"
+          variant="secondary"
+          size="small"
+          disabled={(section.level ?? 1) <= 1}
+          onClick={() =>
+            updateSection({ level: Math.max(1, (section.level ?? 1) - 1) })
+          }
+        />
+        <Button
+          title="Demote heading"
+          variant="secondary"
+          size="small"
+          disabled={(section.level ?? 1) >= 6}
+          onClick={() =>
+            updateSection({ level: Math.min(6, (section.level ?? 1) + 1) })
+          }
+        />
+        <Button
+          title="Duplicate section"
+          variant="secondary"
+          size="small"
+          onClick={() =>
+            void onDuplicate().catch(() =>
+              enqueueErrorSnackBar({ message: 'Could not duplicate section' }),
+            )
+          }
+        />
+        <Button
+          title="Delete section"
+          variant="secondary"
+          size="small"
+          onClick={() =>
+            enqueueDialog({
+              title: 'Delete section?',
+              message: `Delete ${section.name ?? 'this section'} permanently? ${figures.some((figure) => figure.sectionId === section.id) ? 'Assets assigned to it will remain in the manuscript.' : ''}`,
+              buttons: [
+                { title: 'Cancel' },
+                {
+                  title: 'Delete',
+                  accent: 'danger',
+                  role: 'confirm',
+                  onClick: () =>
+                    void onDelete().catch(() =>
+                      enqueueErrorSnackBar({
+                        message: 'Could not delete section',
+                      }),
+                    ),
+                },
+              ],
+            })
+          }
         />
         <StyledCheckbox>
           <input

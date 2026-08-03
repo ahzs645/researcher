@@ -221,4 +221,5 @@ This handles everything: starts Postgres + Redis (auto-detects local services vs
 - `nx.json` - Nx workspace configuration with task definitions
 - `tsconfig.base.json` - Base TypeScript configuration
 - `package.json` - Root package with workspace definitions
+- `packages/twenty-front/src/modules/local-db/research/AGENTS.md` - Required workflow for transposing an existing paper into Manuscript Compose records and exports
 - `.cursor/rules/` - Detailed development guidelines and best practices

@@ -10,24 +10,117 @@ export type ManuscriptInlineNode =
   | { type: 'citation'; props: { citationKey: string }; content?: undefined }
   | { type: 'crossRef'; props: { refKey: string }; content?: undefined };
 
+export type CitationClusterItem = {
+  citationKey: string;
+  locator: string;
+  prefix: string;
+  suffix: string;
+  suppressAuthor: boolean;
+};
+
 // A citation cluster (`[@a; @b]`) is one semantic unit: the formatter renders it
 // as a single "(A, 2017; B, 2020)" label, so it must stay one inline node. But
 // BlockNote inline props are primitives, so the cluster's keys travel joined by
 // this separator inside the single `citationKey` prop.
 const CITATION_KEY_SEPARATOR = '; ';
+const STRUCTURED_CITATION_PREFIX = '__citation_cluster__:';
 
-// Pandoc-style cluster of bare keys only. Locator forms like `[@a, p. 3]` stay
-// literal text, exactly as before, because the chip cannot round-trip a locator.
-const CITATION_TOKEN = /^\[@[^\]\s;]+(?:\s*;\s*@[^\]\s;]+)*\]/;
+const CITATION_TOKEN = /^\[[^\]\r\n]*@[^\]\r\n]+\]/;
 
-export const citationKeysFromProp = (citationKey: string): string[] =>
-  citationKey
+const emptyCitationItem = (citationKey: string): CitationClusterItem => ({
+  citationKey,
+  locator: '',
+  prefix: '',
+  suffix: '',
+  suppressAuthor: false,
+});
+
+const isCitationClusterItem = (value: unknown): value is CitationClusterItem =>
+  isJsonRecord(value) &&
+  typeof value.citationKey === 'string' &&
+  typeof value.locator === 'string' &&
+  typeof value.prefix === 'string' &&
+  typeof value.suffix === 'string' &&
+  typeof value.suppressAuthor === 'boolean';
+
+export const citationClusterFromProp = (
+  citationKey: string,
+): CitationClusterItem[] => {
+  if (citationKey.startsWith(STRUCTURED_CITATION_PREFIX)) {
+    try {
+      const parsed: unknown = JSON.parse(
+        citationKey.slice(STRUCTURED_CITATION_PREFIX.length),
+      );
+      if (Array.isArray(parsed) && parsed.every(isCitationClusterItem)) {
+        return parsed.filter((item) => item.citationKey.trim().length > 0);
+      }
+    } catch {
+      // Fall through to the legacy key parser so malformed data stays editable.
+    }
+  }
+  return citationKey
     .split(';')
     .map((part) => part.trim().replace(/^@/, ''))
-    .filter((part) => part.length > 0);
+    .filter((part) => part.length > 0)
+    .map(emptyCitationItem);
+};
+
+export const citationKeysFromProp = (citationKey: string): string[] =>
+  citationClusterFromProp(citationKey).map((item) => item.citationKey);
 
 export const citationKeysToProp = (keys: string[]): string =>
   keys.join(CITATION_KEY_SEPARATOR);
+
+export const citationClusterToProp = (items: CitationClusterItem[]): string => {
+  const normalized = items
+    .map((item) => ({
+      citationKey: item.citationKey.trim().replace(/^@/, ''),
+      locator: item.locator.trim(),
+      prefix: item.prefix.trim(),
+      suffix: item.suffix.trim(),
+      suppressAuthor: item.suppressAuthor,
+    }))
+    .filter((item) => item.citationKey.length > 0);
+  const hasMetadata = normalized.some(
+    (item) =>
+      item.locator.length > 0 ||
+      item.prefix.length > 0 ||
+      item.suffix.length > 0 ||
+      item.suppressAuthor,
+  );
+  return hasMetadata
+    ? `${STRUCTURED_CITATION_PREFIX}${JSON.stringify(normalized)}`
+    : citationKeysToProp(normalized.map((item) => item.citationKey));
+};
+
+export const citationTokenFromProp = (citationKey: string): string =>
+  `[${citationClusterFromProp(citationKey)
+    .map((item) => {
+      const prefix = item.prefix.length > 0 ? `${item.prefix} ` : '';
+      const locator = item.locator.length > 0 ? `, ${item.locator}` : '';
+      const suffix = item.suffix.length > 0 ? ` ${item.suffix}` : '';
+      return `${prefix}${item.suppressAuthor ? '-' : ''}@${item.citationKey}${locator}${suffix}`;
+    })
+    .join(CITATION_KEY_SEPARATOR)}]`;
+
+const citationClusterFromToken = (token: string): CitationClusterItem[] => {
+  const parts = token.slice(1, -1).split(';');
+  const parsed = parts.map((rawPart): CitationClusterItem | undefined => {
+    const part = rawPart.trim();
+    const match = /^(.*?)(-?)@([^\s,;]+)(?:,\s*(.*))?$/.exec(part);
+    if (match === null) return undefined;
+    return {
+      citationKey: match[3],
+      prefix: match[1].trim(),
+      locator: (match[4] ?? '').trim(),
+      suffix: '',
+      suppressAuthor: match[2] === '-',
+    };
+  });
+  return parsed.every((item): item is CitationClusterItem => item !== undefined)
+    ? parsed
+    : [];
+};
 
 // BlockNote removes Markdown escapes while parsing. Keep their provenance in
 // the editable text with an invisible separator, then restore the backslash
@@ -82,18 +175,16 @@ const nextToken = (
     return undefined;
   }
 
-  if (text.startsWith('[@', start)) {
+  if (text[start] === '[') {
     const match = CITATION_TOKEN.exec(text.slice(start));
     if (match !== null) {
+      const cluster = citationClusterFromToken(match[0]);
+      if (cluster.length === 0) return undefined;
       return {
         end: start + match[0].length,
         node: {
           type: 'citation',
-          props: {
-            citationKey: citationKeysToProp(
-              citationKeysFromProp(match[0].slice(1, -1)),
-            ),
-          },
+          props: { citationKey: citationClusterToProp(cluster) },
         },
       };
     }
@@ -178,13 +269,11 @@ const inlineNodeToText = (node: JsonRecord): JsonRecord | undefined => {
     return { type: 'text', text: `$${node.props.latex}$`, styles: {} };
   }
   if (node.type === 'citation' && typeof node.props.citationKey === 'string') {
-    const keys = citationKeysFromProp(node.props.citationKey);
-    // Re-emit every key with its own `@` so the cluster stays Pandoc-valid.
-    const text =
-      keys.length === 0
-        ? `[@${node.props.citationKey}]`
-        : `[${keys.map((key) => `@${key}`).join(CITATION_KEY_SEPARATOR)}]`;
-    return { type: 'text', text, styles: {} };
+    return {
+      type: 'text',
+      text: citationTokenFromProp(node.props.citationKey),
+      styles: {},
+    };
   }
   if (node.type === 'crossRef' && typeof node.props.refKey === 'string') {
     return { type: 'text', text: `[#${node.props.refKey}]`, styles: {} };
@@ -249,6 +338,22 @@ const displayEquationLatex = (block: JsonRecord): string | undefined => {
   return match?.[1];
 };
 
+const assetPlacementKey = (block: JsonRecord): string | undefined => {
+  if (block.type !== 'paragraph' || !Array.isArray(block.content)) {
+    return undefined;
+  }
+  const content = block.content;
+  if (
+    content.length !== 1 ||
+    !isJsonRecord(content[0]) ||
+    content[0].type !== 'text' ||
+    typeof content[0].text !== 'string'
+  ) {
+    return undefined;
+  }
+  return /^\[\[asset:([^\]\s]+)\]\]$/.exec(content[0].text)?.[1];
+};
+
 const transformBlock = (block: unknown, toManuscript: boolean): unknown => {
   if (!isJsonRecord(block)) return block;
   const children = Array.isArray(block.children)
@@ -258,6 +363,16 @@ const transformBlock = (block: unknown, toManuscript: boolean): unknown => {
   if (toManuscript) {
     if (block.type === 'codeBlock') {
       return block;
+    }
+    const assetRefKey = assetPlacementKey(block);
+    if (assetRefKey !== undefined) {
+      return {
+        ...block,
+        type: 'assetPlacement',
+        props: { refKey: assetRefKey },
+        content: undefined,
+        children,
+      };
     }
     const latex = displayEquationLatex(block);
     if (latex !== undefined) {
@@ -272,6 +387,30 @@ const transformBlock = (block: unknown, toManuscript: boolean): unknown => {
     return {
       ...block,
       content: toManuscriptInlineContent(block.content),
+      children,
+    };
+  }
+
+  if (
+    block.type === 'assetPlacement' &&
+    isJsonRecord(block.props) &&
+    typeof block.props.refKey === 'string'
+  ) {
+    return {
+      ...block,
+      type: 'paragraph',
+      props: {
+        backgroundColor: 'default',
+        textColor: 'default',
+        textAlignment: 'left',
+      },
+      content: [
+        {
+          type: 'text',
+          text: `[[asset:${block.props.refKey}]]`,
+          styles: {},
+        },
+      ],
       children,
     };
   }
@@ -346,7 +485,9 @@ const stashRawBlocks = (markdown: string): string => {
       const isComment = trimmed.startsWith('<!--');
       const isRawHtml =
         trimmed.startsWith('<') &&
-        (isComment || RAW_ANCHOR_LINE.test(trimmed) || RAW_BLOCK_TAG.test(trimmed));
+        (isComment ||
+          RAW_ANCHOR_LINE.test(trimmed) ||
+          RAW_BLOCK_TAG.test(trimmed));
       if (isRawHtml) {
         const rawLines: string[] = [];
         // HTML blocks run to the first blank line; comments stop after `-->`.
@@ -378,10 +519,7 @@ const unstashRawBlocks = (markdown: string): string => {
       lines[index + 1]?.trim() === RAW_BLOCK_SENTINEL
     ) {
       index += 2;
-      while (
-        index < lines.length &&
-        lines[index].trim() !== RAW_BLOCK_END
-      ) {
+      while (index < lines.length && lines[index].trim() !== RAW_BLOCK_END) {
         out.push(lines[index]);
         index += 1;
       }

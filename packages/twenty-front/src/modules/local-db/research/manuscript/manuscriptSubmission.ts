@@ -15,11 +15,20 @@ export type SubmissionMaterials = {
 
 export type SubmissionCheckSeverity = 'ERROR' | 'WARNING' | 'READY';
 
+export type SubmissionCheckTarget =
+  | 'write'
+  | 'titlePage'
+  | 'figures'
+  | 'references'
+  | 'submission'
+  | 'export';
+
 export type SubmissionCheck = {
   id: string;
   label: string;
   detail: string;
   severity: SubmissionCheckSeverity;
+  target?: SubmissionCheckTarget;
 };
 
 export type SubmissionReadiness = {
@@ -117,6 +126,57 @@ const headingNames = (bundle: ManuscriptBundle): Set<string> =>
       .map((node) => node.text.toLowerCase()),
   );
 
+const bundleWarningCheck = (
+  warning: string,
+  index: number,
+): SubmissionCheck => {
+  const isCitation = warning.startsWith('Citation [@');
+  const isUnknownCrossReference = warning.includes(
+    'references unknown asset [#',
+  );
+  const isUnknownPlacement = warning.includes(
+    'has an unknown asset placement [[asset:',
+  );
+  const isMissingEquation = warning.includes('has no equation body yet');
+  const isMissingImage = warning.includes('has no image yet');
+  const isDuplicatePlacement = warning.includes(
+    'has more than one placement marker',
+  );
+  const isHardError =
+    isCitation ||
+    isUnknownCrossReference ||
+    isUnknownPlacement ||
+    isMissingEquation ||
+    isMissingImage;
+  const target: SubmissionCheckTarget = isCitation
+    ? 'references'
+    : isUnknownCrossReference || isUnknownPlacement
+      ? 'write'
+      : isMissingEquation || isMissingImage || isDuplicatePlacement
+        ? 'figures'
+        : 'export';
+
+  return {
+    id: `bundle-warning-${index}`,
+    label: isCitation
+      ? 'Unresolved citation'
+      : isUnknownCrossReference
+        ? 'Broken cross-reference'
+        : isUnknownPlacement
+          ? 'Broken asset placement'
+          : isMissingEquation
+            ? 'Empty equation'
+            : isMissingImage
+              ? 'Missing figure image'
+              : isDuplicatePlacement
+                ? 'Duplicate asset placement'
+                : 'Formatting issue',
+    detail: warning,
+    severity: isHardError ? 'ERROR' : 'WARNING',
+    target,
+  };
+};
+
 export const validateSubmission = (
   bundle: ManuscriptBundle,
   materials: SubmissionMaterials,
@@ -133,6 +193,7 @@ export const validateSubmission = (
     label: 'Title',
     detail: hasTitle ? bundle.metadata.title : 'Add a manuscript title',
     severity: hasTitle ? 'READY' : 'ERROR',
+    target: 'titlePage',
   });
   checks.push({
     id: 'authors',
@@ -141,9 +202,10 @@ export const validateSubmission = (
       ? bundle.metadata.authors
       : 'Add the ordered author line in Submission details',
     severity: isNonEmptyString(bundle.metadata.authors) ? 'READY' : 'ERROR',
+    target: 'titlePage',
   });
-  checks.push(
-    checkRange({
+  checks.push({
+    ...checkRange({
       id: 'abstract',
       label: 'Abstract',
       value: abstractWords,
@@ -151,9 +213,10 @@ export const validateSubmission = (
       maximum: style.abstractWordLimit,
       unit: 'words',
     }),
-  );
-  checks.push(
-    checkRange({
+    target: 'titlePage',
+  });
+  checks.push({
+    ...checkRange({
       id: 'keywords',
       label: 'Keywords',
       value: bundle.metadata.keywords.length,
@@ -161,7 +224,8 @@ export const validateSubmission = (
       maximum: style.keywordMaximum,
       unit: 'keywords',
     }),
-  );
+    target: 'titlePage',
+  });
   checks.push({
     id: 'references',
     label: 'Linked references',
@@ -170,7 +234,14 @@ export const validateSubmission = (
         ? `${bundle.stats.referenceCount} reference records`
         : 'No structured references are connected',
     severity: bundle.stats.referenceCount > 0 ? 'READY' : 'WARNING',
+    target: 'references',
   });
+
+  checks.push(
+    ...bundle.warnings.map((warning, index) =>
+      bundleWarningCheck(warning, index),
+    ),
+  );
 
   const headings = headingNames(bundle);
   for (const declaration of [
@@ -195,14 +266,14 @@ export const validateSubmission = (
         .join(' '),
       detail: present ? 'Section included' : 'Add this declaration section',
       severity: present ? 'READY' : 'WARNING',
+      target: 'write',
     });
   }
 
   // What the package actually ships: uploaded data-URL images only — tables,
   // equations and caption-only placeholders never become figure files.
   const packagedImageCount = bundle.numberedFigures.filter(
-    (figure) =>
-      figure.assetKind !== 'TABLE' && isImageDataUrl(figure.imageUrl),
+    (figure) => figure.assetKind !== 'TABLE' && isImageDataUrl(figure.imageUrl),
   ).length;
 
   for (const artifact of style.requiredArtifacts ?? []) {
@@ -215,6 +286,7 @@ export const validateSubmission = (
             ? `${packagedImageCount} image file(s) will be included in the package`
             : 'No uploaded figure images are connected',
         severity: packagedImageCount > 0 ? 'READY' : 'WARNING',
+        target: 'figures',
       });
       continue;
     }
@@ -224,6 +296,7 @@ export const validateSubmission = (
       label: artifactLabel(artifact),
       detail: isNonEmptyString(material) ? 'Ready' : 'Required by this profile',
       severity: isNonEmptyString(material) ? 'READY' : 'ERROR',
+      target: 'submission',
     });
   }
 
@@ -257,6 +330,7 @@ export const validateSubmission = (
         label: item.definition.label,
         detail: `Required by ${journalName}: ${item.definition.label}`,
         severity: 'WARNING',
+        target: 'submission',
       });
     }
   }
@@ -273,6 +347,7 @@ export const validateSubmission = (
       label: 'Highlight format',
       detail: `${highlights.length} lines · ${lengthValid ? 'all ≤85 characters' : 'one or more exceed 85 characters'}`,
       severity: countValid && lengthValid ? 'READY' : 'ERROR',
+      target: 'submission',
     });
   }
 

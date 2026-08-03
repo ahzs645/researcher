@@ -5,7 +5,10 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptFigureMetadataFields } from '@/local-db/research/components/ManuscriptFigureMetadataFields';
 import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
-import { ManuscriptEquationEditor } from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
+import {
+  equationValidationError,
+  ManuscriptEquationEditor,
+} from '@/local-db/research/import-wizard/components/ManuscriptEquationEditor';
 import {
   chartPngFromTable,
   deriveFigureNameFromCaption,
@@ -33,6 +36,7 @@ type ManuscriptFigureExpandedEditorProps = {
   onMove: (direction: -1 | 1) => void;
   onPlotTable: () => void;
   onReplaceImage: (file: File) => void;
+  onChangeReferenceKey: (refKey: string) => void;
 };
 
 const PLACEMENT_OPTIONS: SelectOption<string>[] = [
@@ -164,6 +168,7 @@ export const ManuscriptFigureExpandedEditor = ({
   onMove,
   onPlotTable,
   onReplaceImage,
+  onChangeReferenceKey,
 }: ManuscriptFigureExpandedEditorProps) => {
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [tableDraft, setTableDraft] = useState(figure.tableData ?? '');
@@ -178,6 +183,10 @@ export const ManuscriptFigureExpandedEditor = ({
   const [nameDraft, setNameDraft] = useState(
     figure.name?.trim() || deriveFigureNameFromCaption(figure.caption ?? ''),
   );
+  const [refKeyDraft, setRefKeyDraft] = useState(
+    figure.refKey?.trim() || figure.id,
+  );
+  const refKeyIsValid = /^[A-Za-z0-9:._-]+$/.test(refKeyDraft.trim());
   const sectionOptions: SelectOption<string>[] = [
     { value: UNASSIGNED_SECTION, label: 'End of document' },
     ...sections
@@ -280,6 +289,27 @@ export const ManuscriptFigureExpandedEditor = ({
                 placeholder="Figure name"
                 onChange={(event) => setNameDraft(event.target.value)}
                 onBlur={persistName}
+              />
+            </StyledField>
+            <StyledField>
+              Reference key
+              <StyledHint>
+                Updates matching cross-references and placement markers.
+              </StyledHint>
+              <StyledInput
+                aria-label={`${figure.label} reference key`}
+                aria-invalid={!refKeyIsValid}
+                value={refKeyDraft}
+                onChange={(event) => setRefKeyDraft(event.target.value)}
+                onBlur={() => {
+                  const nextKey = refKeyDraft.trim();
+                  if (
+                    refKeyIsValid &&
+                    nextKey !== (figure.refKey?.trim() || figure.id)
+                  ) {
+                    onChangeReferenceKey(nextKey);
+                  }
+                }}
               />
             </StyledField>
             {figure.assetKind !== 'TABLE' ? (
@@ -427,7 +457,10 @@ export const ManuscriptFigureExpandedEditor = ({
               variant="primary"
               accent="blue"
               size="small"
-              disabled={equationDraft === (figure.equationLatex ?? '')}
+              disabled={
+                equationDraft === (figure.equationLatex ?? '') ||
+                equationValidationError(equationDraft) !== null
+              }
               onClick={() => onPersist({ equationLatex: equationDraft })}
             />
           </StyledActions>

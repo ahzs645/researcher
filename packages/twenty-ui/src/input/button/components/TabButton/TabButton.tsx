@@ -2,7 +2,7 @@ import { styled } from '@linaria/react';
 import { AppTooltip, type IconComponent, TooltipDelay } from '@ui/display';
 import { StyledTabButton } from '@ui/input/button/components/TabButton/internals/components/StyledTabBase';
 import { TabContent } from '@ui/input/button/components/TabButton/internals/components/TabContent';
-import { type ReactElement } from 'react';
+import { type KeyboardEvent, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 
 type TabButtonProps = {
@@ -20,6 +20,11 @@ type TabButtonProps = {
   contentSize?: 'sm' | 'md';
   disableTestId?: boolean;
   tooltipContent?: string;
+  role?: 'tab';
+  ariaSelected?: boolean;
+  ariaControls?: string;
+  tabIndex?: number;
+  onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
 };
 
 const StyledTabTooltipWrapper = styled.div`
@@ -41,6 +46,11 @@ export const TabButton = ({
   contentSize = 'sm',
   disableTestId = false,
   tooltipContent,
+  role,
+  ariaSelected,
+  ariaControls,
+  tabIndex,
+  onKeyDown,
 }: TabButtonProps) => {
   const tabElementId = `tab-${id}`;
 
@@ -54,6 +64,11 @@ export const TabButton = ({
         to={to}
         className={className}
         onClick={onClick}
+        onKeyDown={onKeyDown}
+        role={role}
+        aria-selected={ariaSelected}
+        aria-controls={ariaControls}
+        tabIndex={tabIndex}
       >
         <TabContent
           id={id}

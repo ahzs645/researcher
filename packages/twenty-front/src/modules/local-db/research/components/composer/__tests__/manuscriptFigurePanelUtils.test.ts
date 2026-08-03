@@ -1,6 +1,7 @@
 import {
   deriveFigureNameFromCaption,
   syncFigureNameFromCaption,
+  uniqueFigureKey,
 } from '@/local-db/research/components/composer/manuscriptFigurePanelUtils';
 
 describe('manuscriptFigurePanelUtils', () => {
@@ -65,6 +66,28 @@ describe('manuscriptFigurePanelUtils', () => {
           nextCaption: 'Updated caption',
         }),
       ).toBe('Custom short name');
+    });
+  });
+
+  describe('uniqueFigureKey', () => {
+    it('adds a stable suffix when the caption slug is already used', () => {
+      expect(
+        uniqueFigureKey(
+          'Study workflow',
+          ['study-workflow', 'study-workflow-2'],
+          'asset',
+        ),
+      ).toBe('study-workflow-3');
+    });
+
+    it('keeps suffixed keys within the storage limit', () => {
+      const key = uniqueFigureKey(
+        'A very long descriptive figure caption for the study',
+        ['a-very-long-descriptive'],
+        'asset',
+      );
+
+      expect(key.length).toBeLessThanOrEqual(24);
     });
   });
 });

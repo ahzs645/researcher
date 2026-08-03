@@ -37,7 +37,7 @@ export const ManuscriptFiguresTab = ({
   onSelectSection,
 }: ManuscriptFiguresTabProps) => (
   <StyledTab>
-    <H2Title title="Figures & tables" />
+    <H2Title title="Figures, tables & equations" />
     <ManuscriptFigurePanel
       manuscriptId={manuscriptId}
       figures={figures}

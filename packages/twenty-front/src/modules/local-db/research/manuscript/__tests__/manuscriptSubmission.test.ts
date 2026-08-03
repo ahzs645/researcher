@@ -146,6 +146,7 @@ describe('validateSubmission', () => {
       label: 'Funding',
       detail: 'Required by Test Journal: Funding',
       severity: 'WARNING',
+      target: 'submission',
     });
     expect(readiness.ready).toBe(true);
   });
@@ -222,14 +223,59 @@ describe('validateSubmission', () => {
       {},
     );
     expect(
-      withImage.checks.find(
-        (check) => check.id === 'artifact-SEPARATE_FIGURES',
-      )?.severity,
+      withImage.checks.find((check) => check.id === 'artifact-SEPARATE_FIGURES')
+        ?.severity,
     ).toBe('READY');
     expect(
       withImage.checks.filter(
         (check) => check.id === 'journal-requirement-SEPARATE_FIGURES',
       ),
     ).toHaveLength(0);
+  });
+
+  it('blocks submission when bundle integrity warnings identify broken content', () => {
+    const readiness = validateSubmission(
+      buildManuscriptBundle({
+        ...baseInput,
+        sections: [
+          ...baseInput.sections,
+          {
+            id: 'body',
+            name: 'Results',
+            sectionType: 'RESULTS',
+            placement: 'MAIN',
+            content: 'Missing citation [@missing] and asset [#missing-figure].',
+          },
+        ],
+        figures: [
+          {
+            id: 'equation',
+            refKey: 'empty-equation',
+            assetKind: 'EQUATION',
+            placement: 'MAIN',
+            equationLatex: '',
+          },
+        ],
+      }),
+      {
+        coverLetter: 'Dear Editor.',
+        competingInterests: 'Nothing to declare.',
+        highlights: ['One result', 'Second result', 'Third result'].join('\n'),
+      },
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      readiness.checks.find((check) => check.label === 'Unresolved citation')
+        ?.target,
+    ).toBe('references');
+    expect(
+      readiness.checks.find((check) => check.label === 'Broken cross-reference')
+        ?.target,
+    ).toBe('write');
+    expect(
+      readiness.checks.find((check) => check.label === 'Empty equation')
+        ?.target,
+    ).toBe('figures');
   });
 });

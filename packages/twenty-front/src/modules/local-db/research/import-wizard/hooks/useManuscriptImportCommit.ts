@@ -11,6 +11,7 @@ import { type SubmissionTransposeUpdate } from '@/local-db/research/manuscript/m
 import { serializeManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';
 import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
+import { useDeleteOneRecord } from '@/object-record/hooks/useDeleteOneRecord';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
@@ -26,6 +27,18 @@ export type ManuscriptImportCreatedCounts = {
   sections: number;
   figures: number;
 };
+
+type ManuscriptImportCreatedRecords = {
+  references: string[];
+  sections: string[];
+  figures: string[];
+};
+
+const emptyCreatedRecords = (): ManuscriptImportCreatedRecords => ({
+  references: [],
+  sections: [],
+  figures: [],
+});
 
 const emptyCreatedCounts = (): ManuscriptImportCreatedCounts => ({
   references: 0,
@@ -71,12 +84,23 @@ export const useManuscriptImportCommit = ({
   const { createOneRecord: createFigure } = useCreateOneRecord({
     objectNameSingular: 'figure',
   });
+  const { deleteOneRecord: deleteSection } = useDeleteOneRecord({
+    objectNameSingular: 'manuscriptSection',
+  });
+  const { deleteOneRecord: deleteReference } = useDeleteOneRecord({
+    objectNameSingular: 'reference',
+  });
+  const { deleteOneRecord: deleteFigure } = useDeleteOneRecord({
+    objectNameSingular: 'figure',
+  });
   const { updateOneRecord } = useUpdateOneRecord();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [isCommitting, setIsCommitting] = useState(false);
   const [failed, setFailed] = useState(false);
   const [createdCounts, setCreatedCounts] =
     useState<ManuscriptImportCreatedCounts>(emptyCreatedCounts);
+  const [createdRecords, setCreatedRecords] =
+    useState<ManuscriptImportCreatedRecords>(emptyCreatedRecords);
   // The mutex must update synchronously before React can publish state.
   // oxlint-disable-next-line twenty/no-state-useref
   const commitMutexRef = useRef(false);
@@ -104,15 +128,24 @@ export const useManuscriptImportCommit = ({
       commitMutexRef.current = true;
       setIsCommitting(true);
       let currentCreatedCounts = emptyCreatedCounts();
+      const currentCreatedRecords = emptyCreatedRecords();
       setCreatedCounts(currentCreatedCounts);
+      setCreatedRecords(currentCreatedRecords);
       try {
         for (const reference of referencesToCreate) {
-          await createReference({ ...reference, manuscriptId });
+          const created = await createReference({ ...reference, manuscriptId });
+          const createdId = (created as { id?: string } | undefined)?.id;
+          if (isDefined(createdId))
+            currentCreatedRecords.references.push(createdId);
           currentCreatedCounts = {
             ...currentCreatedCounts,
             references: currentCreatedCounts.references + 1,
           };
           setCreatedCounts(currentCreatedCounts);
+          setCreatedRecords({
+            ...currentCreatedRecords,
+            references: [...currentCreatedRecords.references],
+          });
         }
 
         const sectionIdsByOrder = new Map<number, string>();
@@ -144,12 +177,17 @@ export const useManuscriptImportCommit = ({
           const createdId = (created as { id?: string } | undefined)?.id;
           if (isDefined(createdId)) {
             sectionIdsByOrder.set(section.orderIndex, createdId);
+            currentCreatedRecords.sections.push(createdId);
           }
+          setCreatedRecords({
+            ...currentCreatedRecords,
+            sections: [...currentCreatedRecords.sections],
+          });
         }
 
         for (const figure of preparedImport.figures) {
           const { sectionOrderIndex, ...record } = figure;
-          await createFigure({
+          const created = await createFigure({
             ...record,
             manuscriptId,
             ...(sectionOrderIndex !== undefined &&
@@ -157,11 +195,18 @@ export const useManuscriptImportCommit = ({
               ? { sectionId: sectionIdsByOrder.get(sectionOrderIndex) }
               : {}),
           });
+          const createdId = (created as { id?: string } | undefined)?.id;
+          if (isDefined(createdId))
+            currentCreatedRecords.figures.push(createdId);
           currentCreatedCounts = {
             ...currentCreatedCounts,
             figures: currentCreatedCounts.figures + 1,
           };
           setCreatedCounts(currentCreatedCounts);
+          setCreatedRecords({
+            ...currentCreatedRecords,
+            figures: [...currentCreatedRecords.figures],
+          });
         }
 
         const manuscriptUpdate: ManuscriptMetadataUpdate = {};
@@ -237,5 +282,51 @@ export const useManuscriptImportCommit = ({
     ],
   );
 
-  return { commitImport, isCommitting, failed, createdCounts };
+  const rollbackImport = useCallback(async (): Promise<boolean> => {
+    if (commitMutexRef.current || !failed) return false;
+    commitMutexRef.current = true;
+    setIsCommitting(true);
+    try {
+      for (const figureId of [...createdRecords.figures].reverse()) {
+        await deleteFigure(figureId);
+      }
+      for (const sectionId of [...createdRecords.sections].reverse()) {
+        await deleteSection(sectionId);
+      }
+      for (const referenceId of [...createdRecords.references].reverse()) {
+        await deleteReference(referenceId);
+      }
+      setCreatedRecords(emptyCreatedRecords());
+      setCreatedCounts(emptyCreatedCounts());
+      setFailed(false);
+      enqueueSuccessSnackBar({
+        message: 'Partial import rolled back — you can safely retry',
+      });
+      return true;
+    } catch (error) {
+      enqueueErrorSnackBar({
+        message: `Could not completely roll back the partial import${error instanceof Error ? `: ${error.message}` : ''}`,
+      });
+      return false;
+    } finally {
+      commitMutexRef.current = false;
+      setIsCommitting(false);
+    }
+  }, [
+    createdRecords,
+    deleteFigure,
+    deleteReference,
+    deleteSection,
+    enqueueErrorSnackBar,
+    enqueueSuccessSnackBar,
+    failed,
+  ]);
+
+  return {
+    commitImport,
+    rollbackImport,
+    isCommitting,
+    failed,
+    createdCounts,
+  };
 };

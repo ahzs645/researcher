@@ -76,7 +76,7 @@ export const useManuscriptImportReviewState = ({
       }),
     [document.stats?.equationCount, preparedImport],
   );
-  const { commitImport, isCommitting, failed, createdCounts } =
+  const { commitImport, rollbackImport, isCommitting, failed, createdCounts } =
     useManuscriptImportCommit({
       manuscriptId: options.manuscriptId,
       manuscriptName: options.manuscriptName,
@@ -142,6 +142,7 @@ export const useManuscriptImportReviewState = ({
     updateSection,
     setImportAnyway,
     confirmImport,
+    rollbackImport,
     isCommitting,
     failed,
     createdCounts,

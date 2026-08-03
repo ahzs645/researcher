@@ -23,4 +23,5 @@ export type ModalProps = React.PropsWithChildren & {
   preventClickOutside?: boolean;
   onBackdropMouseDown?: (e: React.MouseEvent) => void;
   modalRef?: React.RefObject<HTMLDivElement>;
+  accessibilityLabel?: string;
 };

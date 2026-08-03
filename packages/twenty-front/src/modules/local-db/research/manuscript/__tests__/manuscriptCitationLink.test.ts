@@ -1,6 +1,7 @@
 import {
   applyCitationLinks,
   collectUnlinkedCitations,
+  isCitationLinkSuggestionUnambiguous,
 } from '@/local-db/research/manuscript/manuscriptCitationLink';
 import {
   type ReferenceLike,
@@ -40,6 +41,23 @@ const references: ReferenceLike[] = [
   reference('pehoiu2008', 'Pehoiu, G.', 2008, 8),
   reference('manisalidis2020', 'Manisalidis, I.; et al.', 2020, 9),
 ];
+
+describe('isCitationLinkSuggestionUnambiguous', () => {
+  it('requires both high confidence and separation from the next candidate', () => {
+    expect(
+      isCitationLinkSuggestionUnambiguous([
+        { citationKey: 'smith2024', score: 0.96 },
+        { citationKey: 'smith2023', score: 0.92 },
+      ]),
+    ).toBe(false);
+    expect(
+      isCitationLinkSuggestionUnambiguous([
+        { citationKey: 'smith2024', score: 0.96 },
+        { citationKey: 'jones2024', score: 0.7 },
+      ]),
+    ).toBe(true);
+  });
+});
 
 const section = (content: string): SectionLike => ({
   id: 'introduction',

@@ -62,14 +62,12 @@ export const getManuscriptSlashMenuItems = (
       group: 'Manuscript',
       icon: <IconSitemap />,
       onItemClick: () => {
-        // A Mermaid fence: the export draws it, and the source stays editable
-        // as text. A diagram that needs a number and a caption is a figure
-        // instead, created from the Figures tab.
+        // Serializes back to a ```mermaid fence; a diagram that needs a number
+        // and a caption is a figure instead, created from the Figures tab.
         const block = editor.getTextCursorPosition().block;
         editor.updateBlock(block, {
-          type: 'codeBlock',
-          props: { language: 'mermaid' },
-          content: 'flowchart TD\n  A[Start] --> B[Next]',
+          type: 'mermaidDiagram',
+          props: { source: 'flowchart TD\n  A[Start] --> B[Next]' },
         });
       },
     },

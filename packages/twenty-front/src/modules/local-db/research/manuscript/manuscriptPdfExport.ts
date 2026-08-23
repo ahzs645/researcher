@@ -18,9 +18,10 @@ import {
 } from './manuscriptBlocks';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
+import { fitManuscriptFigureImages } from './manuscriptFigureFit';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { isImageDataUrl } from './manuscriptImages';
-import { latexToUnicodeText } from './manuscriptMathText';
+import { latexToScriptedText } from './manuscriptMathText';
 import {
   hasManuscriptScripts,
   manuscriptScriptSegments,
@@ -38,13 +39,21 @@ const A4_HEIGHT_POINTS = 841.89;
 export const exportManuscriptToPdfBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
-  bundle = await prepareManuscriptDiagramImages(
-    await prepareManuscriptBundleWithCsl(bundle),
+  bundle = await fitManuscriptFigureImages(
+    await prepareManuscriptDiagramImages(
+      await prepareManuscriptBundleWithCsl(bundle),
+    ),
   );
   const { editor, blocks } = buildBlockNoteDocument(bundle);
+  // Times-Roman is one of PDF's built-in fonts, and built-in means WinAnsi:
+  // no ≤, no ≥, no ∑, none of the Unicode sub- and superscripts the equation
+  // linearizer emits. Those characters came out as overlapping garbage.
+  // react-pdf takes a font *stack* and substitutes per glyph, so Times sets the
+  // prose and Inter — which BlockNote embeds, and which covers all of the above
+  // — draws whatever Times cannot.
   const fontFamily = /times/i.test(bundle.style.fontFamily ?? '')
-    ? 'Times-Roman'
-    : 'Inter';
+    ? ['Times-Roman', 'Inter']
+    : ['Inter'];
   const bodyLineSpacing = Math.max(1, bundle.style.lineSpacing ?? 1.5);
   const abstractLineSpacing = Math.max(
     1,
@@ -78,7 +87,7 @@ export const exportManuscriptToPdfBlob = async (
       EQUATION_LABEL_SEPARATOR,
     );
     return {
-      equation: latexToUnicodeText(latex ?? ''),
+      equation: latexToScriptedText(latex ?? ''),
       ...(label !== undefined && label.trim().length > 0
         ? { label: label.trim() }
         : {}),
@@ -134,7 +143,9 @@ export const exportManuscriptToPdfBlob = async (
         block.props.textColor === 'equation'
           ? (() => {
               const { equation, label } = equationChildren(block);
-              return label !== undefined ? `${equation}    ${label}` : equation;
+              const text =
+                label !== undefined ? `${equation}    ${label}` : equation;
+              return scriptRuns(text, bundle.style.bodyFontSize ?? 12);
             })()
           : (() => {
               const runs = exporter.transformInlineContent(block.content);
@@ -196,33 +207,37 @@ export const exportManuscriptToPdfBlob = async (
   // so every exporter can raise or lower it. Word reads them; react-pdf never
   // did, so the sentinels printed as stray glyphs. Split the run and let
   // react-pdf shift the pieces.
+  // Sub- and superscript runs, from the importer's sentinels or the equation
+  // linearizer's. react-pdf can shift a run; Unicode cannot supply a subscript
+  // "d" or "f", which is what left `C_d` reading as literal LaTeX.
+  const scriptRuns = (text: string, baseFontSize: number): ReactNode[] =>
+    manuscriptScriptSegments(text).map((segment, index) =>
+      createElement(
+        Text,
+        {
+          key: `script-${index}`,
+          style:
+            segment.position === 'BASELINE'
+              ? {}
+              : {
+                  fontSize: Math.round(baseFontSize * 0.75),
+                  verticalAlign:
+                    segment.position === 'SUPERSCRIPT' ? 'super' : 'sub',
+                },
+        },
+        segment.text,
+      ),
+    );
   const transformStyledText = exporter.transformStyledText.bind(exporter);
   exporter.transformStyledText = (styledText) => {
     if (!hasManuscriptScripts(styledText.text)) {
       return transformStyledText(styledText);
     }
     const base = transformStyledText({ ...styledText, text: '' });
-    const scriptSize = Math.round((bundle.style.bodyFontSize ?? 12) * 0.75);
     return cloneElement(
       base,
       {},
-      ...manuscriptScriptSegments(styledText.text).map((segment, index) =>
-        createElement(
-          Text,
-          {
-            key: `script-${index}`,
-            style:
-              segment.position === 'BASELINE'
-                ? {}
-                : {
-                    fontSize: scriptSize,
-                    verticalAlign:
-                      segment.position === 'SUPERSCRIPT' ? 'super' : 'sub',
-                  },
-          },
-          segment.text,
-        ),
-      ),
+      ...scriptRuns(styledText.text, bundle.style.bodyFontSize ?? 12),
     );
   };
   exporter.styles.page = {
@@ -233,7 +248,9 @@ export const exportManuscriptToPdfBlob = async (
     fontFamily,
     fontSize: bundle.style.bodyFontSize ?? 12,
     lineHeight: bodyLineSpacing,
-  };
+    // BlockNote types this as a single family name; react-pdf has always taken
+    // a stack, and the stack is what makes glyph substitution possible.
+  } as unknown as (typeof exporter.styles)['page'];
   // Page numbers deliberately bypass BlockNote's `footer` option, which nests
   // the number inside its own fixed container. react-pdf re-renders a `render`
   // node on every page and resets its measured height first; nested one level

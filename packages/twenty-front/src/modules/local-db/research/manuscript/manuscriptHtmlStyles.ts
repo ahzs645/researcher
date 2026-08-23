@@ -200,6 +200,8 @@ export const buildManuscriptHtmlCss = (style: JournalStyle): string => {
     text-indent: ${firstLineIndent}pt;
   }
   /* Indented body copy runs on; everything with its own block shape does not. */
+  .title-space { height: 1em; margin: 0; }
+
   .abstract p,
   figcaption,
   .equation,

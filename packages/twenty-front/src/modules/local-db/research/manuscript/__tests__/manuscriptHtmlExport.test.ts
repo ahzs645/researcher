@@ -245,6 +245,25 @@ describe('exportManuscriptToHtml', () => {
     expect(plainStylesheet).toMatch(/p \{\s*margin: 0 0 0.75em;/);
   });
 
+  it('turns a title-page rule into the vertical space it stands for', async () => {
+    const withCover = await exportManuscriptToHtml(
+      buildManuscriptBundle({
+        ...input,
+        manuscript: {
+          ...input.manuscript,
+          titlePageExtraLines: ['by', '--- 6', 'MARCH 2023'],
+        },
+        style: { ...input.style, titlePageTemplate: 'THESIS' },
+      }),
+    );
+
+    expect(withCover).toContain('<p class="title-extra">by</p>');
+    expect(withCover.match(/<p class="title-space"><\/p>/g)).toHaveLength(6);
+    // The rule is spacing, never a printed line of dashes.
+    expect(withCover).not.toContain('>--- 6<');
+    expect(withCover).toContain('.title-space { height: 1em;');
+  });
+
   it('escapes prose that looks like markup', async () => {
     const withMarkup = await exportManuscriptToHtml(
       buildManuscriptBundle({

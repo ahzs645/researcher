@@ -12,7 +12,7 @@ import { formatManuscriptAuthorLine } from './manuscriptContributors';
 import { resolveFigureImage } from './manuscriptImages';
 import { wrapManuscriptScript } from './manuscriptScripts';
 import { parseManuscriptTableGrid } from './manuscriptTableGrid';
-import { isTitlePageSpacerLine } from './manuscriptTitlePage';
+import { titlePageSpacerLineCount } from './manuscriptTitlePage';
 import { type NumberedFigure } from './manuscriptTypes';
 
 // Build a BlockNote document from the neutral document-node model. Shared by the
@@ -315,18 +315,20 @@ const bundleToBlocks = (
     ...bundle.metadata.titlePageExtraLines
       .map((line) => line.trim())
       .filter((line) => line.length > 0)
-      .map(
-        (line): ExportPartialBlock =>
-          // A `---` line is vertical space, which is how a cover page pushes its
-          // degree and institution blocks apart.
-          isTitlePageSpacerLine(line)
-            ? titlePageSpacerBlock()
-            : {
+      .flatMap((line): ExportPartialBlock[] => {
+        // A `---` line is vertical space, which is how a cover page pushes its
+        // degree and institution blocks apart; `--- 6` is six of them.
+        const spacerLines = titlePageSpacerLineCount(line);
+        return spacerLines === null
+          ? [
+              {
                 type: 'paragraph',
                 props: { textAlignment: affiliationAlignment },
                 content: line,
               },
-      ),
+            ]
+          : Array.from({ length: spacerLines }, titlePageSpacerBlock);
+      }),
   );
   if (isNonEmptyString(bundle.metadata.correspondingAuthor)) {
     blocks.push({

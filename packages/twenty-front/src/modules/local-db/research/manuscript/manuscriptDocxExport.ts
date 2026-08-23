@@ -25,6 +25,7 @@ import {
 } from './manuscriptBlocks';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
+import { fitManuscriptFigureImages } from './manuscriptFigureFit';
 import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
 import { manuscriptAuthorLineSegments } from './manuscriptContributors';
 import { latexToMathComponents } from './manuscriptDocxMath';
@@ -399,7 +400,9 @@ export const exportManuscriptToDocxBlob = async (
 ): Promise<Blob> => {
   const formattedBundle = await prepareManuscriptBundleWithCsl(bundle);
   // Diagrams are Mermaid source until export; Word embeds the raster.
-  bundle = await prepareManuscriptDiagramImages(formattedBundle);
+  bundle = await fitManuscriptFigureImages(
+    await prepareManuscriptDiagramImages(formattedBundle),
+  );
   const { editor, blocks } = buildBlockNoteDocument(bundle);
   const fontFamily = bundle.style.fontFamily?.trim() || 'Times New Roman';
   const bodyFontSize = bundle.style.bodyFontSize ?? 12;

@@ -30,6 +30,7 @@ import {
 import { resolveFigureImage } from './manuscriptImages';
 import { latexToMathMl } from './manuscriptMathMl';
 import { resolveManuscriptTableStyle } from './manuscriptTableStyleOptions';
+import { titlePageSpacerLineCount } from './manuscriptTitlePage';
 import { type NumberedFigure } from './manuscriptTypes';
 
 // A single .html file that opens anywhere, offline, with nothing to fetch:
@@ -350,6 +351,12 @@ const titleBlockHtml = (
   for (const extra of bundle.metadata.titlePageExtraLines
     .map((line) => line.trim())
     .filter((line) => line.length > 0)) {
+    // `---` (or `--- 6`) is vertical space on a cover page, not a rule.
+    const spacerLines = titlePageSpacerLineCount(extra);
+    if (spacerLines !== null) {
+      lines.push('<p class="title-space"></p>'.repeat(spacerLines));
+      continue;
+    }
     lines.push(
       `<p class="title-extra">${manuscriptInlineToHtml(extra, context)}</p>`,
     );

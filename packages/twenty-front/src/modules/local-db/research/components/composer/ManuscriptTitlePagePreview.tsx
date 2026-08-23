@@ -6,7 +6,7 @@ import {
   formatManuscriptAuthorLine,
   parseManuscriptAffiliations,
 } from '@/local-db/research/manuscript/manuscriptContributors';
-import { isTitlePageSpacerLine } from '@/local-db/research/manuscript/manuscriptTitlePage';
+import { titlePageSpacerLineCount } from '@/local-db/research/manuscript/manuscriptTitlePage';
 import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
 
 import { StyledTitlePageCard } from './manuscriptTitlePageStyles';
@@ -137,8 +137,10 @@ const StyledCorrespondence = styled.div`
 `;
 
 // A `---` line in the extra lines is vertical space on the page, not a rule.
+// One line each, so `--- 6` stacks six of them and the preview shows the same
+// gap the export will print.
 const StyledTitlePageSpacer = styled.div`
-  height: ${themeCssVariables.spacing[8]};
+  height: 1.5em;
 `;
 
 const StyledKeywords = styled.div`
@@ -264,13 +266,16 @@ export const ManuscriptTitlePagePreview = ({
               {extraLines
                 .map((line) => line.trim())
                 .filter((line) => line.length > 0)
-                .map((line, index) =>
-                  isTitlePageSpacerLine(line) ? (
-                    <StyledTitlePageSpacer key={`${index}-spacer`} />
-                  ) : (
-                    <div key={`${index}-${line}`}>{line}</div>
-                  ),
-                )}
+                .flatMap((line, index) => {
+                  const spacerLines = titlePageSpacerLineCount(line);
+                  return spacerLines === null
+                    ? [<div key={`${index}-${line}`}>{line}</div>]
+                    : Array.from({ length: spacerLines }, (_value, offset) => (
+                        <StyledTitlePageSpacer
+                          key={`${index}-spacer-${offset}`}
+                        />
+                      ));
+                })}
             </div>
             {correspondingAuthor.trim().length > 0 ? (
               <StyledCorrespondence>{correspondingAuthor}</StyledCorrespondence>

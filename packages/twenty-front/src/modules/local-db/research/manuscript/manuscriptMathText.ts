@@ -7,6 +7,7 @@
 // to readable text rather than disappearing.
 
 import { COMMAND_TEXT } from './manuscriptMathGlyphs';
+import { wrapManuscriptScript } from './manuscriptScripts';
 
 const SUBSCRIPT_CHARS: Record<string, string> = {
   '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
@@ -285,6 +286,22 @@ const convertLatex = (input: string): string => {
   }
   return output;
 };
+
+// Where Unicode has no subscript for a letter — there is no ₍d₎, ₍f₎ or ₍b₎ —
+// the linearizer keeps the LaTeX marker, so `C_{d}` reads as "C_d". A renderer
+// that can actually lower a run wants those marked instead, so it can set them
+// the way the DOCX export already does.
+const SCRIPT_FALLBACK = /([_^])(?:\(([^()]*)\)|(\S))/g;
+
+export const latexToScriptedText = (latex: string): string =>
+  latexToUnicodeText(latex).replace(
+    SCRIPT_FALLBACK,
+    (_match, marker: string, grouped?: string, single?: string) =>
+      wrapManuscriptScript(
+        grouped ?? single ?? '',
+        marker === '_' ? 'SUBSCRIPT' : 'SUPERSCRIPT',
+      ),
+  );
 
 export const latexToUnicodeText = (latex: string): string =>
   convertLatex(latex)

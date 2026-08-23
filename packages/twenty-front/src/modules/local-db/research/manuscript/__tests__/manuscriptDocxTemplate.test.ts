@@ -2,8 +2,10 @@ import { strToU8, zipSync } from 'fflate';
 
 import {
   describeManuscriptDocxTemplate,
-  extractManuscriptDocxStyles,
   isManuscriptDocxStylesXml,
+  MAX_TEMPLATE_STYLES_BYTES,
+  manuscriptDocxTemplateRejection,
+  readManuscriptDocxTemplate,
 } from '@/local-db/research/manuscript/manuscriptDocxTemplate';
 
 const STYLES_XML = [
@@ -22,37 +24,57 @@ const docxBytes = (files: Record<string, string>): Uint8Array =>
     ),
   );
 
-describe('extractManuscriptDocxStyles', () => {
+describe('readManuscriptDocxTemplate', () => {
   it('lifts word/styles.xml out of a .docx', () => {
-    const bytes = docxBytes({
-      '[Content_Types].xml': '<Types/>',
-      'word/document.xml': '<w:document><w:body/></w:document>',
-      'word/styles.xml': STYLES_XML,
+    const result = readManuscriptDocxTemplate(
+      docxBytes({
+        '[Content_Types].xml': '<Types/>',
+        'word/document.xml': '<w:document><w:body/></w:document>',
+        'word/styles.xml': STYLES_XML,
+      }),
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      stylesXml: STYLES_XML,
+      styleCount: 2,
     });
-
-    expect(extractManuscriptDocxStyles(bytes)).toBe(STYLES_XML);
   });
 
-  it('returns null for a Word file with no styles part', () => {
-    expect(
-      extractManuscriptDocxStyles(
-        docxBytes({ 'word/document.xml': '<w:document/>' }),
-      ),
-    ).toBeNull();
+  it('says a Word file has no styles to borrow', () => {
+    const result = readManuscriptDocxTemplate(
+      docxBytes({ 'word/document.xml': '<w:document/>' }),
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'NO_STYLES' });
+    expect(manuscriptDocxTemplateRejection(result as never)).toContain(
+      'no style definitions',
+    );
   });
 
-  it('returns null for something that is not a ZIP at all', () => {
-    expect(
-      extractManuscriptDocxStyles(strToU8('this is not a docx')),
-    ).toBeNull();
+  it('says a file that is not a Word document is not one', () => {
+    const result = readManuscriptDocxTemplate(strToU8('this is not a docx'));
+
+    expect(result).toEqual({ ok: false, reason: 'NOT_A_WORD_FILE' });
   });
 
-  it('returns null when the styles part is not a styles document', () => {
+  it('rejects a styles part too large to keep on the record', () => {
+    const padded = STYLES_XML.replace(
+      '</w:styles>',
+      `<!--${'x'.repeat(MAX_TEMPLATE_STYLES_BYTES)}--></w:styles>`,
+    );
+
     expect(
-      extractManuscriptDocxStyles(
+      readManuscriptDocxTemplate(docxBytes({ 'word/styles.xml': padded })),
+    ).toEqual({ ok: false, reason: 'TOO_LARGE' });
+  });
+
+  it('rejects a styles part that is not a styles document', () => {
+    expect(
+      readManuscriptDocxTemplate(
         docxBytes({ 'word/styles.xml': '<html><body>nope</body></html>' }),
       ),
-    ).toBeNull();
+    ).toEqual({ ok: false, reason: 'NO_STYLES' });
   });
 });
 

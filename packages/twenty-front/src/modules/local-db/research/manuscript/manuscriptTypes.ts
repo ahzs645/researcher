@@ -135,7 +135,9 @@ export type JournalStyle = {
   // The name of the .docx a Word template came from, for the settings UI.
   referenceDocUrl?: string | null;
   // `word/styles.xml` lifted out of that .docx — the DOCX exporter's style
-  // base when present, so the author's own template governs the output.
+  // base when present, so the author's own template governs the output. Set
+  // per manuscript (an export-style override), never stored on the journal:
+  // it is tens of kilobytes and has no business being a database index key.
   referenceDocStyles?: string | null;
 };
 

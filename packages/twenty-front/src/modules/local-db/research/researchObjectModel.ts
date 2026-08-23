@@ -2358,14 +2358,6 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         description: 'Word template whose named styles the export maps onto',
       },
       {
-        name: 'referenceDocStyles',
-        label: 'Reference DOCX styles',
-        type: 'TEXT',
-        icon: 'IconPalette',
-        description:
-          "The styles.xml lifted from that template — the export's style base",
-      },
-      {
         name: 'outputFormats',
         label: 'Output formats',
         type: 'MULTI_SELECT',

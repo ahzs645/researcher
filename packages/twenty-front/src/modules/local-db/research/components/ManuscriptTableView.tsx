@@ -97,8 +97,8 @@ export const ManuscriptTableView = ({
                 <th
                   key={`header-${rowIndex}-${cell.column}`}
                   scope="col"
-                  colSpan={cell.colSpan}
-                  rowSpan={cell.rowSpan}
+                  colSpan={cell.colSpan > 1 ? cell.colSpan : undefined}
+                  rowSpan={cell.rowSpan > 1 ? cell.rowSpan : undefined}
                 >
                   {cell.text}
                 </th>
@@ -112,8 +112,8 @@ export const ManuscriptTableView = ({
               {row.map((cell) => (
                 <td
                   key={`cell-${rowIndex}-${cell.column}`}
-                  colSpan={cell.colSpan}
-                  rowSpan={cell.rowSpan}
+                  colSpan={cell.colSpan > 1 ? cell.colSpan : undefined}
+                  rowSpan={cell.rowSpan > 1 ? cell.rowSpan : undefined}
                 >
                   {cell.text}
                 </td>

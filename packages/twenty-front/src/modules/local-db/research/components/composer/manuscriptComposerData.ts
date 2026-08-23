@@ -143,6 +143,7 @@ export const FIGURE_GQL = {
   orderIndex: true,
   tableData: true,
   equationLatex: true,
+  diagramSource: true,
   manuscript: { id: true },
   section: { id: true },
   dataset: { id: true },
@@ -225,7 +226,6 @@ export const JOURNAL_GQL = {
   tableFontSize: true,
   tableLineSpacing: true,
   referenceDocUrl: true,
-  referenceDocStyles: true,
 };
 
 export const sortSections = (sections: SectionLike[]): SectionLike[] =>

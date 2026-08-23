@@ -1,15 +1,12 @@
 import { styled } from '@linaria/react';
-import { useEffect, useState } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { renderMermaidToSvg } from '@/local-db/research/manuscript/manuscriptDiagram';
+import { useManuscriptDiagramSvg } from '@/local-db/research/hooks/useManuscriptDiagramSvg';
 
 type ManuscriptDiagramEditorProps = {
   source: string;
   onChange: (source: string) => void;
 };
-
-const PREVIEW_DEBOUNCE_MS = 350;
 
 const StyledEditor = styled.div`
   display: flex;
@@ -68,32 +65,7 @@ export const ManuscriptDiagramEditor = ({
   source,
   onChange,
 }: ManuscriptDiagramEditorProps) => {
-  const [svg, setSvg] = useState<string | null>(null);
-  const [status, setStatus] = useState<'idle' | 'drawing' | 'error'>('idle');
-
-  // Mermaid parses on every keystroke otherwise, and a half-typed diagram is
-  // always a parse error — wait for the author to pause.
-  useEffect(() => {
-    const body = source.trim();
-    if (body.length === 0) {
-      setSvg(null);
-      setStatus('idle');
-      return;
-    }
-    setStatus('drawing');
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void renderMermaidToSvg(body).then((rendered) => {
-        if (cancelled) return;
-        setSvg(rendered);
-        setStatus(rendered === null ? 'error' : 'idle');
-      });
-    }, PREVIEW_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [source]);
+  const { svg, status } = useManuscriptDiagramSvg(source);
 
   return (
     <StyledEditor>

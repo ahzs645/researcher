@@ -3,7 +3,7 @@ import {
   getDefaultReactSlashMenuItems,
   type DefaultReactSuggestionItem,
 } from '@blocknote/react';
-import { IconAt, IconFunction, IconLink } from 'twenty-ui/display';
+import { IconAt, IconFunction, IconLink, IconSitemap } from 'twenty-ui/display';
 
 import { type ManuscriptEditor } from '@/local-db/research/components/editor/ManuscriptEditorSchema';
 import { manuscriptReferenceKey } from '@/local-db/research/components/editor/ManuscriptEditorContext';
@@ -55,6 +55,23 @@ export const getManuscriptSlashMenuItems = (
       group: 'Manuscript',
       icon: <IconLink />,
       onItemClick: openCrossReferencePicker,
+    },
+    {
+      title: 'Diagram',
+      aliases: ['mermaid', 'flowchart', 'sequence', 'graph'],
+      group: 'Manuscript',
+      icon: <IconSitemap />,
+      onItemClick: () => {
+        // A Mermaid fence: the export draws it, and the source stays editable
+        // as text. A diagram that needs a number and a caption is a figure
+        // instead, created from the Figures tab.
+        const block = editor.getTextCursorPosition().block;
+        editor.updateBlock(block, {
+          type: 'codeBlock',
+          props: { language: 'mermaid' },
+          content: 'flowchart TD\n  A[Start] --> B[Next]',
+        });
+      },
     },
     {
       title: 'Insert asset',

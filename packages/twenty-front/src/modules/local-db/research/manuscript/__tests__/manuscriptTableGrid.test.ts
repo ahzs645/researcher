@@ -1,7 +1,6 @@
 import {
   buildManuscriptTableGrid,
   manuscriptTableGridToRawRows,
-  manuscriptTableHasMergedCells,
   manuscriptTableHeaderRows,
   parseManuscriptTableGrid,
 } from '@/local-db/research/manuscript/manuscriptTableGrid';
@@ -134,18 +133,5 @@ describe('manuscriptTableGridToRawRows', () => {
         gridToMarkdownTable(manuscriptTableGridToRawRows(grid)),
       ).rows[0][0].text,
     ).toBe('<');
-  });
-});
-
-describe('manuscriptTableHasMergedCells', () => {
-  it('separates merged grids from plain ones', () => {
-    expect(
-      manuscriptTableHasMergedCells(parseManuscriptTableGrid(CENSORED_TABLE)),
-    ).toBe(true);
-    expect(
-      manuscriptTableHasMergedCells(
-        parseManuscriptTableGrid('| A | B |\n| --- | --- |\n| 1 | 2 |'),
-      ),
-    ).toBe(false);
   });
 });

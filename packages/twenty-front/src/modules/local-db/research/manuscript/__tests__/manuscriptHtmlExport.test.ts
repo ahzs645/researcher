@@ -168,6 +168,15 @@ describe('exportManuscriptToHtml', () => {
     expect(html).toContain('id="view-structure"');
   });
 
+  it("styles the abstract with the journal's abstract spacing", () => {
+    // The stylesheet gives .abstract its own line height; without the class the
+    // journal's abstract setting would silently do nothing in HTML.
+    expect(html).toContain('<div class="abstract">');
+    expect(html).toMatch(/\.abstract \{ line-height: [\d.]+; \}/);
+    // Body prose is not wrapped.
+    expect(html).toContain('<p>Copper dominated');
+  });
+
   it('offers every table design as a reader-switchable variant', () => {
     for (const id of [
       'view-table-academic',

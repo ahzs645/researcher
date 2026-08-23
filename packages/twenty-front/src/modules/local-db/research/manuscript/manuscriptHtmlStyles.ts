@@ -178,7 +178,7 @@ export const buildManuscriptHtmlCss = (style: JournalStyle): string => {
   /* The visual hierarchy the Word output has but a plain HTML dump loses:
      level 1 is a full-width banner rule, level 2 a hairline, level 3 an
      accent bar, level 4 small caps. */
-  .manuscript > h1, .section-h1 {
+  .manuscript > h1 {
     border-bottom: 2px solid var(--heading-ink);
     font-size: ${titleFontSize}pt;
     letter-spacing: 0.01em;

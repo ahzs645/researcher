@@ -2,6 +2,7 @@ import { isNonEmptyString } from '@sniptt/guards';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import {
   parseManuscriptTableGrid,
@@ -373,7 +374,11 @@ export const jatsXmlExporter: ManuscriptExporter = {
   formats: ['JATS', 'XML'],
   offline: true,
   export: async (bundle): Promise<ExportFile[]> => {
-    const formattedBundle = await prepareManuscriptBundleWithCsl(bundle);
+    // A diagram's picture only exists once Mermaid has drawn it; without this
+    // the <fig> would carry no <graphic> at all.
+    const formattedBundle = await prepareManuscriptDiagramImages(
+      await prepareManuscriptBundleWithCsl(bundle),
+    );
     return [
       {
         filename: `${slugifyTitle(formattedBundle.metadata.title)}.jats.xml`,

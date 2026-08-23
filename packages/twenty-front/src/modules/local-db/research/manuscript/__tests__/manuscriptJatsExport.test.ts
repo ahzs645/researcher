@@ -108,7 +108,9 @@ describe('buildJatsArticle', () => {
   it('carries front-matter metadata', () => {
     expect(jats).toContain('<article-title>Test article</article-title>');
     expect(jats).toContain('<journal-title>Journal of Tests</journal-title>');
-    expect(jats).toContain('<article-id pub-id-type="doi">10.1000/test</article-id>');
+    expect(jats).toContain(
+      '<article-id pub-id-type="doi">10.1000/test</article-id>',
+    );
     expect(jats).toContain('<string-name>Smith, Jane</string-name>');
     expect(jats).toContain('<kwd>testing</kwd>');
     expect(jats).toContain('<abstract>');
@@ -160,6 +162,47 @@ describe('buildJatsArticle', () => {
     );
     expect(escaped).toContain('A &amp; B &lt; C.');
     expect(escaped).toContain('<title>R &amp; D &lt;raw&gt;</title>');
-    expect(new DOMParser().parseFromString(escaped, 'text/xml').querySelector('parsererror')).toBeNull();
+    expect(
+      new DOMParser()
+        .parseFromString(escaped, 'text/xml')
+        .querySelector('parsererror'),
+    ).toBeNull();
+  });
+});
+
+describe('a drawn diagram in JATS', () => {
+  it('carries a graphic once the diagram has an image', () => {
+    const xml = buildJatsArticle(
+      buildManuscriptBundle({
+        manuscript: { id: 'p', name: 'Diagram paper' },
+        sections: [
+          {
+            id: 'methods',
+            name: 'Methods',
+            sectionType: 'METHODS',
+            placement: 'MAIN',
+            content: 'Method text.',
+            includeInExport: true,
+          },
+        ],
+        figures: [
+          {
+            id: 'f1',
+            refKey: 'workflow',
+            name: 'Workflow',
+            caption: 'Sampling workflow.',
+            assetKind: 'FIGURE',
+            placement: 'MAIN',
+            imageSource: 'DIAGRAM',
+            diagramSource: 'flowchart TD\n  A --> B',
+            imageUrl: 'data:image/png;base64,iVBORw0KGgo=',
+          },
+        ],
+        references: [],
+        style: { name: 'Test journal' },
+      }),
+    );
+
+    expect(xml).toContain('<graphic xlink:href="figures/workflow.png"/>');
   });
 });

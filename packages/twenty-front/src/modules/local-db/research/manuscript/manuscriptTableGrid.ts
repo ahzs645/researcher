@@ -174,11 +174,3 @@ export const manuscriptTableGridToRawRows = (
   );
   return rawRows;
 };
-
-// True when the grid carries any merge — lets callers keep the simple path.
-export const manuscriptTableHasMergedCells = (
-  grid: ManuscriptTableGrid,
-): boolean =>
-  grid.rows.some((row) =>
-    row.some((cell) => cell.colSpan > 1 || cell.rowSpan > 1),
-  );

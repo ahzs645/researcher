@@ -104,7 +104,13 @@ const linkCitationCluster = (
   return link(keys[0], label);
 };
 
+type FrontMatterKind = 'abstract' | 'keywords' | null;
+
 type HtmlRenderState = {
+  // Which front-matter section the prose being rendered belongs to. The node
+  // model carries no section identity, but the heading immediately before the
+  // prose does — and the journal styles the abstract differently from the body.
+  frontMatter: FrontMatterKind;
   outline: OutlineEntry[];
   headingIds: Set<string>;
   // reference key → the ids of the in-text citations that point at it.
@@ -268,6 +274,12 @@ const nodeToHtml = (
 ): string => {
   switch (node.kind) {
     case 'heading': {
+      const heading = node.text.trim();
+      state.frontMatter = /^abstract$/i.test(heading)
+        ? 'abstract'
+        : /^keywords?$/i.test(heading)
+          ? 'keywords'
+          : null;
       const id = context.registerHeading(node.level, node.text);
       return (
         `<h${node.level} id="${escapeHtmlAttribute(id)}" data-outline-level="${node.level}">` +
@@ -275,8 +287,12 @@ const nodeToHtml = (
         `${manuscriptInlineToHtml(node.text, context)}</h${node.level}>`
       );
     }
-    case 'prose':
-      return manuscriptMarkdownToHtml(node.markdown, context);
+    case 'prose': {
+      const html = manuscriptMarkdownToHtml(node.markdown, context);
+      return state.frontMatter === null
+        ? html
+        : `<div class="${state.frontMatter}">${html}</div>`;
+    }
     case 'figure':
       return figureToHtml(
         node.figure,
@@ -422,6 +438,7 @@ export const exportManuscriptToHtml = async (
   const tableStyle = resolveManuscriptTableStyle(prepared.style.tableStyle);
   const diagrams = await renderManuscriptDiagrams(prepared);
   const state: HtmlRenderState = {
+    frontMatter: null,
     outline: [],
     headingIds: new Set(),
     backlinksByKey: new Map(),

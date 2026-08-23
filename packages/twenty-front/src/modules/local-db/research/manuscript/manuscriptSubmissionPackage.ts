@@ -1,3 +1,4 @@
+import { isNonEmptyString } from '@sniptt/guards';
 import { strToU8, zip } from 'fflate';
 
 import { type ManuscriptBundle, slugifyTitle } from './manuscriptAssembly';
@@ -10,6 +11,7 @@ import {
   isImageDataUrl,
   resolveFigureImage,
 } from './manuscriptImages';
+import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { buildJatsArticle } from './manuscriptJatsExport';
 import { type PortableManuscriptSource } from './manuscriptPortableManifest';
 import { addPortableResearchPaperFiles } from './manuscriptPortableZip';
@@ -149,7 +151,9 @@ const buildMecaManifest = (
   bundle: ManuscriptBundle,
 ): string => {
   const items = filenames.map((filename, index) => {
-    const extension = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
+    const extension = filename
+      .slice(filename.lastIndexOf('.') + 1)
+      .toLowerCase();
     const mediaType =
       MEDIA_TYPE_BY_EXTENSION[extension] ?? 'application/octet-stream';
     const type = MECA_TYPE_BY_FILENAME(filename, base);
@@ -187,27 +191,54 @@ export const createPortableResearchPackage = async (
   };
 };
 
-const addFigures = (files: Zippable, bundle: ManuscriptBundle) => {
-  const linkedFigures: string[] = [];
+export type ManuscriptSubmissionFigures = {
+  // Figures with pixels, as files to put in the ZIP.
+  files: Record<string, Uint8Array>;
+  // Figures that ship as a reference rather than a file, one line each.
+  linked: string[];
+};
+
+// Split the manuscript's figures into files and references. Pure, so what
+// happens to each kind of figure is testable without building a ZIP.
+export const manuscriptSubmissionFigures = (
+  bundle: ManuscriptBundle,
+): ManuscriptSubmissionFigures => {
+  const result: ManuscriptSubmissionFigures = { files: {}, linked: [] };
   for (const figure of bundle.numberedFigures) {
     if (figure.assetKind === 'TABLE') continue;
     if (isImageDataUrl(figure.imageUrl)) {
       const decoded = dataUrlToBytes(figure.imageUrl as string);
       if (decoded !== null) {
-        files[
+        result.files[
           `figures/${figure.label.replace(/[^a-z0-9]+/gi, '-')}.${decoded.extension}`
         ] = decoded.bytes;
       }
-    } else if (isHttpUrl(figure.imageUrl)) {
-      linkedFigures.push(`${figure.label}: ${figure.imageUrl}`);
-    } else {
-      const image = resolveFigureImage(figure);
-      if (image.kind === 'url') {
-        linkedFigures.push(`${figure.label}: ${image.src}`);
-      }
+      continue;
+    }
+    if (isHttpUrl(figure.imageUrl)) {
+      result.linked.push(`${figure.label}: ${figure.imageUrl}`);
+      continue;
+    }
+    const image = resolveFigureImage(figure);
+    if (image.kind === 'url') {
+      result.linked.push(`${figure.label}: ${image.src}`);
+    } else if (isNonEmptyString(figure.diagramSource)) {
+      // The diagram did not render to an image, so say so here instead of
+      // letting the figure disappear from the package without a trace.
+      result.linked.push(
+        `${figure.label}: Mermaid diagram, not rendered — source in the portable package`,
+      );
     }
   }
-  addText(files, 'figures/linked-figures.txt', linkedFigures.join('\n'));
+  return result;
+};
+
+const addFigures = (files: Zippable, bundle: ManuscriptBundle) => {
+  const { files: figureFiles, linked } = manuscriptSubmissionFigures(bundle);
+  for (const [path, bytes] of Object.entries(figureFiles)) {
+    files[path] = bytes;
+  }
+  addText(files, 'figures/linked-figures.txt', linked.join('\n'));
 };
 
 const addSubmissionExtras = (
@@ -253,6 +284,9 @@ export const createSubmissionPackage = async (
   const files: Zippable = {};
   const readiness = validateSubmission(bundle, materials);
   const base = slugifyTitle(bundle.metadata.title);
+  // Draw every Mermaid diagram once, so the manuscript, the JATS article, and
+  // the figure files all carry the same picture instead of dropping it.
+  bundle = await prepareManuscriptDiagramImages(bundle);
 
   files[`${base}-manuscript.docx`] = await blobToBytes(
     await exportManuscriptToDocxBlob(bundle),

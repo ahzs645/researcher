@@ -5,6 +5,7 @@ import {
   MANUSCRIPT_STYLE_CONTROL_GROUPS,
   type ManuscriptStyleControlGroup,
 } from '@/local-db/research/manuscript/manuscriptExportStyleControlDefinitions';
+import { ManuscriptExportTemplateField } from '@/local-db/research/components/composer/export/ManuscriptExportTemplateField';
 import {
   type ManuscriptExportStyleOverrideKey,
   type ManuscriptExportStyleOverrides,
@@ -101,7 +102,7 @@ const customizedCount = (
   group: ManuscriptStyleControlGroup,
   styleOverrides: ManuscriptExportStyleOverrides,
 ): number =>
-  [...group.texts, ...group.selects].filter(
+  [...group.texts, ...group.selects, ...(group.files ?? [])].filter(
     (control) => styleOverrides[control.field] !== undefined,
   ).length;
 
@@ -121,6 +122,14 @@ export const ManuscriptExportStyleControls = ({
         </summary>
         <StyledGrid>
           <StyledDescription>{group.description}</StyledDescription>
+          {(group.files ?? []).map((control) => (
+            <ManuscriptExportTemplateField
+              key={control.id}
+              control={control}
+              style={style}
+              onChange={onChange}
+            />
+          ))}
           {group.texts.map((control) => (
             <StyledField key={control.id}>
               {control.label}

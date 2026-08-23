@@ -6,6 +6,7 @@ import {
   formatManuscriptAuthorLine,
   parseManuscriptAffiliations,
 } from '@/local-db/research/manuscript/manuscriptContributors';
+import { titlePageSpacerLineCount } from '@/local-db/research/manuscript/manuscriptTitlePage';
 import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
 
 import { StyledTitlePageCard } from './manuscriptTitlePageStyles';
@@ -135,6 +136,13 @@ const StyledCorrespondence = styled.div`
   text-align: center;
 `;
 
+// A `---` line in the extra lines is vertical space on the page, not a rule.
+// One line each, so `--- 6` stacks six of them and the preview shows the same
+// gap the export will print.
+const StyledTitlePageSpacer = styled.div`
+  height: 1.5em;
+`;
+
 const StyledKeywords = styled.div`
   font-size: ${themeCssVariables.font.size.sm};
   margin-top: ${themeCssVariables.spacing[4]};
@@ -183,8 +191,12 @@ export const ManuscriptTitlePagePreview = ({
     );
   };
 
-  const affiliationAlignment =
-    style.affiliationAlignment === 'CENTER'
+  // A thesis cover centres everything and drops the affiliation superscripts,
+  // matching what the DOCX exporter builds for the same setting.
+  const isThesisTitlePage = style.titlePageTemplate === 'THESIS';
+  const affiliationAlignment = isThesisTitlePage
+    ? 'center'
+    : style.affiliationAlignment === 'CENTER'
       ? 'center'
       : style.affiliationAlignment === 'RIGHT'
         ? 'right'
@@ -246,16 +258,24 @@ export const ManuscriptTitlePagePreview = ({
               {parseManuscriptAffiliations(affiliations).map(
                 (affiliation, index) => (
                   <div key={affiliation.id}>
-                    <sup>{index + 1}</sup> <em>{affiliation.name}</em>
+                    {isThesisTitlePage ? null : <sup>{index + 1}</sup>}{' '}
+                    <em>{affiliation.name}</em>
                   </div>
                 ),
               )}
               {extraLines
                 .map((line) => line.trim())
                 .filter((line) => line.length > 0)
-                .map((line, index) => (
-                  <div key={`${index}-${line}`}>{line}</div>
-                ))}
+                .flatMap((line, index) => {
+                  const spacerLines = titlePageSpacerLineCount(line);
+                  return spacerLines === null
+                    ? [<div key={`${index}-${line}`}>{line}</div>]
+                    : Array.from({ length: spacerLines }, (_value, offset) => (
+                        <StyledTitlePageSpacer
+                          key={`${index}-spacer-${offset}`}
+                        />
+                      ));
+                })}
             </div>
             {correspondingAuthor.trim().length > 0 ? (
               <StyledCorrespondence>{correspondingAuthor}</StyledCorrespondence>

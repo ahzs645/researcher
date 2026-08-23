@@ -82,6 +82,7 @@ export type PortableResearchPaperManifest = {
     sectionKey?: string;
     tableData?: string;
     equationLatex?: string;
+    diagramSource?: string;
   }>;
   references: Array<{
     key: string;
@@ -219,6 +220,9 @@ export const buildPortableResearchPaperManifest = (
           : {}),
         ...(figure.equationLatex !== null && figure.equationLatex !== undefined
           ? { equationLatex: figure.equationLatex }
+          : {}),
+        ...(figure.diagramSource !== null && figure.diagramSource !== undefined
+          ? { diagramSource: figure.diagramSource }
           : {}),
       };
     }),

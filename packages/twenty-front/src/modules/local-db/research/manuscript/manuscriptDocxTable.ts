@@ -92,6 +92,7 @@ export const createManuscriptTableMapping =
     const headerRows = new Array(data.headerRows ?? 0).fill(true);
     const headerColumns = new Array(data.headerCols ?? 0).fill(true);
     const centered = tableStyle !== 'GRID';
+    const occupied = new Set<string>();
 
     return new Table({
       layout: TableLayoutType.FIXED,
@@ -102,15 +103,29 @@ export const createManuscriptTableMapping =
       columnWidths,
       margins: { top: 100, bottom: 100, left: 120, right: 120 },
       borders: bordersForStyle(tableStyle),
+      // A cell that spans rows is omitted from the rows it covers, so the
+      // position of every later cell has to be tracked against the real grid —
+      // using the array index would put merged cells in the wrong column and
+      // give them the wrong width.
       rows: data.rows.map((row, rowIndex) => {
         const isHeaderRow = headerRows[rowIndex] === true;
+        let cursor = 0;
         return new TableRow({
           tableHeader: isHeaderRow,
           cantSplit: true,
-          children: row.cells.map((cell, columnIndex) => {
+          children: row.cells.map((cell) => {
             const mappedCell = mapTableCell(cell);
-            const isHeader = isHeaderRow || headerColumns[columnIndex] === true;
+            while (occupied.has(`${rowIndex}:${cursor}`)) cursor += 1;
+            const columnIndex = cursor;
             const columnSpan = mappedCell.props.colspan ?? 1;
+            const rowSpan = mappedCell.props.rowspan ?? 1;
+            for (let r = rowIndex; r < rowIndex + rowSpan; r += 1) {
+              for (let c = columnIndex; c < columnIndex + columnSpan; c += 1) {
+                occupied.add(`${r}:${c}`);
+              }
+            }
+            cursor = columnIndex + columnSpan;
+            const isHeader = isHeaderRow || headerColumns[columnIndex] === true;
             const width = columnWidths
               .slice(columnIndex, columnIndex + columnSpan)
               .reduce((sum, value) => sum + value, 0);

@@ -89,7 +89,8 @@ describe('buildBlockNoteDocument', () => {
     expect(serialized).toContain('C_{f}=\\\\frac{C_{metal}}{C_{background}}');
     expect(serialized).toContain('"textColor":"equation"');
     expect(serialized).not.toContain('$$');
-    expect(serialized).toContain('"columnWidths":[312,312]');
+    // Two columns of the printable width, which A4 sets.
+    expect(serialized).toContain('"columnWidths":[300,300]');
     expect(serialized).toContain('"previewWidth":600');
     expect(serialized).toContain('Figure 1. Chart');
   });
@@ -476,5 +477,154 @@ describe('buildBlockNoteDocument', () => {
     expect(serialized).toContain('Appendix B: Primary sensitivity grid');
     expect(serialized).not.toContain('2. Appendix A');
     expect(serialized).not.toContain('3. Appendix B');
+  });
+});
+
+describe('front matter pagination and title page templates', () => {
+  const frontMatterBundle = (
+    style: Record<string, unknown>,
+    titlePageExtraLines: string[] = [
+      'by',
+      'Student # (230235918)',
+      '---',
+      'THESIS SUBMITTED IN PARTIAL FULFILLMENT OF',
+      '---',
+      'MARCH 2023',
+    ],
+  ) =>
+    buildManuscriptBundle({
+      manuscript: {
+        id: 'paper',
+        name: 'Assessing particulate bound metals',
+        authorLine: 'Ahmad Jalil',
+        affiliations: 'University of Northern British Columbia',
+        titlePageExtraLines,
+      },
+      style: { name: 'Thesis', ...style },
+      sections: [
+        {
+          id: 'abstract',
+          name: 'Abstract',
+          sectionType: 'ABSTRACT',
+          placement: 'FRONT_MATTER',
+          includeInExport: true,
+          content: 'A compact summary.',
+        },
+        {
+          id: 'introduction',
+          name: 'Introduction',
+          sectionType: 'INTRODUCTION',
+          placement: 'MAIN',
+          includeInExport: true,
+          content: 'The body starts here.',
+        },
+      ],
+      figures: [],
+      references: [],
+    });
+
+  const pageBreaks = (style: Record<string, unknown>) => {
+    const { blocks } = buildBlockNoteDocument(frontMatterBundle(style));
+    return {
+      blocks,
+      breakIndexes: blocks.flatMap((block, index) =>
+        block.type === 'pageBreak' ? [index] : [],
+      ),
+      abstractIndex: blocks.findIndex(
+        (block) =>
+          block.type === 'heading' &&
+          JSON.stringify(block.content).includes('Abstract'),
+      ),
+      introductionIndex: blocks.findIndex(
+        (block) =>
+          block.type === 'heading' &&
+          JSON.stringify(block.content).includes('Introduction'),
+      ),
+    };
+  };
+
+  it('separates the title page, the abstract page, and the body', () => {
+    const { breakIndexes, abstractIndex, introductionIndex } = pageBreaks({
+      frontMatterLayout: 'SEPARATE_TITLE_AND_ABSTRACT',
+    });
+
+    expect(breakIndexes).toHaveLength(2);
+    expect(breakIndexes[0]).toBeLessThan(abstractIndex);
+    expect(breakIndexes[1]).toBe(introductionIndex - 1);
+  });
+
+  it('keeps the existing layouts to one break', () => {
+    expect(
+      pageBreaks({ frontMatterLayout: 'SEPARATE_TITLE_PAGE' }).breakIndexes,
+    ).toHaveLength(1);
+    expect(
+      pageBreaks({ frontMatterLayout: 'TITLE_WITH_ABSTRACT' }).breakIndexes,
+    ).toHaveLength(1);
+    expect(pageBreaks({ frontMatterLayout: 'INLINE' }).breakIndexes).toEqual(
+      [],
+    );
+  });
+
+  it('centres a thesis cover page and turns --- into vertical space', () => {
+    const { blocks } = pageBreaks({
+      frontMatterLayout: 'SEPARATE_TITLE_PAGE',
+      titlePageTemplate: 'THESIS',
+      affiliationAlignment: 'LEFT',
+    });
+    const titleIndex = blocks.findIndex((block) => block.type === 'heading');
+    const coverBlocks = blocks.slice(
+      titleIndex,
+      blocks.findIndex((block) => block.type === 'pageBreak'),
+    );
+    const serialized = JSON.stringify(coverBlocks);
+
+    // Even with the journal set to left-aligned affiliations, a cover centres.
+    expect(serialized).not.toContain('"textAlignment":"left"');
+    expect(serialized).toContain('THESIS SUBMITTED IN PARTIAL FULFILLMENT OF');
+    // The `---` lines became blank spacers, not literal rules.
+    expect(serialized).not.toContain('---');
+    // A spacer carries a no-break space rather than nothing: react-pdf gives a
+    // text node with no characters no line box, so an empty paragraph took up
+    // no room and the gap the author asked for disappeared.
+    expect(
+      coverBlocks.filter(
+        (block) =>
+          block.type === 'paragraph' &&
+          JSON.stringify(block.content) === '"\u00a0"',
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('stacks a counted spacer into that many blank lines', () => {
+    const { blocks } = buildBlockNoteDocument(
+      frontMatterBundle(
+        {
+          frontMatterLayout: 'SEPARATE_TITLE_PAGE',
+          titlePageTemplate: 'THESIS',
+        },
+        ['by', '--- 6', 'MARCH 2023'],
+      ),
+    );
+    const coverBlocks = blocks.slice(
+      blocks.findIndex((block) => block.type === 'heading'),
+      blocks.findIndex((block) => block.type === 'pageBreak'),
+    );
+
+    expect(
+      coverBlocks.filter(
+        (block) => JSON.stringify(block.content) === '"\u00a0"',
+      ).length,
+      // Six from the `--- 6`, plus the one a thesis cover puts under its title.
+    ).toBe(7);
+    expect(JSON.stringify(coverBlocks)).not.toContain('--- 6');
+  });
+
+  it('leaves the journal masthead alignment alone by default', () => {
+    const { blocks } = pageBreaks({
+      frontMatterLayout: 'SEPARATE_TITLE_PAGE',
+      affiliationAlignment: 'LEFT',
+    });
+
+    expect(JSON.stringify(blocks)).toContain('"textAlignment":"left"');
   });
 });

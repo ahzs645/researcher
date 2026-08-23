@@ -153,6 +153,27 @@ scratch, and format it offline:
 - `manuscript/manuscriptCsl.ts` — resolves CSL styles **local-first** (bundled
   under `public/csl/`), CDN fallback, so the common journals format with no
   network.
+- `manuscript/manuscriptTableGrid.ts` — merged cells on top of GFM tables: a
+  cell of `<` continues the one to its left, `^` the one above, and the `|---|`
+  separator's position is the header depth. The Word importer writes those
+  markers from `w:gridSpan`/`w:vMerge`, so a spanning header survives into
+  Word, HTML, and JATS instead of collapsing onto one column.
+- `manuscript/manuscriptHtmlExport.ts` (+ `manuscriptHtmlMarkdown.ts`,
+  `manuscriptHtmlStyles.ts`, `manuscriptMathMl.ts`) — a **one-file HTML export**
+  with nothing to fetch: equations become MathML (no KaTeX stylesheet or web
+  fonts), figures are already data-URLs, in-text citations link to their
+  reference entry and back, cross-references link to their asset, and the two
+  reader controls (heading levels, table design) are pure CSS.
+- `manuscript/manuscriptDiagram.ts` — **Mermaid** as a way of adding an image: a
+  figure carries `diagramSource`, and prose can carry a ```mermaid fence. Drawn
+  once per export — inline SVG for HTML, rasterized PNG for DOCX/PDF — and null
+  off-browser, so a broken diagram falls back to its source instead of failing
+  the export. In the composer a fence is drawn rather than shown as code: the
+  editor transform swaps `codeBlock[language=mermaid]` for a `mermaidDiagram`
+  block on load and back on save, so the stored Markdown is byte-identical.
+- `manuscript/manuscriptDocxTemplate.ts` — lifts `word/styles.xml` out of a
+  user's own `.docx` so the Word export can use their template's fonts and
+  heading styles as its style base (~50 KB stored, not the whole file).
 - `researchApplicationImport.ts` — the same import engine, grant-shaped: a
   proposal `.docx` → `applicationSection` drafts, behind the Funding nav's
   **Import proposal** page.

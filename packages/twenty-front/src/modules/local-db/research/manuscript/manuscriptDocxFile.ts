@@ -21,6 +21,7 @@ import {
 } from './manuscriptImportBlocks';
 import { extractPdfText } from './manuscriptPdfFile';
 import { readPortableResearchPaperZip } from './manuscriptPortableZip';
+import { tiffToPngDataUrl } from './manuscriptTiff';
 
 export { type ImportedSourceInfo } from './manuscriptImportBlocks';
 
@@ -168,8 +169,13 @@ const loadDocxImages = async (
     const extension = target.slice(target.lastIndexOf('.') + 1).toLowerCase();
     const mimeType = IMAGE_MIME_BY_EXTENSION[extension];
     if (mimeType === undefined) continue;
+    // Word writes TIFF whenever the author pasted one, and nothing in a browser
+    // paints it. Re-encode to PNG here so the figure survives the import as a
+    // picture rather than as a data URL with no renderer.
+    const png =
+      mimeType === 'image/tiff' ? await tiffToPngDataUrl(bytes) : null;
     images[relationshipId] = {
-      dataUrl: `data:${mimeType};base64,${bytesToBase64(bytes)}`,
+      dataUrl: png ?? `data:${mimeType};base64,${bytesToBase64(bytes)}`,
       altText: imageAltText(documentXml, relationshipId),
     };
   }
@@ -217,7 +223,7 @@ const readImportedWordSource = async (
 };
 
 const TIFF_WARNING =
-  'A TIFF figure was preserved, but browsers cannot preview TIFF reliably. Replace it with PNG before final export.';
+  'A TIFF figure could not be converted, so it was preserved as-is. Browsers cannot preview TIFF — replace it with PNG before final export.';
 
 const addTiffWarning = (
   document: ImportedDocument,

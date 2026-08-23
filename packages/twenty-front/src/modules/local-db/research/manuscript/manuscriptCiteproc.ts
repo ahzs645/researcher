@@ -18,6 +18,7 @@ import scienceXml from './csl-styles/science.csl?raw';
 import springerBasicAuthorDateXml from './csl-styles/springer-basic-author-date.csl?raw';
 import vancouverXml from './csl-styles/vancouver.csl?raw';
 import { type ReferenceLike } from './manuscriptTypes';
+import { decodeXmlEntities } from './manuscriptXmlEntities';
 
 export type VendoredCslStyle = {
   id: string;
@@ -25,17 +26,9 @@ export type VendoredCslStyle = {
   xml: string;
 };
 
-const decodeXmlText = (value: string): string =>
-  value
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
-
 const titleFromStyleXml = (xml: string): string => {
   const title = /<title>([\s\S]*?)<\/title>/i.exec(xml)?.[1]?.trim();
-  return title === undefined ? 'Untitled CSL style' : decodeXmlText(title);
+  return title === undefined ? 'Untitled CSL style' : decodeXmlEntities(title);
 };
 
 const vendoredStyle = (id: string, xml: string): VendoredCslStyle => ({
@@ -241,7 +234,7 @@ export const createCiteprocEngine = async ({
 };
 
 const plainTextFromHtml = (html: string): string =>
-  decodeXmlText(
+  decodeXmlEntities(
     html
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]*>/g, ' ')

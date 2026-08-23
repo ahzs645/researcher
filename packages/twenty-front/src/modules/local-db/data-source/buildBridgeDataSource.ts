@@ -162,7 +162,9 @@ export const getBridgeDataSource = () => {
       //          projectMembership (researcher↔project roster) objects and
       //          their relations
       //   7 → 8  journal export page-layout and typography fields
-      schemaVersion: 8,
+      //   8 → 9  figure.diagramSource (Mermaid) and journal.titlePageTemplate
+      //   9 → 10 journal.paragraphFirstLineIndent
+      schemaVersion: 10,
     });
   }
   return cachedDataSource;

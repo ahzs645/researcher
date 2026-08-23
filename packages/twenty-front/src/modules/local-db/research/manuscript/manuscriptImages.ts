@@ -38,9 +38,11 @@ export const resolveFigureImage = (figure: FigureLike): ResolvedImage => {
   return { kind: 'none' };
 };
 
-// True when a figure has a usable image (vs caption-only placeholder).
+// True when a figure has a usable image (vs caption-only placeholder). A
+// diagram counts: its picture is rendered from Mermaid source at export time.
 export const figureHasImage = (figure: FigureLike): boolean =>
-  resolveFigureImage(figure).kind !== 'none';
+  resolveFigureImage(figure).kind !== 'none' ||
+  isNonEmptyString(figure.diagramSource);
 
 // Render a numbered figure as a self-contained Markdown block: the image (or a
 // placeholder), then the captioned label, plus credit if present. Tables, which
@@ -67,6 +69,10 @@ export const figureToMarkdown = (figure: NumberedFigure): string => {
 
   if (image.kind !== 'none') {
     lines.push(`![${alt}](${image.src})`);
+  } else if (isNonEmptyString(figure.diagramSource)) {
+    // No raster yet — carry the Mermaid source itself, which every Markdown
+    // renderer that understands the fence can draw.
+    lines.push(`\`\`\`mermaid\n${figure.diagramSource.trim()}\n\`\`\``);
   } else if (figure.assetKind !== 'TABLE') {
     lines.push(`*[${figure.label}: image to be added]*`);
   }
@@ -100,11 +106,16 @@ export const describeImageSource = (figure: FigureLike): string => {
         return 'Plotted from dataset';
       case 'GENERATED':
         return 'Generated chart';
+      case 'DIAGRAM':
+        return 'Mermaid diagram';
       case 'URL':
         return 'Linked image';
       default:
         return resolved.kind === 'dataurl' ? 'Uploaded image' : 'Linked image';
     }
+  }
+  if (isNonEmptyString(figure.diagramSource)) {
+    return 'Mermaid diagram (renders at export)';
   }
   switch (figure.imageSource) {
     case 'DATASET':

@@ -24,6 +24,9 @@ import {
   EQUATION_LABEL_SEPARATOR,
 } from './manuscriptBlocks';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
+import { fitManuscriptFigureImages } from './manuscriptFigureFit';
+import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
 import { manuscriptAuthorLineSegments } from './manuscriptContributors';
 import { latexToMathComponents } from './manuscriptDocxMath';
 import {
@@ -49,6 +52,7 @@ type ManuscriptDocxMappingOptions = {
   bodyLineSpacing: number;
   abstractLineSpacing: number;
   paragraphSpacingAfter: number;
+  paragraphFirstLineIndent: number;
   affiliationLineSpacing: number;
   affiliationSpacingAfter: number;
   tableStyle: ManuscriptTableStyle;
@@ -137,6 +141,7 @@ const createManuscriptDocxMappings = ({
   bodyLineSpacing,
   abstractLineSpacing,
   paragraphSpacingAfter,
+  paragraphFirstLineIndent,
   affiliationLineSpacing,
   affiliationSpacingAfter,
   tableStyle,
@@ -312,7 +317,11 @@ const createManuscriptDocxMappings = ({
             ? figureCaptionLineSpacing
             : isAffiliation
               ? affiliationLineSpacing
-              : bodyLineSpacing;
+              : // A cover page is laid out by counting lines, so a title-page
+                // line is one line — not one line times the body's spacing.
+                block.props.textColor === 'title-line'
+                ? 1
+                : bodyLineSpacing;
       const children = isFigureCaption
         ? manuscriptScriptSegments(equation).map(
             (segment) =>
@@ -355,8 +364,20 @@ const createManuscriptDocxMappings = ({
                 : exporter.transformInlineContent([content]);
             })
           : exporter.transformInlineContent(block.content);
+      // Body copy only: an indented caption, abstract or affiliation line reads
+      // as a mistake, and the equation and author-line paragraphs returned
+      // above never reach here.
+      const isBodyProse =
+        !isAbstract &&
+        !isTableCaption &&
+        !isFigureCaption &&
+        !isAffiliation &&
+        block.props.textColor !== 'title-line';
       return new Paragraph({
         alignment,
+        ...(isBodyProse && paragraphFirstLineIndent > 0
+          ? { indent: { firstLine: Math.round(paragraphFirstLineIndent * 20) } }
+          : {}),
         spacing: {
           after: isTableCaption
             ? 0
@@ -386,7 +407,10 @@ export const exportManuscriptToDocxBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
   const formattedBundle = await prepareManuscriptBundleWithCsl(bundle);
-  bundle = formattedBundle;
+  // Diagrams are Mermaid source until export; Word embeds the raster.
+  bundle = await fitManuscriptFigureImages(
+    await prepareManuscriptDiagramImages(formattedBundle),
+  );
   const { editor, blocks } = buildBlockNoteDocument(bundle);
   const fontFamily = bundle.style.fontFamily?.trim() || 'Times New Roman';
   const bodyFontSize = bundle.style.bodyFontSize ?? 12;
@@ -413,6 +437,10 @@ export const exportManuscriptToDocxBlob = async (
   const paragraphSpacingAfter = Math.max(
     0,
     bundle.style.paragraphSpacingAfter ?? 0,
+  );
+  const paragraphFirstLineIndent = Math.max(
+    0,
+    bundle.style.paragraphFirstLineIndent ?? 0,
   );
   const affiliationLineSpacing = Math.max(
     1,
@@ -445,6 +473,7 @@ export const exportManuscriptToDocxBlob = async (
       bodyLineSpacing: lineSpacing,
       abstractLineSpacing,
       paragraphSpacingAfter,
+      paragraphFirstLineIndent,
       affiliationLineSpacing,
       affiliationSpacingAfter,
       tableStyle,
@@ -466,71 +495,81 @@ export const exportManuscriptToDocxBlob = async (
     bundle.style.bodyAlignment === 'JUSTIFIED'
       ? AlignmentType.JUSTIFIED
       : AlignmentType.LEFT;
+  // When the author supplied their own .docx, its styles.xml is the style
+  // authority: passing it as `externalStyles` (and dropping the generated
+  // style set, which would otherwise sit in front of it) is what makes the
+  // export come out looking like their template.
+  const templateStyles = bundle.style.referenceDocStyles;
+  const usesTemplate = isManuscriptDocxStylesXml(templateStyles);
+
   return exporter.toBlob(blocks, {
     documentOptions: {
       creator: bundle.metadata.authors,
       title: bundle.metadata.title,
       subject: bundle.metadata.journal,
       // Replace BlockNote's Inter-based template instead of appending duplicate
-      // Heading/Normal definitions. The journal profile is the style authority.
-      externalStyles: undefined,
-      styles: {
-        default: {
-          document: {
-            run: {
-              font: fontFamily,
-              size: bodyFontSize * 2,
-            },
-            paragraph: {
-              alignment: bodyAlignment,
-              spacing: {
-                after: Math.round(paragraphSpacingAfter * 20),
-                line: Math.round(240 * lineSpacing),
-                lineRule: LineRuleType.AUTO,
+      // Heading/Normal definitions. The journal profile is the style authority
+      // unless the author supplied a Word template.
+      externalStyles: usesTemplate ? templateStyles : undefined,
+      styles: usesTemplate
+        ? undefined
+        : {
+            default: {
+              document: {
+                run: {
+                  font: fontFamily,
+                  size: bodyFontSize * 2,
+                },
+                paragraph: {
+                  alignment: bodyAlignment,
+                  spacing: {
+                    after: Math.round(paragraphSpacingAfter * 20),
+                    line: Math.round(240 * lineSpacing),
+                    lineRule: LineRuleType.AUTO,
+                  },
+                },
+              },
+              heading1: {
+                run: {
+                  font: fontFamily,
+                  size: titleFontSize * 2,
+                  bold: true,
+                  color: '000000',
+                },
+                paragraph: {
+                  alignment: AlignmentType.CENTER,
+                  keepNext: true,
+                  spacing: { before: 240, after: 240, line: 280 },
+                },
+              },
+              heading2: {
+                run: {
+                  font: fontFamily,
+                  size: headingFontSize * 2,
+                  bold: true,
+                  color: headingColor,
+                },
+                paragraph: {
+                  alignment: AlignmentType.LEFT,
+                  keepNext: true,
+                  spacing: { before: 240, after: 120, line: 280 },
+                },
+              },
+              heading3: {
+                run: {
+                  font: fontFamily,
+                  size: subheadingFontSize * 2,
+                  bold: true,
+                  color: headingColor,
+                },
+                paragraph: {
+                  alignment: AlignmentType.LEFT,
+                  keepNext: true,
+                  spacing: { before: 160, after: 80, line: 280 },
+                },
               },
             },
           },
-          heading1: {
-            run: {
-              font: fontFamily,
-              size: titleFontSize * 2,
-              bold: true,
-              color: '000000',
-            },
-            paragraph: {
-              alignment: AlignmentType.CENTER,
-              keepNext: true,
-              spacing: { before: 240, after: 240, line: 280 },
-            },
-          },
-          heading2: {
-            run: {
-              font: fontFamily,
-              size: headingFontSize * 2,
-              bold: true,
-              color: headingColor,
-            },
-            paragraph: {
-              alignment: AlignmentType.LEFT,
-              keepNext: true,
-              spacing: { before: 240, after: 120, line: 280 },
-            },
-          },
-          heading3: {
-            run: {
-              font: fontFamily,
-              size: subheadingFontSize * 2,
-              bold: true,
-              color: headingColor,
-            },
-            paragraph: {
-              alignment: AlignmentType.LEFT,
-              keepNext: true,
-              spacing: { before: 160, after: 80, line: 280 },
-            },
-          },
-        },
-      },
     },
     sectionOptions: {
       properties: {

@@ -75,14 +75,23 @@ export const parseMarkdownTable = (
 };
 
 // Render a grid back to a GFM Markdown table (used when seeding/normalizing).
-export const gridToMarkdownTable = (rows: string[][]): string => {
+// `headerRows` decides where the `|---|` separator lands, which is also how the
+// span-aware parser recovers a multi-deck header.
+export const gridToMarkdownTable = (
+  rows: string[][],
+  headerRows = 1,
+): string => {
   if (rows.length === 0) return '';
   const columnCount = Math.max(...rows.map((row) => row.length));
   const pad = (row: string[]): string =>
     `| ${Array.from({ length: columnCount }, (_, index) => escapeCell(row[index] ?? '')).join(' | ')} |`;
-  const [header, ...body] = rows;
+  const headerDepth = Math.min(Math.max(1, headerRows), rows.length);
   const separator = `| ${Array.from({ length: columnCount }, () => '---').join(' | ')} |`;
-  return [pad(header), separator, ...body.map(pad)].join('\n');
+  return [
+    ...rows.slice(0, headerDepth).map(pad),
+    separator,
+    ...rows.slice(headerDepth).map(pad),
+  ].join('\n');
 };
 
 export const tableColumnCount = (rows: string[][]): number =>

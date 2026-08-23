@@ -23,11 +23,29 @@ export type CrossReferenceResult = {
   unresolvedKeys: string[];
 };
 
+// ── Cross-reference anchors ────────────────────────────────────────────────
+// Resolving [#fig:x] to "Figure 3" is all Word and PDF need, but an HTML
+// export can make that text jump to the figure. Exporters opt in, and the
+// resolved label then carries the asset it resolved to inside control
+// characters that cannot occur in prose.
+const CROSS_REF_ANCHOR_OPEN = '\u0005';
+const CROSS_REF_ANCHOR_SPLIT = '\u0011';
+const CROSS_REF_ANCHOR_CLOSE = '\u0003';
+
+export const CROSS_REF_ANCHOR_PATTERN =
+  /\u0005([^\u0005\u0011\u0003]*)\u0011([^\u0003]*)\u0003/g;
+
+export const stripCrossReferenceAnchors = (value: string): string =>
+  value.replace(CROSS_REF_ANCHOR_PATTERN, (_match, _key, label: string) =>
+    String(label),
+  );
+
 // Replace every [#key] token with the target asset's cross-ref label. Unknown
 // keys are left visible (so the gap is obvious) and reported.
 export const resolveCrossReferences = (
   markdown: string,
   numbered: NumberedFigure[],
+  withAnchors = false,
 ): CrossReferenceResult => {
   const lookup = buildAssetLookup(numbered);
   const unresolved = new Set<string>();
@@ -38,7 +56,11 @@ export const resolveCrossReferences = (
       unresolved.add(rawKey);
       return `[#${rawKey}]`;
     }
-    return asset.crossRefLabel;
+    if (!withAnchors) return asset.crossRefLabel;
+    // The anchor names the asset the key resolved to, not the key the author
+    // typed, so aliases and prefixed forms land on the same element.
+    const target = asset.refKey ?? asset.id;
+    return `${CROSS_REF_ANCHOR_OPEN}${target}${CROSS_REF_ANCHOR_SPLIT}${asset.crossRefLabel}${CROSS_REF_ANCHOR_CLOSE}`;
   });
 
   return { text, unresolvedKeys: [...unresolved] };

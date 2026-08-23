@@ -354,6 +354,25 @@ const assetPlacementKey = (block: JsonRecord): string | undefined => {
   return /^\[\[asset:([^\]\s]+)\]\]$/.exec(content[0].text)?.[1];
 };
 
+// A ```mermaid fence is a code block everywhere except in the editor, where it
+// is drawn. Only the source travels, so turning it back into the fence is exact.
+const mermaidDiagramSource = (block: JsonRecord): string | undefined => {
+  if (
+    block.type !== 'codeBlock' ||
+    !isJsonRecord(block.props) ||
+    String(block.props.language).toLowerCase() !== 'mermaid' ||
+    !Array.isArray(block.content)
+  ) {
+    return undefined;
+  }
+  const source = block.content
+    .map((part) =>
+      isJsonRecord(part) && typeof part.text === 'string' ? part.text : '',
+    )
+    .join('');
+  return source.trim().length === 0 ? undefined : source;
+};
+
 const transformBlock = (block: unknown, toManuscript: boolean): unknown => {
   if (!isJsonRecord(block)) return block;
   const children = Array.isArray(block.children)
@@ -362,7 +381,16 @@ const transformBlock = (block: unknown, toManuscript: boolean): unknown => {
 
   if (toManuscript) {
     if (block.type === 'codeBlock') {
-      return block;
+      const source = mermaidDiagramSource(block);
+      return source === undefined
+        ? block
+        : {
+            ...block,
+            type: 'mermaidDiagram',
+            props: { source },
+            content: undefined,
+            children,
+          };
     }
     const assetRefKey = assetPlacementKey(block);
     if (assetRefKey !== undefined) {
@@ -411,6 +439,20 @@ const transformBlock = (block: unknown, toManuscript: boolean): unknown => {
           styles: {},
         },
       ],
+      children,
+    };
+  }
+
+  if (
+    block.type === 'mermaidDiagram' &&
+    isJsonRecord(block.props) &&
+    typeof block.props.source === 'string'
+  ) {
+    return {
+      ...block,
+      type: 'codeBlock',
+      props: { language: 'mermaid' },
+      content: [{ type: 'text', text: block.props.source, styles: {} }],
       children,
     };
   }

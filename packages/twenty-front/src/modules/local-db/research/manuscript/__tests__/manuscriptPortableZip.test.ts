@@ -76,6 +76,18 @@ const source: PortableManuscriptSource = {
       orderIndex: 0,
       sectionId: 'introduction-id',
     },
+    {
+      id: 'diagram-id',
+      name: 'Sampling workflow',
+      refKey: 'sampling-workflow',
+      caption: 'How a filter becomes a number.',
+      assetKind: 'FIGURE',
+      placement: 'MAIN',
+      imageSource: 'DIAGRAM',
+      diagramSource: 'flowchart TD\n  A[Collect] --> B[Digest]',
+      orderIndex: 1,
+      sectionId: 'introduction-id',
+    },
   ],
   references: [
     {
@@ -204,6 +216,28 @@ describe('portable research-paper ZIP', () => {
       ]),
       coverLetter: 'Please consider this manuscript.',
     });
+  });
+
+  it('round-trips a Mermaid diagram figure', () => {
+    const manifest = buildPortableResearchPaperManifest(source, {}, {});
+    const diagram = manifest.figures.find(
+      (figure) => figure.refKey === 'sampling-workflow',
+    );
+
+    expect(diagram?.diagramSource).toBe(
+      'flowchart TD\n  A[Collect] --> B[Digest]',
+    );
+
+    const prepared = preparePortableResearchPaperImport(manifest, []);
+    const importedDiagram = prepared.figures.find(
+      (figure) => figure.refKey === 'sampling-workflow',
+    );
+
+    expect(importedDiagram?.diagramSource).toBe(
+      'flowchart TD\n  A[Collect] --> B[Digest]',
+    );
+    // The importer recognises it as a diagram rather than an image-less figure.
+    expect(importedDiagram?.imageSource).toBe('DIAGRAM');
   });
 
   it('rejects a ZIP without the versioned research-paper manifest', () => {

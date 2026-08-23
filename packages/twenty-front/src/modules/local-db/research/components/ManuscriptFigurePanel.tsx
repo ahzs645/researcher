@@ -81,6 +81,7 @@ export const ManuscriptFigurePanel = ({
   const [imageUrl, setImageUrl] = useState('');
   const [tableData, setTableData] = useState('');
   const [equationLatex, setEquationLatex] = useState('');
+  const [diagramSource, setDiagramSource] = useState('');
   const [chartKind, setChartKind] = useState<ChartKind>('bar');
   const [chartDatasetId, setChartDatasetId] = useState<string | null>(null);
   const [tableEditorVersion, setTableEditorVersion] = useState(0);
@@ -304,24 +305,30 @@ export const ManuscriptFigurePanel = ({
           figures.map((figure) => figure.refKey),
           `asset-${Date.now()}`,
         );
+        // A diagram is a figure whose picture is drawn from Mermaid source at
+        // export time, so it numbers and cross-references like any other.
+        const isDiagram = assetKind === 'DIAGRAM';
         await createOneRecord({
           name:
             deriveFigureNameFromCaption(trimmedCaption) || 'Untitled figure',
           manuscriptId,
-          assetKind,
+          assetKind: isDiagram ? 'FIGURE' : assetKind,
           placement,
           refKey,
           caption: trimmedCaption,
           imageUrl: dataUrl ?? imageUrl.trim(),
-          imageSource: isDefined(dataUrl)
-            ? 'UPLOAD'
-            : imageUrl.trim().length > 0
-              ? 'URL'
-              : 'NONE',
+          imageSource: isDiagram
+            ? 'DIAGRAM'
+            : isDefined(dataUrl)
+              ? 'UPLOAD'
+              : imageUrl.trim().length > 0
+                ? 'URL'
+                : 'NONE',
           ...(assetKind === 'TABLE' ? { tableData: tableData.trim() } : {}),
           ...(assetKind === 'EQUATION'
             ? { equationLatex: equationLatex.trim() }
             : {}),
+          ...(isDiagram ? { diagramSource: diagramSource.trim() } : {}),
           orderIndex: figures.length,
         });
         enqueueSuccessSnackBar({ message: `Added ${assetKind.toLowerCase()}` });
@@ -331,6 +338,7 @@ export const ManuscriptFigurePanel = ({
       setImageUrl('');
       setTableData('');
       setEquationLatex('');
+      setDiagramSource('');
       setChartDatasetId(null);
       setTableEditorVersion((version) => version + 1);
       setIsCreateFormOpen(false);
@@ -408,6 +416,7 @@ export const ManuscriptFigurePanel = ({
           imageUrl={imageUrl}
           tableData={tableData}
           equationLatex={equationLatex}
+          diagramSource={diagramSource}
           tableStyle={tableStyle}
           tableEditorVersion={tableEditorVersion}
           chartKind={chartKind}
@@ -420,6 +429,7 @@ export const ManuscriptFigurePanel = ({
           onImageUrlChange={setImageUrl}
           onTableDataChange={setTableData}
           onEquationLatexChange={setEquationLatex}
+          onDiagramSourceChange={setDiagramSource}
           onChartKindChange={setChartKind}
           onChartDatasetChange={selectChartDataset}
           onAdd={() => {

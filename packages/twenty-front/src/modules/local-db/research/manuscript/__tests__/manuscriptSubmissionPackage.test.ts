@@ -1,7 +1,10 @@
 import { strFromU8, unzipSync } from 'fflate';
 
 import { buildManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
-import { createSubmissionPackage } from '@/local-db/research/manuscript/manuscriptSubmissionPackage';
+import {
+  createSubmissionPackage,
+  manuscriptSubmissionFigures,
+} from '@/local-db/research/manuscript/manuscriptSubmissionPackage';
 
 jest.mock('@/local-db/research/manuscript/manuscriptDocxExport', () => ({
   exportManuscriptToDocxBlob: jest.fn(
@@ -123,9 +126,9 @@ describe('createSubmissionPackage', () => {
     const manifest = strFromU8(packageFiles['manifest.xml']);
     for (const xml of [manifest, strFromU8(packageFiles[jatsFilename!])]) {
       expect(
-        new DOMParser().parseFromString(xml, 'text/xml').querySelector(
-          'parsererror',
-        ),
+        new DOMParser()
+          .parseFromString(xml, 'text/xml')
+          .querySelector('parsererror'),
       ).toBeNull();
     }
     expect(manifest).toContain('type="manuscript"');
@@ -137,5 +140,85 @@ describe('createSubmissionPackage', () => {
         filename.endsWith('-manuscript.docx'),
       ),
     ).toBe(true);
+  });
+});
+
+describe('figures in a submission package', () => {
+  const figuresFor = (figures: unknown[]) =>
+    manuscriptSubmissionFigures(
+      buildManuscriptBundle({
+        manuscript: { id: 'p', name: 'Diagram paper' },
+        sections: [
+          {
+            id: 'methods',
+            name: 'Methods',
+            sectionType: 'METHODS',
+            placement: 'MAIN',
+            content: 'Method text.',
+            includeInExport: true,
+          },
+        ],
+        figures: figures as never,
+        references: [],
+        style: { name: 'Test journal' },
+      }),
+    );
+
+  it('ships an uploaded figure as a real file', () => {
+    const { files, linked } = figuresFor([
+      {
+        id: 'f1',
+        refKey: 'plot',
+        name: 'Plot',
+        caption: 'A plot.',
+        assetKind: 'FIGURE',
+        placement: 'MAIN',
+        imageSource: 'UPLOAD',
+        imageUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      },
+    ]);
+
+    expect(Object.keys(files)).toEqual(['figures/Figure-1.png']);
+    expect(linked).toEqual([]);
+  });
+
+  // Off-browser Mermaid cannot draw, so the figure has no pixels to ship —
+  // but it must not vanish from the package without a word.
+  it('records a diagram it could not draw instead of dropping it', () => {
+    const { files, linked } = figuresFor([
+      {
+        id: 'f2',
+        refKey: 'workflow',
+        name: 'Workflow',
+        caption: 'Sampling workflow.',
+        assetKind: 'FIGURE',
+        placement: 'MAIN',
+        imageSource: 'DIAGRAM',
+        diagramSource: 'flowchart TD\\n  A --> B',
+      },
+    ]);
+
+    expect(files).toEqual({});
+    expect(linked).toEqual([
+      'Figure 1: Mermaid diagram, not rendered — source in the portable package',
+    ]);
+  });
+
+  it('ships a drawn diagram as a file like any other figure', () => {
+    const { files } = figuresFor([
+      {
+        id: 'f3',
+        refKey: 'workflow',
+        name: 'Workflow',
+        caption: 'Sampling workflow.',
+        assetKind: 'FIGURE',
+        placement: 'MAIN',
+        imageSource: 'DIAGRAM',
+        diagramSource: 'flowchart TD\\n  A --> B',
+        imageUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      },
+    ]);
+
+    expect(Object.keys(files)).toEqual(['figures/Figure-1.png']);
   });
 });

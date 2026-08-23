@@ -622,6 +622,7 @@ export const useManuscriptComposer = () => {
           orderIndex: figure.orderIndex ?? 0,
           tableData: figure.tableData,
           equationLatex: figure.equationLatex,
+          diagramSource: figure.diagramSource,
           ...(isDefined(figure.datasetId)
             ? { datasetId: figure.datasetId }
             : {}),

@@ -21,12 +21,26 @@ export type ManuscriptStyleTextControl = {
   placeholder: string;
 };
 
+// A control that takes a file rather than a value: the picked document is read
+// and reduced to the field's stored form (a Word template becomes its
+// styles.xml), so the settings record never carries a multi-megabyte blob.
+export type ManuscriptStyleFileControl = {
+  id: string;
+  label: string;
+  field: ManuscriptExportStyleOverrideKey;
+  // Field that records which file the value came from, for the UI.
+  sourceNameField: ManuscriptExportStyleOverrideKey;
+  accept: string;
+  description: string;
+};
+
 export type ManuscriptStyleControlGroup = {
   id: string;
   title: string;
   description: string;
   selects: ManuscriptStyleSelectControl[];
   texts: ManuscriptStyleTextControl[];
+  files?: ManuscriptStyleFileControl[];
 };
 
 const enabledOptions: SelectOption<string>[] = [
@@ -47,6 +61,15 @@ const fontSizeOptions = (minimum: number, maximum: number) =>
     return { value, label: `${value} pt` };
   });
 
+// Stored in points, labelled in inches: a thesis handbook says "half an inch",
+// a Word dialog says 36 pt, and both should be recognisable here.
+const firstLineIndentOptions: SelectOption<string>[] = [
+  { value: '0', label: 'None (flush left)' },
+  { value: '18', label: 'Quarter inch (18 pt)' },
+  { value: '36', label: 'Half inch (36 pt)' },
+  { value: '54', label: 'Three quarters (54 pt)' },
+];
+
 const spacingOptions: SelectOption<string>[] = [
   { value: '0', label: 'None (0 pt)' },
   { value: '3', label: 'Tight (3 pt)' },
@@ -59,6 +82,18 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
     id: 'page-typography',
     title: 'Page & typography',
     description: 'Title-page structure, fonts, alignment, and body spacing.',
+    files: [
+      {
+        id: 'manuscript-export-reference-doc-input',
+        label: 'Word template (.docx)',
+        field: 'referenceDocStyles',
+        sourceNameField: 'referenceDocUrl',
+        accept:
+          '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        description:
+          "Uses your own document's styles for the Word export — fonts, headings, and Normal come from the template.",
+      },
+    ],
     texts: [
       {
         id: 'manuscript-export-font-family-input',
@@ -76,9 +111,24 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
         defaultValue: 'INLINE',
         valueType: 'STRING',
         options: [
+          {
+            value: 'SEPARATE_TITLE_AND_ABSTRACT',
+            label: 'Title page, abstract page, then body',
+          },
           { value: 'SEPARATE_TITLE_PAGE', label: 'Separate title page' },
           { value: 'TITLE_WITH_ABSTRACT', label: 'Title + abstract on page 1' },
           { value: 'INLINE', label: 'Continuous front matter' },
+        ],
+      },
+      {
+        id: 'manuscript-export-title-page-template-select',
+        label: 'Title page template',
+        field: 'titlePageTemplate',
+        defaultValue: 'JOURNAL',
+        valueType: 'STRING',
+        options: [
+          { value: 'JOURNAL', label: 'Journal masthead' },
+          { value: 'THESIS', label: 'Thesis cover page' },
         ],
       },
       {
@@ -158,6 +208,14 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
         defaultValue: '0',
         valueType: 'NUMBER',
         options: spacingOptions,
+      },
+      {
+        id: 'manuscript-export-first-line-indent-select',
+        label: 'First-line indent',
+        field: 'paragraphFirstLineIndent',
+        defaultValue: '0',
+        valueType: 'NUMBER',
+        options: firstLineIndentOptions,
       },
       {
         id: 'manuscript-export-two-column-select',

@@ -3,6 +3,7 @@ import { type KeyboardEvent } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptFigureExpandedEditor } from '@/local-db/research/components/ManuscriptFigureExpandedEditor';
+import { useManuscriptDiagramSvg } from '@/local-db/research/hooks/useManuscriptDiagramSvg';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
   describeImageSource,
@@ -105,6 +106,24 @@ const StyledThumb = styled.img`
   width: 56px;
 `;
 
+// A diagram has no stored pixels until export, so the row draws it from its
+// Mermaid source instead of showing a bare "figure" chip.
+const StyledDiagramThumb = styled.span`
+  align-items: center;
+  border: 1px solid ${themeCssVariables.border.color.light};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  display: flex;
+  height: 40px;
+  justify-content: center;
+  overflow: hidden;
+  width: 56px;
+
+  & svg {
+    height: 100%;
+    max-width: 100%;
+  }
+`;
+
 const StyledKindBadge = styled.span`
   align-items: center;
   background: ${themeCssVariables.background.transparent.light};
@@ -145,6 +164,13 @@ export const ManuscriptFigureListItem = ({
   onChangeReferenceKey,
 }: ManuscriptFigureListItemProps) => {
   const image = resolveFigureImage(figure);
+  const isDiagramFigure =
+    typeof figure.diagramSource === 'string' &&
+    figure.diagramSource.trim().length > 0;
+  const { svg: diagramSvg } = useManuscriptDiagramSvg(
+    image.kind === 'none' ? figure.diagramSource : null,
+    0,
+  );
   const linkedSection = sections.find(({ id }) => id === figure.sectionId);
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -163,12 +189,21 @@ export const ManuscriptFigureListItem = ({
         onKeyDown={handleRowKeyDown}
       >
         <StyledSummary>
-          {figure.assetKind === 'TABLE' || image.kind === 'none' ? (
-            <StyledKindBadge>
-              {figure.assetKind?.toLowerCase() ?? 'asset'}
-            </StyledKindBadge>
-          ) : (
+          {image.kind !== 'none' && figure.assetKind !== 'TABLE' ? (
             <StyledThumb src={image.src} alt={figure.altText ?? ''} />
+          ) : diagramSvg !== null ? (
+            // Mermaid renders in strict mode, which sanitizes its own labels.
+            <StyledDiagramThumb
+              role="img"
+              aria-label={`${figure.label} diagram`}
+              dangerouslySetInnerHTML={{ __html: diagramSvg }}
+            />
+          ) : (
+            <StyledKindBadge>
+              {isDiagramFigure
+                ? 'diagram'
+                : (figure.assetKind?.toLowerCase() ?? 'asset')}
+            </StyledKindBadge>
           )}
           <StyledMain>
             <StyledLabel>

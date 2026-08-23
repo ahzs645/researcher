@@ -130,9 +130,65 @@ describe('manuscript citeproc', () => {
     const runs = bibliographyHtmlToInlineRuns(htmlEntry!.html!);
     expect(
       runs.some(
-        (run) => run.styles.italic === true && run.text.includes('Journal of Testing'),
+        (run) =>
+          run.styles.italic === true && run.text.includes('Journal of Testing'),
       ),
     ).toBe(true);
+  });
+
+  it('decodes a numeric entity in an in-text citation too', async () => {
+    // Two authors make APA render an ampersand, and citeproc escapes it as
+    // `&#38;`. Left literal, the exporters escape its `&` again and the reader
+    // sees "Brunekreef &#38; Forsberg" on the page.
+    const engine = await createCiteprocEngine({
+      styleId: 'apa',
+      references: [
+        {
+          id: 'pair',
+          citationKey: 'pair',
+          name: 'Coarse particles',
+          authors: 'Brunekreef, Bert; Forsberg, Bertil',
+          year: 2005,
+          cslType: 'ARTICLE_JOURNAL',
+        },
+      ],
+    });
+    const [label] = formatCslCitations(engine!, [['pair']]);
+
+    expect(label).toContain('&');
+    expect(label).not.toContain('&#38;');
+    expect(label).toContain('Brunekreef');
+  });
+
+  it('separates a numbered entry from its text and decodes numeric entities', () => {
+    // What a `second-field-align` style (Vancouver, AMA) actually emits: the
+    // marker and the entry are two blocks, and citeproc escapes the ampersand
+    // in a journal name as a numeric reference.
+    const runs = bibliographyHtmlToInlineRuns(
+      [
+        '<div class="csl-entry">',
+        '<div class="csl-left-margin">1.</div>',
+        '<div class="csl-right-inline">Pope CA. Lines that Connect. ',
+        '<i>Journal of the Air &#38; Waste Management Association</i>. 2006.',
+        '</div></div>',
+      ].join(''),
+    );
+    const text = runs.map((run) => run.text).join('');
+
+    expect(text).toContain('1. Pope CA.');
+    expect(text).toContain('Air & Waste Management');
+    expect(text).not.toContain('&#38;');
+    expect(text).not.toMatch(/\s$/);
+  });
+
+  it('keeps an inline tag from splitting the word it sits inside', () => {
+    const runs = bibliographyHtmlToInlineRuns(
+      '<div class="csl-entry">Exposure in mg/m<sup>3</sup> units.</div>',
+    );
+
+    expect(runs.map((run) => run.text).join('')).toBe(
+      'Exposure in mg/m3 units.',
+    );
   });
 
   it('builds an engine for every vendored style', async () => {

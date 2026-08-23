@@ -148,7 +148,7 @@ describe('parseMarkdownDocument', () => {
     ]);
   });
 
-  it('preserves heading levels and lets subsections inherit their parent type', () => {
+  it('anchors the shallowest heading at level 1 and lets subsections inherit their parent type', () => {
     const doc = parseMarkdownDocument(
       [
         '## Methods',
@@ -159,15 +159,18 @@ describe('parseMarkdownDocument', () => {
         'Twenty volunteers.',
       ].join('\n'),
     );
+    // The document's own top level is `##`, so that is level 1 — a Word file
+    // whose sections are all "Heading 2" must not export a level deeper than
+    // the one its author wrote.
     // "Study site" matches the METHODS rule directly; "Participants" matches no
     // rule and inherits METHODS from its ancestor instead of falling to OTHER.
     expect(doc.sections).toMatchObject([
-      { name: 'Methods', sectionType: 'METHODS', placement: 'MAIN', level: 2 },
+      { name: 'Methods', sectionType: 'METHODS', placement: 'MAIN', level: 1 },
       {
         name: 'Study site',
         sectionType: 'METHODS',
         placement: 'MAIN',
-        level: 3,
+        level: 2,
       },
       {
         name: 'Participants',
@@ -176,6 +179,22 @@ describe('parseMarkdownDocument', () => {
         level: 3,
       },
     ]);
+  });
+
+  it('keeps relative depth when a document starts below the title', () => {
+    const doc = parseMarkdownDocument(
+      [
+        '# Metals downtown',
+        '',
+        '## Results',
+        'Numbers.',
+        '### Metals',
+        'Cu.',
+      ].join('\n'),
+    );
+
+    expect(doc.title).toBe('Metals downtown');
+    expect(doc.sections.map((section) => section.level)).toEqual([1, 2]);
   });
 
   it('inherits SUPPLEMENT for supplement subsections but not across front matter', () => {
@@ -529,7 +548,6 @@ describe('extractImagesToFigures', () => {
     expect(gappy.sections[0].content).not.toContain('imported-figure-9]');
   });
 
-
   it('keeps refKeys unique across embedded and caption-only extractors', () => {
     const sections = parseMarkdownDocument(
       [
@@ -807,6 +825,51 @@ describe('parseWordMlToMarkdown', () => {
     expect(stripManuscriptScriptMarkers(doc.sections[0].content)).toBe(
       'PM2.5 uses μg/m3',
     );
+  });
+});
+
+describe('Word merged table cells', () => {
+  const cell = (text: string, properties = ''): string =>
+    `<w:tc><w:tcPr>${properties}</w:tcPr><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+  const row = (cells: string, properties = ''): string =>
+    `<w:tr>${properties ? `<w:trPr>${properties}</w:trPr>` : ''}${cells}</w:tr>`;
+
+  it('turns w:gridSpan into continuation markers', () => {
+    const xml = [
+      '<w:body><w:tbl>',
+      row(
+        cell('') + cell('Percent of Data Censored', '<w:gridSpan w:val="3"/>'),
+        '<w:tblHeader/>',
+      ),
+      row(
+        cell('Sample Size') + cell('<50%') + cell('50-80%') + cell('>80%'),
+        '<w:tblHeader/>',
+      ),
+      row(cell('n<50') + cell('Robust ROS') + cell('MLE') + cell('High')),
+      '</w:tbl></w:body>',
+    ].join('');
+
+    const markdown = parseWordMlToMarkdown(xml);
+
+    expect(markdown).toContain('| Percent of Data Censored | < | < |');
+    // The separator lands after both header rows, so the deck survives.
+    expect(
+      markdown.split('\n').findIndex((line) => /^\|\s*---/.test(line)),
+    ).toBe(
+      markdown.split('\n').findIndex((line) => line.includes('Sample Size')) +
+        1,
+    );
+  });
+
+  it('turns a continued w:vMerge into an upward marker', () => {
+    const xml = [
+      '<w:body><w:tbl>',
+      row(cell('Metal', '<w:vMerge w:val="restart"/>') + cell('Rural')),
+      row(cell('', '<w:vMerge/>') + cell('Urban')),
+      '</w:tbl></w:body>',
+    ].join('');
+
+    expect(parseWordMlToMarkdown(xml)).toContain('| ^ | Urban |');
   });
 });
 

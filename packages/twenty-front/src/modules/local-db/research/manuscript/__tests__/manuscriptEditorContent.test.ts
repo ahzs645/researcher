@@ -136,6 +136,54 @@ describe('manuscript editor content', () => {
     expect(manuscriptNodesToTokens(converted)).toEqual([block]);
   });
 
+  it('draws a mermaid fence as a diagram block and puts it back', () => {
+    const block = {
+      id: 'diagram-block',
+      type: 'codeBlock',
+      props: { language: 'mermaid' },
+      content: [
+        {
+          type: 'text',
+          text: 'flowchart TD\n  A[Collect] --> B[Digest]',
+          styles: {},
+        },
+      ],
+      children: [],
+    };
+
+    const converted = manuscriptTokensToNodes([block]);
+
+    expect(converted[0]).toMatchObject({
+      type: 'mermaidDiagram',
+      props: { source: 'flowchart TD\n  A[Collect] --> B[Digest]' },
+    });
+    expect(manuscriptNodesToTokens(converted)).toEqual([block]);
+  });
+
+  it('leaves a code block in another language alone', () => {
+    const block = {
+      id: 'code-block',
+      type: 'codeBlock',
+      props: { language: 'python' },
+      content: [{ type: 'text', text: 'print(1)', styles: {} }],
+      children: [],
+    };
+
+    expect(manuscriptTokensToNodes([block])).toEqual([block]);
+  });
+
+  it('leaves an empty mermaid fence as a code block to keep typing in', () => {
+    const block = {
+      id: 'empty-block',
+      type: 'codeBlock',
+      props: { language: 'mermaid' },
+      content: [{ type: 'text', text: '   ', styles: {} }],
+      children: [],
+    };
+
+    expect(manuscriptTokensToNodes([block])).toEqual([block]);
+  });
+
   it('round-trips token-heavy Markdown byte-for-byte through the editor adapter', () => {
     const blocks = markdownToManuscriptBlocks(testEditor, TOKEN_HEAVY_MARKDOWN);
 

@@ -1,4 +1,8 @@
-import { latexToUnicodeText } from '@/local-db/research/manuscript/manuscriptMathText';
+import {
+  latexToScriptedText,
+  latexToUnicodeText,
+} from '@/local-db/research/manuscript/manuscriptMathText';
+import { manuscriptScriptSegments } from '@/local-db/research/manuscript/manuscriptScripts';
 
 describe('latexToUnicodeText', () => {
   it('converts Greek letters and operators from the glyph tables', () => {
@@ -47,5 +51,43 @@ describe('latexToUnicodeText', () => {
   it('degrades unknown commands and unbalanced groups to readable text', () => {
     expect(latexToUnicodeText('\\foo{x}')).toBe('foox');
     expect(latexToUnicodeText('a_{b')).toBe('a_{b');
+  });
+});
+
+describe('latexToScriptedText', () => {
+  it('marks the scripts Unicode has no character for', () => {
+    // There is no subscript "d" or "f" in Unicode, so the linearizer keeps the
+    // LaTeX marker and `C_{d}` reads as "C_d". A renderer that can lower a run
+    // wants them marked instead.
+    const segments = manuscriptScriptSegments(
+      latexToScriptedText('C_{d}=\\sum_{i=1}^{n} C_{f}'),
+    );
+
+    expect(segments).toEqual([
+      { text: 'C', position: 'BASELINE' },
+      { text: 'd', position: 'SUBSCRIPT' },
+      { text: '=∑ᵢ₌₁ⁿ C', position: 'BASELINE' },
+      { text: 'f', position: 'SUBSCRIPT' },
+    ]);
+  });
+
+  it('marks a multi-character script Unicode cannot raise or lower', () => {
+    // "ref" has superscript characters and stays Unicode; "background" has no
+    // subscript "b" or "g", and a capital has neither.
+    expect(
+      manuscriptScriptSegments(latexToScriptedText('C_{background}^{ref}')),
+    ).toEqual([
+      { text: 'C', position: 'BASELINE' },
+      { text: 'background', position: 'SUBSCRIPT' },
+      { text: 'ʳᵉᶠ', position: 'BASELINE' },
+    ]);
+    expect(manuscriptScriptSegments(latexToScriptedText('x^{Cd}'))).toEqual([
+      { text: 'x', position: 'BASELINE' },
+      { text: 'Cd', position: 'SUPERSCRIPT' },
+    ]);
+  });
+
+  it('leaves a script Unicode can render alone', () => {
+    expect(latexToScriptedText('x_i^2')).toBe('xᵢ²');
   });
 });

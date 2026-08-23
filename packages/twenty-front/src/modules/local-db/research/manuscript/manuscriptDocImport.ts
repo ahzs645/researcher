@@ -9,6 +9,11 @@
 import { countWords } from './manuscriptAssembly';
 import { assetPlacementMarker } from './manuscriptAssetPlacement';
 import { COMMAND_TEXT } from './manuscriptMathGlyphs';
+import {
+  escapeManuscriptTableCellSpanMarker,
+  TABLE_SPAN_LEFT_MARKER,
+  TABLE_SPAN_UP_MARKER,
+} from './manuscriptTableGrid';
 import { gridToMarkdownTable } from './manuscriptTables';
 import { wrapManuscriptScript } from './manuscriptScripts';
 import { type PortableResearchPaperManifest } from './manuscriptPortableManifest';
@@ -58,7 +63,8 @@ export type ImportedFigureDraft = {
   sectionOrderIndex?: number;
   tableData?: string;
   equationLatex?: string;
-  imageSource: 'NONE' | 'UPLOAD';
+  diagramSource?: string;
+  imageSource: 'NONE' | 'UPLOAD' | 'DIAGRAM';
   imageUrl?: string;
   altText?: string;
   credit?: string;
@@ -339,6 +345,18 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
       } else {
         startIndex = 1;
       }
+    }
+  }
+
+  // A document whose own top-level headings are Word's "Heading 2" is still a
+  // document with top-level headings. Anchor the shallowest one at 1 so the
+  // outline depth an author sees matches the one they wrote, instead of every
+  // section exporting one level deeper than the title it sits under.
+  const body = blocks.slice(startIndex);
+  const shallowest = Math.min(...body.map((block) => block.level || 1));
+  if (Number.isFinite(shallowest) && shallowest > 1) {
+    for (const block of body) {
+      block.level = Math.max(1, (block.level || 1) - (shallowest - 1));
     }
   }
 
@@ -958,15 +976,75 @@ const wordParagraphToMarkdown = (
   ];
 };
 
+// Word expresses merges as `w:gridSpan` (horizontal) and `w:vMerge`
+// (vertical). Dropping them is what made a header like "Percent of Data
+// Censored" land over a single column instead of the three it covers, so each
+// covered slot becomes the continuation marker the grid model reads back.
+const wordCellProperties = (
+  cellXml: string,
+): { gridSpan: number; verticalMergeContinues: boolean } => {
+  const properties = /<w:tcPr\b[\s\S]*?<\/w:tcPr>/.exec(cellXml)?.[0] ?? '';
+  const gridSpan = Number(
+    /<w:gridSpan\b[^>]*w:val="(\d+)"/.exec(properties)?.[1] ?? '1',
+  );
+  const verticalMerge = /<w:vMerge\b[^>]*\/?>/.exec(properties)?.[0];
+  return {
+    gridSpan: Number.isFinite(gridSpan) && gridSpan > 0 ? gridSpan : 1,
+    // `<w:vMerge/>` with no value, or `w:val="continue"`, continues the cell
+    // above; only `w:val="restart"` opens a new one.
+    verticalMergeContinues:
+      verticalMerge !== undefined && !/w:val="restart"/.test(verticalMerge),
+  };
+};
+
 const wordTableToMarkdown = (tableXml: string): string => {
-  const rows = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)].map(
-    (rowMatch) =>
-      [...rowMatch[0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].map((cellMatch) =>
-        wordRunsText(cellMatch[0]).replace(/\s+/g, ' ').trim(),
-      ),
+  const rowMatches = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)];
+  const rows = rowMatches.map((rowMatch) =>
+    [...rowMatch[0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].flatMap(
+      (cellMatch) => {
+        const { gridSpan, verticalMergeContinues } = wordCellProperties(
+          cellMatch[0],
+        );
+        const text = wordRunsText(cellMatch[0]).replace(/\s+/g, ' ').trim();
+        const anchor = verticalMergeContinues
+          ? TABLE_SPAN_UP_MARKER
+          : escapeManuscriptTableCellSpanMarker(text);
+        return [
+          anchor,
+          ...Array.from({ length: gridSpan - 1 }, () => TABLE_SPAN_LEFT_MARKER),
+        ];
+      },
+    ),
   );
   const grid = rows.filter((cells) => cells.length > 0);
-  return grid.length === 0 ? '' : `\n${gridToMarkdownTable(grid)}\n`;
+  if (grid.length === 0) return '';
+  // Word marks repeated header rows with `w:tblHeader`; a leading run of them
+  // is the table's header deck.
+  const headerFlags = rowMatches
+    .filter((rowMatch) => rowMatch[0].includes('<w:tc'))
+    .map((rowMatch) =>
+      /<w:trPr\b[\s\S]*?<\/w:trPr>/.test(rowMatch[0])
+        ? /<w:tblHeader\b/.test(rowMatch[0])
+        : false,
+    );
+  const declaredHeaderRows = headerFlags.findIndex((isHeader) => !isHeader);
+  const declared =
+    declaredHeaderRows > 0
+      ? declaredHeaderRows
+      : declaredHeaderRows === -1 && headerFlags.length > 0
+        ? headerFlags.length
+        : 1;
+  // Most authors never switch on Word's "repeat header row", so a two-deck
+  // header usually declares nothing. A horizontally merged cell in the top row
+  // is the giveaway — it exists to caption the columns underneath it — so that
+  // row and the one below it are the deck. Adjustable in the table editor.
+  const topRowSpans =
+    grid.length > 1 && grid[0].includes(TABLE_SPAN_LEFT_MARKER);
+  const headerRows = Math.min(
+    Math.max(declared, topRowSpans ? 2 : 1),
+    Math.max(1, grid.length - 1),
+  );
+  return `\n${gridToMarkdownTable(grid, headerRows)}\n`;
 };
 
 const findMatchingTableEnd = (body: string, start: number): number => {

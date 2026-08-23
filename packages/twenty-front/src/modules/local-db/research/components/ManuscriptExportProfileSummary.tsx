@@ -1,6 +1,7 @@
 import { styled } from '@linaria/react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { isManuscriptDocxStylesXml } from '@/local-db/research/manuscript/manuscriptDocxTemplate';
 import { type ManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
 
 type ManuscriptExportProfileSummaryProps = {
@@ -30,11 +31,13 @@ export const ManuscriptExportProfileSummary = ({
 }: ManuscriptExportProfileSummaryProps) => {
   const style = bundle.style;
   const frontMatterLabel =
-    style.frontMatterLayout === 'SEPARATE_TITLE_PAGE'
-      ? 'Separate title page'
-      : style.frontMatterLayout === 'TITLE_WITH_ABSTRACT'
-        ? 'Title + abstract on page 1'
-        : 'Continuous front matter';
+    style.frontMatterLayout === 'SEPARATE_TITLE_AND_ABSTRACT'
+      ? 'Title page, abstract page, then body'
+      : style.frontMatterLayout === 'SEPARATE_TITLE_PAGE'
+        ? 'Separate title page'
+        : style.frontMatterLayout === 'TITLE_WITH_ABSTRACT'
+          ? 'Title + abstract on page 1'
+          : 'Continuous front matter';
 
   return (
     <>
@@ -69,6 +72,10 @@ export const ManuscriptExportProfileSummary = ({
         {style.pageNumbering === true ? ' · page numbers' : ''}
         {style.sectionNumbering === true ? ' · numbered sections' : ''}
         {style.twoColumn === true ? ' · two columns' : ''}
+        {style.titlePageTemplate === 'THESIS' ? ' · thesis cover page' : ''}
+        {isManuscriptDocxStylesXml(style.referenceDocStyles)
+          ? ` · Word styles from ${style.referenceDocUrl?.trim() || 'your template'}`
+          : ''}
         {' · native Word equations'}
       </StyledSummary>
       <StyledStats>

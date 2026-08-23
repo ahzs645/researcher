@@ -2,6 +2,7 @@ import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { resolveCslStyleXml } from './manuscriptCiteproc';
 import { blocknoteDocxExporter } from './manuscriptDocxExport';
+import { manuscriptHtmlExporter } from './manuscriptHtmlExport';
 import { jatsXmlExporter } from './manuscriptJatsExport';
 import { blocknotePdfExporter } from './manuscriptPdfExport';
 
@@ -88,7 +89,9 @@ export const markdownBundleExporter: ManuscriptExporter = {
     ];
     // Ship the vendored CSL style the front matter points at, so the bundle
     // is self-contained.
-    const styleXml = resolveCslStyleXml(formattedBundle.metadata.citationStyleId);
+    const styleXml = resolveCslStyleXml(
+      formattedBundle.metadata.citationStyleId,
+    );
     if (styleXml !== null) {
       files.push({
         filename: `${formattedBundle.metadata.citationStyleId}.csl`,
@@ -105,6 +108,7 @@ export const markdownBundleExporter: ManuscriptExporter = {
 export const getManuscriptExporters = (): ManuscriptExporter[] => [
   blocknoteDocxExporter,
   blocknotePdfExporter,
+  manuscriptHtmlExporter,
   jatsXmlExporter,
   markdownBundleExporter,
 ];

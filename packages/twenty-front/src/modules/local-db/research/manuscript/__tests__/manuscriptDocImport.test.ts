@@ -529,7 +529,6 @@ describe('extractImagesToFigures', () => {
     expect(gappy.sections[0].content).not.toContain('imported-figure-9]');
   });
 
-
   it('keeps refKeys unique across embedded and caption-only extractors', () => {
     const sections = parseMarkdownDocument(
       [
@@ -807,6 +806,51 @@ describe('parseWordMlToMarkdown', () => {
     expect(stripManuscriptScriptMarkers(doc.sections[0].content)).toBe(
       'PM2.5 uses μg/m3',
     );
+  });
+});
+
+describe('Word merged table cells', () => {
+  const cell = (text: string, properties = ''): string =>
+    `<w:tc><w:tcPr>${properties}</w:tcPr><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+  const row = (cells: string, properties = ''): string =>
+    `<w:tr>${properties ? `<w:trPr>${properties}</w:trPr>` : ''}${cells}</w:tr>`;
+
+  it('turns w:gridSpan into continuation markers', () => {
+    const xml = [
+      '<w:body><w:tbl>',
+      row(
+        cell('') + cell('Percent of Data Censored', '<w:gridSpan w:val="3"/>'),
+        '<w:tblHeader/>',
+      ),
+      row(
+        cell('Sample Size') + cell('<50%') + cell('50-80%') + cell('>80%'),
+        '<w:tblHeader/>',
+      ),
+      row(cell('n<50') + cell('Robust ROS') + cell('MLE') + cell('High')),
+      '</w:tbl></w:body>',
+    ].join('');
+
+    const markdown = parseWordMlToMarkdown(xml);
+
+    expect(markdown).toContain('| Percent of Data Censored | < | < |');
+    // The separator lands after both header rows, so the deck survives.
+    expect(
+      markdown.split('\n').findIndex((line) => /^\|\s*---/.test(line)),
+    ).toBe(
+      markdown.split('\n').findIndex((line) => line.includes('Sample Size')) +
+        1,
+    );
+  });
+
+  it('turns a continued w:vMerge into an upward marker', () => {
+    const xml = [
+      '<w:body><w:tbl>',
+      row(cell('Metal', '<w:vMerge w:val="restart"/>') + cell('Rural')),
+      row(cell('', '<w:vMerge/>') + cell('Urban')),
+      '</w:tbl></w:body>',
+    ].join('');
+
+    expect(parseWordMlToMarkdown(xml)).toContain('| ^ | Urban |');
   });
 });
 

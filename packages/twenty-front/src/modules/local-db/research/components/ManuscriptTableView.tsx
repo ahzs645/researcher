@@ -2,7 +2,7 @@ import { styled } from '@linaria/react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
-import { parseMarkdownTable } from '@/local-db/research/manuscript/manuscriptTables';
+import { parseManuscriptTableGrid } from '@/local-db/research/manuscript/manuscriptTableGrid';
 
 type ManuscriptTableViewProps = {
   markdown: string;
@@ -78,34 +78,44 @@ export const ManuscriptTableView = ({
   markdown,
   tableStyle,
 }: ManuscriptTableViewProps) => {
-  const rows = parseMarkdownTable(markdown);
-  const columnCount =
-    rows.length === 0 ? 0 : Math.max(...rows.map((row) => row.length));
+  const grid = parseManuscriptTableGrid(markdown);
 
-  if (rows.length === 0 || columnCount === 0) {
+  if (grid.rows.length === 0 || grid.columnCount === 0) {
     return <StyledFallback>{markdown}</StyledFallback>;
   }
 
-  const [header, ...body] = rows;
+  const header = grid.rows.slice(0, grid.headerRows);
+  const body = grid.rows.slice(grid.headerRows);
 
   return (
     <StyledScrollContainer>
       <StyledTable tableStyle={tableStyle}>
         <thead>
-          <tr>
-            {Array.from({ length: columnCount }, (_, columnIndex) => (
-              <th key={`header-${columnIndex}`} scope="col">
-                {header[columnIndex] ?? ''}
-              </th>
-            ))}
-          </tr>
+          {header.map((row, rowIndex) => (
+            <tr key={`header-${rowIndex}`}>
+              {row.map((cell) => (
+                <th
+                  key={`header-${rowIndex}-${cell.column}`}
+                  scope="col"
+                  colSpan={cell.colSpan}
+                  rowSpan={cell.rowSpan}
+                >
+                  {cell.text}
+                </th>
+              ))}
+            </tr>
+          ))}
         </thead>
         <tbody>
           {body.map((row, rowIndex) => (
             <tr key={`row-${rowIndex}`}>
-              {Array.from({ length: columnCount }, (_, columnIndex) => (
-                <td key={`cell-${rowIndex}-${columnIndex}`}>
-                  {row[columnIndex] ?? ''}
+              {row.map((cell) => (
+                <td
+                  key={`cell-${rowIndex}-${cell.column}`}
+                  colSpan={cell.colSpan}
+                  rowSpan={cell.rowSpan}
+                >
+                  {cell.text}
                 </td>
               ))}
             </tr>

@@ -6,6 +6,11 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { ManuscriptTableView } from '@/local-db/research/components/ManuscriptTableView';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
+  manuscriptTableHeaderRows,
+  TABLE_SPAN_LEFT_MARKER,
+  TABLE_SPAN_UP_MARKER,
+} from '@/local-db/research/manuscript/manuscriptTableGrid';
+import {
   gridToMarkdownTable,
   parseMarkdownTable,
 } from '@/local-db/research/manuscript/manuscriptTables';
@@ -62,11 +67,13 @@ const StyledRow = styled.div<{ columnCount: number }>`
   );
 `;
 
-const StyledCellInput = styled.input<{ isHeader: boolean }>`
-  background: ${({ isHeader }) =>
-    isHeader
-      ? themeCssVariables.background.secondary
-      : themeCssVariables.background.primary};
+const StyledCellInput = styled.input<{ isHeader: boolean; isMerged: boolean }>`
+  background: ${({ isHeader, isMerged }) =>
+    isMerged
+      ? themeCssVariables.background.tertiary
+      : isHeader
+        ? themeCssVariables.background.secondary
+        : themeCssVariables.background.primary};
   border: 1px solid ${themeCssVariables.border.color.medium};
   border-radius: ${themeCssVariables.border.radius.sm};
   color: ${themeCssVariables.font.color.primary};
@@ -103,6 +110,12 @@ const StyledPreviewLabel = styled.span`
   font-size: ${themeCssVariables.font.size.xs};
 `;
 
+const StyledHint = styled.p`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+  margin: 0;
+`;
+
 const displayStyleName = (tableStyle: ManuscriptTableStyle): string =>
   tableStyle
     .toLowerCase()
@@ -128,12 +141,23 @@ export const ManuscriptTableEditor = ({
   const [isSourceVisible, setIsSourceVisible] = useState(false);
   const [previewStyle, setPreviewStyle] = useState(tableStyle);
   const [rows, setRows] = useState(() => editableGrid(markdown));
+  const [headerRows, setHeaderRows] = useState(() =>
+    manuscriptTableHeaderRows(markdown),
+  );
+  const [activeCell, setActiveCell] = useState<{
+    row: number;
+    column: number;
+  } | null>(null);
   const columnCount = Math.max(1, ...rows.map((row) => row.length));
 
-  const updateGrid = (nextRows: string[][]) => {
-    const nextMarkdown = gridToMarkdownTable(nextRows);
+  const updateGrid = (nextRows: string[][], nextHeaderRows = headerRows) => {
+    const boundedHeaderRows = Math.min(
+      Math.max(1, nextHeaderRows),
+      Math.max(1, nextRows.length),
+    );
     setRows(nextRows);
-    onChange(nextMarkdown);
+    setHeaderRows(boundedHeaderRows);
+    onChange(gridToMarkdownTable(nextRows, boundedHeaderRows));
   };
 
   const updateCell = (rowIndex: number, columnIndex: number, value: string) => {
@@ -147,6 +171,16 @@ export const ManuscriptTableEditor = ({
       ),
     );
   };
+
+  const cellValue = (rowIndex: number, columnIndex: number): string =>
+    rows[rowIndex]?.[columnIndex] ?? '';
+  const isMergeMarker = (value: string): boolean =>
+    value.trim() === TABLE_SPAN_LEFT_MARKER ||
+    value.trim() === TABLE_SPAN_UP_MARKER;
+  const activeValue =
+    activeCell === null ? '' : cellValue(activeCell.row, activeCell.column);
+  const canMergeLeft = activeCell !== null && activeCell.column > 0;
+  const canMergeUp = activeCell !== null && activeCell.row > 0;
 
   return (
     <StyledEditor>
@@ -209,9 +243,72 @@ export const ManuscriptTableEditor = ({
                     updateGrid(rows.map((row) => row.slice(0, columnCount - 1)))
                   }
                 />
+                <StyledPreviewLabel>Header rows</StyledPreviewLabel>
+                <StyledSelect
+                  aria-label="Header rows"
+                  value={String(headerRows)}
+                  onChange={(event) =>
+                    updateGrid(rows, Number(event.target.value))
+                  }
+                >
+                  {Array.from(
+                    { length: Math.min(3, rows.length) },
+                    (_, index) => (
+                      <option key={index + 1} value={String(index + 1)}>
+                        {index + 1}
+                      </option>
+                    ),
+                  )}
+                </StyledSelect>
+                <Button
+                  title="Merge left"
+                  variant="tertiary"
+                  size="small"
+                  disabled={!canMergeLeft}
+                  onClick={() =>
+                    activeCell !== null &&
+                    updateCell(
+                      activeCell.row,
+                      activeCell.column,
+                      TABLE_SPAN_LEFT_MARKER,
+                    )
+                  }
+                />
+                <Button
+                  title="Merge up"
+                  variant="tertiary"
+                  size="small"
+                  disabled={!canMergeUp}
+                  onClick={() =>
+                    activeCell !== null &&
+                    updateCell(
+                      activeCell.row,
+                      activeCell.column,
+                      TABLE_SPAN_UP_MARKER,
+                    )
+                  }
+                />
+                <Button
+                  title="Split"
+                  variant="tertiary"
+                  size="small"
+                  disabled={activeCell === null || !isMergeMarker(activeValue)}
+                  onClick={() =>
+                    activeCell !== null &&
+                    updateCell(activeCell.row, activeCell.column, '')
+                  }
+                />
               </>
             ) : null}
           </StyledToolbar>
+          {!isSourceVisible ? (
+            <StyledHint>
+              Select a cell, then merge it into its neighbour — a merged cell
+              shows {TABLE_SPAN_LEFT_MARKER} (continues left) or{' '}
+              {TABLE_SPAN_UP_MARKER} (continues up), and exports as one spanning
+              cell in Word, HTML, and JATS.
+            </StyledHint>
+          ) : null}
           {isSourceVisible ? (
             <StyledSource
               aria-label="Markdown table source"
@@ -219,6 +316,7 @@ export const ManuscriptTableEditor = ({
               value={markdown}
               onChange={(event) => {
                 setRows(editableGrid(event.target.value));
+                setHeaderRows(manuscriptTableHeaderRows(event.target.value));
                 onChange(event.target.value);
               }}
             />
@@ -229,9 +327,13 @@ export const ManuscriptTableEditor = ({
                   {Array.from({ length: columnCount }, (_, columnIndex) => (
                     <StyledCellInput
                       key={`cell-${rowIndex}-${columnIndex}`}
-                      aria-label={`${rowIndex === 0 ? 'Header' : `Row ${rowIndex}`} column ${columnIndex + 1}`}
-                      isHeader={rowIndex === 0}
+                      aria-label={`${rowIndex < headerRows ? 'Header' : `Row ${rowIndex}`} column ${columnIndex + 1}`}
+                      isHeader={rowIndex < headerRows}
+                      isMerged={isMergeMarker(row[columnIndex] ?? '')}
                       value={row[columnIndex] ?? ''}
+                      onFocus={() =>
+                        setActiveCell({ row: rowIndex, column: columnIndex })
+                      }
                       onChange={(event) =>
                         updateCell(rowIndex, columnIndex, event.target.value)
                       }

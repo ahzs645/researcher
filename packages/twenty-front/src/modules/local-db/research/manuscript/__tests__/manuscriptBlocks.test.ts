@@ -478,3 +478,122 @@ describe('buildBlockNoteDocument', () => {
     expect(serialized).not.toContain('3. Appendix B');
   });
 });
+
+describe('front matter pagination and title page templates', () => {
+  const frontMatterBundle = (style: Record<string, unknown>) =>
+    buildManuscriptBundle({
+      manuscript: {
+        id: 'paper',
+        name: 'Assessing particulate bound metals',
+        authorLine: 'Ahmad Jalil',
+        affiliations: 'University of Northern British Columbia',
+        titlePageExtraLines: [
+          'by',
+          'Student # (230235918)',
+          '---',
+          'THESIS SUBMITTED IN PARTIAL FULFILLMENT OF',
+          '---',
+          'MARCH 2023',
+        ],
+      },
+      style: { name: 'Thesis', ...style },
+      sections: [
+        {
+          id: 'abstract',
+          name: 'Abstract',
+          sectionType: 'ABSTRACT',
+          placement: 'FRONT_MATTER',
+          includeInExport: true,
+          content: 'A compact summary.',
+        },
+        {
+          id: 'introduction',
+          name: 'Introduction',
+          sectionType: 'INTRODUCTION',
+          placement: 'MAIN',
+          includeInExport: true,
+          content: 'The body starts here.',
+        },
+      ],
+      figures: [],
+      references: [],
+    });
+
+  const pageBreaks = (style: Record<string, unknown>) => {
+    const { blocks } = buildBlockNoteDocument(frontMatterBundle(style));
+    return {
+      blocks,
+      breakIndexes: blocks.flatMap((block, index) =>
+        block.type === 'pageBreak' ? [index] : [],
+      ),
+      abstractIndex: blocks.findIndex(
+        (block) =>
+          block.type === 'heading' &&
+          JSON.stringify(block.content).includes('Abstract'),
+      ),
+      introductionIndex: blocks.findIndex(
+        (block) =>
+          block.type === 'heading' &&
+          JSON.stringify(block.content).includes('Introduction'),
+      ),
+    };
+  };
+
+  it('separates the title page, the abstract page, and the body', () => {
+    const { breakIndexes, abstractIndex, introductionIndex } = pageBreaks({
+      frontMatterLayout: 'SEPARATE_TITLE_AND_ABSTRACT',
+    });
+
+    expect(breakIndexes).toHaveLength(2);
+    expect(breakIndexes[0]).toBeLessThan(abstractIndex);
+    expect(breakIndexes[1]).toBe(introductionIndex - 1);
+  });
+
+  it('keeps the existing layouts to one break', () => {
+    expect(
+      pageBreaks({ frontMatterLayout: 'SEPARATE_TITLE_PAGE' }).breakIndexes,
+    ).toHaveLength(1);
+    expect(
+      pageBreaks({ frontMatterLayout: 'TITLE_WITH_ABSTRACT' }).breakIndexes,
+    ).toHaveLength(1);
+    expect(pageBreaks({ frontMatterLayout: 'INLINE' }).breakIndexes).toEqual(
+      [],
+    );
+  });
+
+  it('centres a thesis cover page and turns --- into vertical space', () => {
+    const { blocks } = pageBreaks({
+      frontMatterLayout: 'SEPARATE_TITLE_PAGE',
+      titlePageTemplate: 'THESIS',
+      affiliationAlignment: 'LEFT',
+    });
+    const titleIndex = blocks.findIndex((block) => block.type === 'heading');
+    const coverBlocks = blocks.slice(
+      titleIndex,
+      blocks.findIndex((block) => block.type === 'pageBreak'),
+    );
+    const serialized = JSON.stringify(coverBlocks);
+
+    // Even with the journal set to left-aligned affiliations, a cover centres.
+    expect(serialized).not.toContain('"textAlignment":"left"');
+    expect(serialized).toContain('THESIS SUBMITTED IN PARTIAL FULFILLMENT OF');
+    // The `---` lines became blank spacers, not literal rules.
+    expect(serialized).not.toContain('---');
+    expect(
+      coverBlocks.filter(
+        (block) =>
+          block.type === 'paragraph' &&
+          ['""', '[]'].includes(JSON.stringify(block.content)),
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('leaves the journal masthead alignment alone by default', () => {
+    const { blocks } = pageBreaks({
+      frontMatterLayout: 'SEPARATE_TITLE_PAGE',
+      affiliationAlignment: 'LEFT',
+    });
+
+    expect(JSON.stringify(blocks)).toContain('"textAlignment":"left"');
+  });
+});

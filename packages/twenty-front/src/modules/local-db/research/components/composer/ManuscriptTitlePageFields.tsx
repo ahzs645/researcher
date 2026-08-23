@@ -120,6 +120,8 @@ export const ManuscriptTitlePageFields = ({
         </StyledTitlePageHeading>
         <StyledTitlePageHint>
           Thesis, degree, institution, and date lines appear after affiliations.
+          A line of <code>---</code> is vertical space, for spreading a cover
+          page out.
         </StyledTitlePageHint>
         {extraLines.map((line, index) => (
           <StyledTitlePageExtraLineRow key={index}>

@@ -305,6 +305,13 @@ the inventory, link reconciliation, preflight, and export verification.
 - `manuscript/manuscriptEditorContent.ts`: live-token parsing and serialization.
 - `manuscript/manuscriptReferenceForm.ts`: structured reference editing.
 - `manuscript/manuscriptSubmission.ts`: unified readiness checks.
+- `manuscript/manuscriptTableGrid.ts`: merged-cell table grid (`<` / `^` markers).
+- `manuscript/manuscriptHtmlExport.ts`: self-contained HTML exporter.
+- `manuscript/manuscriptHtmlMarkdown.ts`: Markdown → HTML for that exporter.
+- `manuscript/manuscriptHtmlStyles.ts`: the exported file's inlined stylesheet.
+- `manuscript/manuscriptMathMl.ts`: LaTeX → MathML (KaTeX, no stylesheet).
+- `manuscript/manuscriptDiagram.ts`: Mermaid rendering for figures and fences.
+- `manuscript/manuscriptDocxTemplate.ts`: styles.xml lifted from a user template.
 - `manuscript/manuscriptPortableManifest.ts`: canonical manifest schema.
 - `manuscript/manuscriptPortableZip.ts`: round-trip ZIP creation/reading.
 - `manuscript/manuscriptSubmissionPackage.ts`: journal submission package.

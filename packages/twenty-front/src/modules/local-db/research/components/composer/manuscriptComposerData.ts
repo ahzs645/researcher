@@ -206,6 +206,7 @@ export const JOURNAL_GQL = {
   sectionNumbering: true,
   twoColumn: true,
   frontMatterLayout: true,
+  titlePageTemplate: true,
   fontFamily: true,
   bodyFontSize: true,
   titleFontSize: true,
@@ -224,6 +225,7 @@ export const JOURNAL_GQL = {
   tableFontSize: true,
   tableLineSpacing: true,
   referenceDocUrl: true,
+  referenceDocStyles: true,
 };
 
 export const sortSections = (sections: SectionLike[]): SectionLike[] =>

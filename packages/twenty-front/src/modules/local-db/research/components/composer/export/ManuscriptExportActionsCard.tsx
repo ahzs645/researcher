@@ -47,6 +47,11 @@ const EXPORTER_PRESENTATION: Record<
     label: 'PDF',
     description: 'Print-ready preview using the selected journal formatting.',
   },
+  'self-contained-html': {
+    label: 'HTML (self-contained)',
+    description:
+      'One file that opens offline: typeset equations, linked citations, and switchable table designs.',
+  },
   'markdown-bundle': {
     label: 'Markdown bundle',
     description: 'Pandoc-ready manuscript with its structured bibliography.',

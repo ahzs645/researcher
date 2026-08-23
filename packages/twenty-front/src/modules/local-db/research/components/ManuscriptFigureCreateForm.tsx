@@ -3,6 +3,7 @@ import { type ChangeEvent, useRef } from 'react';
 import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { ManuscriptDiagramEditor } from '@/local-db/research/components/ManuscriptDiagramEditor';
 import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
 import { type DatasetRecord } from '@/local-db/research/components/composer/manuscriptComposerData';
 import {
@@ -20,6 +21,7 @@ type ManuscriptFigureCreateFormProps = {
   imageUrl: string;
   tableData: string;
   equationLatex: string;
+  diagramSource: string;
   tableStyle: ManuscriptTableStyle;
   tableEditorVersion: number;
   chartKind: ChartKind;
@@ -32,6 +34,7 @@ type ManuscriptFigureCreateFormProps = {
   onImageUrlChange: (value: string) => void;
   onTableDataChange: (value: string) => void;
   onEquationLatexChange: (value: string) => void;
+  onDiagramSourceChange: (value: string) => void;
   onChartKindChange: (value: ChartKind) => void;
   onChartDatasetChange: (value: string | null) => void;
   onAdd: () => void;
@@ -42,6 +45,7 @@ const ASSET_KIND_OPTIONS: SelectOption<string>[] = [
   { value: 'FIGURE', label: 'Figure' },
   { value: 'TABLE', label: 'Table' },
   { value: 'CHART', label: 'Chart (from table data)' },
+  { value: 'DIAGRAM', label: 'Diagram (Mermaid)' },
   { value: 'EQUATION', label: 'Equation' },
   { value: 'SCHEME', label: 'Scheme' },
   { value: 'BOX', label: 'Box' },
@@ -93,6 +97,7 @@ export const ManuscriptFigureCreateForm = ({
   imageUrl,
   tableData,
   equationLatex,
+  diagramSource,
   tableStyle,
   tableEditorVersion,
   chartKind,
@@ -105,6 +110,7 @@ export const ManuscriptFigureCreateForm = ({
   onImageUrlChange,
   onTableDataChange,
   onEquationLatexChange,
+  onDiagramSourceChange,
   onChartKindChange,
   onChartDatasetChange,
   onAdd,
@@ -126,7 +132,8 @@ export const ManuscriptFigureCreateForm = ({
   const equationError = equationValidationError(equationLatex);
   const canAdd =
     caption.trim().length > 0 &&
-    (assetKind !== 'EQUATION' || equationError === null);
+    (assetKind !== 'EQUATION' || equationError === null) &&
+    (assetKind !== 'DIAGRAM' || diagramSource.trim().length > 0);
 
   return (
     <StyledForm>
@@ -181,6 +188,11 @@ export const ManuscriptFigureCreateForm = ({
             onEquationLatexChange(stripEquationDelimiters(markdown))
           }
         />
+      ) : assetKind === 'DIAGRAM' ? (
+        <ManuscriptDiagramEditor
+          source={diagramSource}
+          onChange={onDiagramSourceChange}
+        />
       ) : (
         <StyledInput
           placeholder="Image URL (optional)"
@@ -197,7 +209,7 @@ export const ManuscriptFigureCreateForm = ({
           disabled={isAdding || !canAdd}
           onClick={onAdd}
         />
-        {assetKind === 'EQUATION' ? null : (
+        {assetKind === 'EQUATION' || assetKind === 'DIAGRAM' ? null : (
           <Button
             title="Upload image…"
             variant="secondary"

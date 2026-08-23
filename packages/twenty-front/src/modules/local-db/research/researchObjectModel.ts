@@ -212,12 +212,21 @@ const ASSET_KIND_OPTIONS: ResearchSelectOption[] = [
   { value: 'EQUATION', label: 'Equation', color: 'pink' },
 ];
 
+// Arrangement of the title page. A journal masthead runs authors and
+// affiliations under the title; a thesis cover centres everything and spaces
+// its groups apart.
+const TITLE_PAGE_TEMPLATE_OPTIONS: ResearchSelectOption[] = [
+  { value: 'JOURNAL', label: 'Journal masthead', color: 'blue' },
+  { value: 'THESIS', label: 'Thesis cover page', color: 'purple' },
+];
+
 // How the image got here — the modular "ways images are added".
 const IMAGE_SOURCE_OPTIONS: ResearchSelectOption[] = [
   { value: 'UPLOAD', label: 'Uploaded file', color: 'blue' },
   { value: 'URL', label: 'External URL', color: 'sky' },
   { value: 'DATASET', label: 'From a dataset', color: 'turquoise' },
   { value: 'GENERATED', label: 'Generated / plotted', color: 'purple' },
+  { value: 'DIAGRAM', label: 'Mermaid diagram', color: 'yellow' },
   { value: 'NONE', label: 'No image yet', color: 'gray' },
 ];
 
@@ -1898,6 +1907,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         description: 'For equations: the body as LaTeX, e.g. \\frac{a}{b}',
       },
       {
+        name: 'diagramSource',
+        label: 'Diagram',
+        type: 'TEXT',
+        icon: 'IconSitemap',
+        description:
+          'For diagrams: the Mermaid source, e.g. flowchart TD; A-->B',
+      },
+      {
         name: 'imageSource',
         label: 'Image source',
         type: 'SELECT',
@@ -2326,11 +2343,27 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconLineHeight',
       },
       {
+        name: 'titlePageTemplate',
+        label: 'Title page template',
+        type: 'SELECT',
+        icon: 'IconLayoutBoardSplit',
+        description: 'Journal masthead, or a centred thesis cover page',
+        options: TITLE_PAGE_TEMPLATE_OPTIONS,
+      },
+      {
         name: 'referenceDocUrl',
         label: 'Reference DOCX',
         type: 'TEXT',
         icon: 'IconFileTypeDocx',
         description: 'Word template whose named styles the export maps onto',
+      },
+      {
+        name: 'referenceDocStyles',
+        label: 'Reference DOCX styles',
+        type: 'TEXT',
+        icon: 'IconPalette',
+        description:
+          "The styles.xml lifted from that template — the export's style base",
       },
       {
         name: 'outputFormats',

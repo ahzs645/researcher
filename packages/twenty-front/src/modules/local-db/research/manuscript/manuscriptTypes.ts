@@ -54,6 +54,8 @@ export type FigureLike = {
   tableData?: string | null;
   // For EQUATION assets: the body as LaTeX, without delimiters.
   equationLatex?: string | null;
+  // For diagram figures: the Mermaid source, rendered to an image at export.
+  diagramSource?: string | null;
 };
 
 export type ReferenceLike = {
@@ -111,6 +113,8 @@ export type JournalStyle = {
   sectionNumbering?: boolean | null;
   twoColumn?: boolean | null;
   frontMatterLayout?: string | null;
+  // Arrangement of the title page itself (journal masthead vs thesis cover).
+  titlePageTemplate?: string | null;
   fontFamily?: string | null;
   bodyFontSize?: number | null;
   titleFontSize?: number | null;
@@ -128,7 +132,11 @@ export type JournalStyle = {
   tableStyle?: string | null;
   tableFontSize?: number | null;
   tableLineSpacing?: number | null;
+  // The name of the .docx a Word template came from, for the settings UI.
   referenceDocUrl?: string | null;
+  // `word/styles.xml` lifted out of that .docx — the DOCX exporter's style
+  // base when present, so the author's own template governs the output.
+  referenceDocStyles?: string | null;
 };
 
 export type NumberedFigure = FigureLike & {

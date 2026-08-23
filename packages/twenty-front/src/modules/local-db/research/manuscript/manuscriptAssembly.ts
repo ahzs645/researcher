@@ -89,12 +89,23 @@ export const manuscriptSectionsForExport = (
     )
     .sort(compareSections);
 
-const sectionHeadingLevel = (section: SectionLike, heading: string): 2 | 3 => {
+const sectionHeadingLevel = (
+  section: SectionLike,
+  heading: string,
+): 2 | 3 | 4 => {
   if (
     section.sectionType === 'ABSTRACT' ||
     section.sectionType === 'KEYWORDS'
   ) {
     return 3;
+  }
+  // The depth the author gave the section in the composer outline is the
+  // authority — the manuscript title is the h1, so a top-level section is h2.
+  // Without it every section exported flat, which is why a subsection was
+  // indistinguishable from the section above it.
+  const outlineLevel = section.level;
+  if (isDefined(outlineLevel) && outlineLevel >= 2) {
+    return Math.round(outlineLevel) >= 3 ? 4 : 3;
   }
   const numericPrefix = /^(\d+(?:\.\d+)+)\b/.exec(heading)?.[1];
   return numericPrefix !== undefined && numericPrefix.split('.').length >= 3
@@ -170,9 +181,16 @@ export type ManuscriptCitationFormatting = {
   labelsByCluster: ReadonlyMap<string, string>;
 };
 
+export type ManuscriptBundleOptions = {
+  // Keep each rendered citation paired with the keys it came from, so an
+  // exporter can link "[3]" to the reference it names. Off by default: the
+  // markers are invisible control characters that only the HTML exporter reads.
+  citationAnchors?: boolean;
+};
+
 // One unit of the neutral document model.
 export type ManuscriptDocNode =
-  | { kind: 'heading'; level: 1 | 2 | 3; text: string }
+  | { kind: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
   | { kind: 'prose'; markdown: string }
   | { kind: 'figure'; figure: NumberedFigure }
   | { kind: 'table'; figure: NumberedFigure }
@@ -189,9 +207,14 @@ const renderSectionBody = (
   section: SectionLike,
   numbered: NumberedFigure[],
   warnings: string[],
+  withAnchors: boolean,
 ): { heading: string; resolved: string; citationKeys: string[] } => {
   const content = section.content ?? '';
-  const { text, unresolvedKeys } = resolveCrossReferences(content, numbered);
+  const { text, unresolvedKeys } = resolveCrossReferences(
+    content,
+    numbered,
+    withAnchors,
+  );
   for (const key of unresolvedKeys) {
     warnings.push(
       `Section "${section.name ?? section.sectionType}" references unknown asset [#${key}]`,
@@ -207,9 +230,11 @@ const renderSectionBody = (
 export const buildManuscriptBundle = (
   input: BuildBundleInput,
   citationFormatting?: ManuscriptCitationFormatting,
+  options: ManuscriptBundleOptions = {},
 ): ManuscriptBundle => {
   const { manuscript, style } = input;
   const warnings: string[] = [];
+  const withAnchors = options.citationAnchors === true;
 
   // The metadata already renders title-page fields, and a generated
   // bibliography replaces an imported source References section.
@@ -225,7 +250,11 @@ export const buildManuscriptBundle = (
     for (const field of ['caption', 'tableData'] as const) {
       const value = figure[field];
       if (!isNonEmptyString(value)) continue;
-      const { text, unresolvedKeys } = resolveCrossReferences(value, numbered);
+      const { text, unresolvedKeys } = resolveCrossReferences(
+        value,
+        numbered,
+        withAnchors,
+      );
       for (const key of unresolvedKeys) {
         warnings.push(
           `${figure.label} ${field === 'caption' ? 'caption' : 'table'} references unknown asset [#${key}]`,
@@ -264,7 +293,7 @@ export const buildManuscriptBundle = (
 
   // First pass: resolve cross-refs and collect citation keys in document order.
   const rendered = sections.map((section) =>
-    renderSectionBody(section, numbered, warnings),
+    renderSectionBody(section, numbered, warnings, withAnchors),
   );
   const citedKeys: string[] = [];
   const seenKeys = new Set<string>();
@@ -322,12 +351,13 @@ export const buildManuscriptBundle = (
 
   const renderCitationText =
     citationFormatting === undefined
-      ? (text: string) => renderCitationsInText(text, context)
+      ? (text: string) => renderCitationsInText(text, context, withAnchors)
       : (text: string) =>
           renderCitationsInTextWithLabels(
             text,
             citationFormatting.labelsByCluster,
             context,
+            withAnchors,
           );
   const renderFigureText = (figure: NumberedFigure): NumberedFigure => ({
     ...figure,

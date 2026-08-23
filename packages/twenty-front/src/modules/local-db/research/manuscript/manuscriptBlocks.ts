@@ -11,7 +11,8 @@ import { bibliographyHtmlToInlineRuns } from './manuscriptCitations';
 import { formatManuscriptAuthorLine } from './manuscriptContributors';
 import { resolveFigureImage } from './manuscriptImages';
 import { wrapManuscriptScript } from './manuscriptScripts';
-import { parseMarkdownTable } from './manuscriptTables';
+import { parseManuscriptTableGrid } from './manuscriptTableGrid';
+import { isTitlePageSpacerLine } from './manuscriptTitlePage';
 import { type NumberedFigure } from './manuscriptTypes';
 
 // Build a BlockNote document from the neutral document-node model. Shared by the
@@ -118,20 +119,30 @@ const tableToBlocks = (
 ): ExportPartialBlock[] => {
   const blocks: ExportPartialBlock[] = [];
   if (captionPosition !== 'BELOW') blocks.push(tableCaptionBlock(figure));
-  const rows = parseMarkdownTable(figure.tableData);
-  if (rows.length > 0) {
+  const grid = parseManuscriptTableGrid(figure.tableData);
+  if (grid.rows.length > 0 && grid.columnCount > 0) {
     // BlockNote's DOCX mapper treats these values as CSS pixels and converts
     // them to twips. 624 px maps to the 9,360 DXA usable width of a Letter page
     // with one-inch margins, preventing narrow content-sized tables.
-    const columnCount = Math.max(...rows.map((cells) => cells.length));
-    const columnWidth = Math.floor(624 / columnCount);
+    const columnWidth = Math.floor(624 / grid.columnCount);
     blocks.push({
       type: 'table',
       content: {
         type: 'tableContent',
-        columnWidths: Array.from({ length: columnCount }, () => columnWidth),
-        headerRows: 1,
-        rows: rows.map((cells) => ({ cells })),
+        columnWidths: Array.from(
+          { length: grid.columnCount },
+          () => columnWidth,
+        ),
+        headerRows: grid.headerRows,
+        // Covered cells are already folded into their anchor, so a merged
+        // header reaches Word as one cell with a real gridSpan.
+        rows: grid.rows.map((cells) => ({
+          cells: cells.map((cell) => ({
+            type: 'tableCell' as const,
+            props: { colspan: cell.colSpan, rowspan: cell.rowSpan },
+            content: [{ type: 'text' as const, text: cell.text, styles: {} }],
+          })),
+        })),
       },
     });
   }
@@ -197,6 +208,13 @@ const proseToBlocks = (
 
 const pageBreakBlock = (): ExportPartialBlock => ({ type: 'pageBreak' });
 
+// A blank centred paragraph — the vertical space a cover page is built from.
+const titlePageSpacerBlock = (): ExportPartialBlock => ({
+  type: 'paragraph',
+  props: { textAlignment: 'center' },
+  content: '',
+});
+
 const numberNestedHeadings = (
   markdown: string,
   sectionNumber: number | null,
@@ -242,6 +260,10 @@ const bundleToBlocks = (
   editor: ExportEditor,
   bundle: ManuscriptBundle,
 ): ExportPartialBlock[] => {
+  // A thesis cover page centres everything and separates its groups with
+  // deliberate vertical space; a journal masthead runs the affiliations under
+  // the author line in the journal's own alignment.
+  const isThesisTitlePage = bundle.style.titlePageTemplate === 'THESIS';
   const blocks: ExportPartialBlock[] = [
     {
       type: 'heading',
@@ -249,6 +271,7 @@ const bundleToBlocks = (
       content: bundle.metadata.title,
     },
   ];
+  if (isThesisTitlePage) blocks.push(titlePageSpacerBlock());
   if (isNonEmptyString(bundle.metadata.authors)) {
     blocks.push({
       type: 'paragraph',
@@ -265,8 +288,9 @@ const bundleToBlocks = (
       ],
     });
   }
-  const affiliationAlignment =
-    bundle.style.affiliationAlignment === 'CENTER'
+  const affiliationAlignment = isThesisTitlePage
+    ? 'center'
+    : bundle.style.affiliationAlignment === 'CENTER'
       ? 'center'
       : bundle.style.affiliationAlignment === 'RIGHT'
         ? 'right'
@@ -281,7 +305,8 @@ const bundleToBlocks = (
           affiliationParagraph(
             affiliation,
             affiliationAlignment,
-            bundle.style.affiliationNumberStyle !== 'BASELINE',
+            !isThesisTitlePage &&
+              bundle.style.affiliationNumberStyle !== 'BASELINE',
           ),
         ),
     );
@@ -291,11 +316,16 @@ const bundleToBlocks = (
       .map((line) => line.trim())
       .filter((line) => line.length > 0)
       .map(
-        (line): ExportPartialBlock => ({
-          type: 'paragraph',
-          props: { textAlignment: affiliationAlignment },
-          content: line,
-        }),
+        (line): ExportPartialBlock =>
+          // A `---` line is vertical space, which is how a cover page pushes its
+          // degree and institution blocks apart.
+          isTitlePageSpacerLine(line)
+            ? titlePageSpacerBlock()
+            : {
+                type: 'paragraph',
+                props: { textAlignment: affiliationAlignment },
+                content: line,
+              },
       ),
   );
   if (isNonEmptyString(bundle.metadata.correspondingAuthor)) {
@@ -307,7 +337,15 @@ const bundleToBlocks = (
   }
 
   const frontMatterLayout = bundle.style.frontMatterLayout ?? 'INLINE';
-  if (frontMatterLayout === 'SEPARATE_TITLE_PAGE') {
+  // Two independent decisions: does the body start after the title block, and
+  // does it start after the abstract. "Separate title and abstract" is both.
+  const breaksAfterTitlePage =
+    frontMatterLayout === 'SEPARATE_TITLE_PAGE' ||
+    frontMatterLayout === 'SEPARATE_TITLE_AND_ABSTRACT';
+  const breaksAfterAbstract =
+    frontMatterLayout === 'TITLE_WITH_ABSTRACT' ||
+    frontMatterLayout === 'SEPARATE_TITLE_AND_ABSTRACT';
+  if (breaksAfterTitlePage) {
     blocks.push(pageBreakBlock());
   }
 
@@ -316,7 +354,7 @@ const bundleToBlocks = (
   let currentNestedNumber = 0;
   let abstractSeen = false;
   let currentSectionIsAbstract = false;
-  let bodyPageStarted = frontMatterLayout !== 'TITLE_WITH_ABSTRACT';
+  let bodyPageStarted = !breaksAfterAbstract;
   const bodyAlignment =
     bundle.style.bodyAlignment === 'JUSTIFIED' ? 'justify' : 'left';
   const unnumberedHeading =
@@ -415,7 +453,7 @@ const bundleToBlocks = (
           if (includeSupplementCover || hasPreparedSupplementCover) break;
         }
         if (
-          frontMatterLayout === 'TITLE_WITH_ABSTRACT' &&
+          breaksAfterAbstract &&
           abstractSeen &&
           !/^(abstract|keywords)$/i.test(node.text.trim()) &&
           !bodyPageStarted

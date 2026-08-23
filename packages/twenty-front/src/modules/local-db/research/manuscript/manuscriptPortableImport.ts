@@ -60,7 +60,15 @@ export const preparePortableResearchPaperImport = (
       ...(figure.equationLatex !== undefined
         ? { equationLatex: figure.equationLatex }
         : {}),
-      imageSource: figure.imageUrl === undefined ? 'NONE' : 'UPLOAD',
+      ...(figure.diagramSource !== undefined
+        ? { diagramSource: figure.diagramSource }
+        : {}),
+      imageSource:
+        figure.diagramSource !== undefined
+          ? 'DIAGRAM'
+          : figure.imageUrl === undefined
+            ? 'NONE'
+            : 'UPLOAD',
       ...(figure.imageUrl !== undefined ? { imageUrl: figure.imageUrl } : {}),
       ...(figure.altText !== undefined ? { altText: figure.altText } : {}),
       ...(figure.credit !== undefined ? { credit: figure.credit } : {}),

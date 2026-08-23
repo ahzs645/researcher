@@ -24,6 +24,8 @@ import {
   EQUATION_LABEL_SEPARATOR,
 } from './manuscriptBlocks';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
+import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
 import { manuscriptAuthorLineSegments } from './manuscriptContributors';
 import { latexToMathComponents } from './manuscriptDocxMath';
 import {
@@ -386,7 +388,8 @@ export const exportManuscriptToDocxBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
   const formattedBundle = await prepareManuscriptBundleWithCsl(bundle);
-  bundle = formattedBundle;
+  // Diagrams are Mermaid source until export; Word embeds the raster.
+  bundle = await prepareManuscriptDiagramImages(formattedBundle);
   const { editor, blocks } = buildBlockNoteDocument(bundle);
   const fontFamily = bundle.style.fontFamily?.trim() || 'Times New Roman';
   const bodyFontSize = bundle.style.bodyFontSize ?? 12;
@@ -466,71 +469,81 @@ export const exportManuscriptToDocxBlob = async (
     bundle.style.bodyAlignment === 'JUSTIFIED'
       ? AlignmentType.JUSTIFIED
       : AlignmentType.LEFT;
+  // When the author supplied their own .docx, its styles.xml is the style
+  // authority: passing it as `externalStyles` (and dropping the generated
+  // style set, which would otherwise sit in front of it) is what makes the
+  // export come out looking like their template.
+  const templateStyles = bundle.style.referenceDocStyles;
+  const usesTemplate = isManuscriptDocxStylesXml(templateStyles);
+
   return exporter.toBlob(blocks, {
     documentOptions: {
       creator: bundle.metadata.authors,
       title: bundle.metadata.title,
       subject: bundle.metadata.journal,
       // Replace BlockNote's Inter-based template instead of appending duplicate
-      // Heading/Normal definitions. The journal profile is the style authority.
-      externalStyles: undefined,
-      styles: {
-        default: {
-          document: {
-            run: {
-              font: fontFamily,
-              size: bodyFontSize * 2,
-            },
-            paragraph: {
-              alignment: bodyAlignment,
-              spacing: {
-                after: Math.round(paragraphSpacingAfter * 20),
-                line: Math.round(240 * lineSpacing),
-                lineRule: LineRuleType.AUTO,
+      // Heading/Normal definitions. The journal profile is the style authority
+      // unless the author supplied a Word template.
+      externalStyles: usesTemplate ? templateStyles : undefined,
+      styles: usesTemplate
+        ? undefined
+        : {
+            default: {
+              document: {
+                run: {
+                  font: fontFamily,
+                  size: bodyFontSize * 2,
+                },
+                paragraph: {
+                  alignment: bodyAlignment,
+                  spacing: {
+                    after: Math.round(paragraphSpacingAfter * 20),
+                    line: Math.round(240 * lineSpacing),
+                    lineRule: LineRuleType.AUTO,
+                  },
+                },
+              },
+              heading1: {
+                run: {
+                  font: fontFamily,
+                  size: titleFontSize * 2,
+                  bold: true,
+                  color: '000000',
+                },
+                paragraph: {
+                  alignment: AlignmentType.CENTER,
+                  keepNext: true,
+                  spacing: { before: 240, after: 240, line: 280 },
+                },
+              },
+              heading2: {
+                run: {
+                  font: fontFamily,
+                  size: headingFontSize * 2,
+                  bold: true,
+                  color: headingColor,
+                },
+                paragraph: {
+                  alignment: AlignmentType.LEFT,
+                  keepNext: true,
+                  spacing: { before: 240, after: 120, line: 280 },
+                },
+              },
+              heading3: {
+                run: {
+                  font: fontFamily,
+                  size: subheadingFontSize * 2,
+                  bold: true,
+                  color: headingColor,
+                },
+                paragraph: {
+                  alignment: AlignmentType.LEFT,
+                  keepNext: true,
+                  spacing: { before: 160, after: 80, line: 280 },
+                },
               },
             },
           },
-          heading1: {
-            run: {
-              font: fontFamily,
-              size: titleFontSize * 2,
-              bold: true,
-              color: '000000',
-            },
-            paragraph: {
-              alignment: AlignmentType.CENTER,
-              keepNext: true,
-              spacing: { before: 240, after: 240, line: 280 },
-            },
-          },
-          heading2: {
-            run: {
-              font: fontFamily,
-              size: headingFontSize * 2,
-              bold: true,
-              color: headingColor,
-            },
-            paragraph: {
-              alignment: AlignmentType.LEFT,
-              keepNext: true,
-              spacing: { before: 240, after: 120, line: 280 },
-            },
-          },
-          heading3: {
-            run: {
-              font: fontFamily,
-              size: subheadingFontSize * 2,
-              bold: true,
-              color: headingColor,
-            },
-            paragraph: {
-              alignment: AlignmentType.LEFT,
-              keepNext: true,
-              spacing: { before: 160, after: 80, line: 280 },
-            },
-          },
-        },
-      },
     },
     sectionOptions: {
       properties: {

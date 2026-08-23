@@ -6,6 +6,10 @@ import {
   type ManuscriptStyleControlGroup,
 } from '@/local-db/research/manuscript/manuscriptExportStyleControlDefinitions';
 import {
+  describeManuscriptDocxTemplate,
+  extractManuscriptDocxStyles,
+} from '@/local-db/research/manuscript/manuscriptDocxTemplate';
+import {
   type ManuscriptExportStyleOverrideKey,
   type ManuscriptExportStyleOverrides,
 } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
@@ -64,6 +68,28 @@ const StyledField = styled.label`
   gap: ${themeCssVariables.spacing[1]};
 `;
 
+const StyledFileRow = styled.div`
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${themeCssVariables.spacing[2]};
+`;
+
+const StyledFileSummary = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
+const StyledClearButton = styled.button`
+  background: none;
+  border: none;
+  color: ${themeCssVariables.font.color.tertiary};
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+`;
+
 const StyledInput = styled.input`
   background: ${themeCssVariables.background.primary};
   border: 1px solid ${themeCssVariables.border.color.medium};
@@ -101,7 +127,7 @@ const customizedCount = (
   group: ManuscriptStyleControlGroup,
   styleOverrides: ManuscriptExportStyleOverrides,
 ): number =>
-  [...group.texts, ...group.selects].filter(
+  [...group.texts, ...group.selects, ...(group.files ?? [])].filter(
     (control) => styleOverrides[control.field] !== undefined,
   ).length;
 
@@ -121,6 +147,58 @@ export const ManuscriptExportStyleControls = ({
         </summary>
         <StyledGrid>
           <StyledDescription>{group.description}</StyledDescription>
+          {(group.files ?? []).map((control) => (
+            <StyledField key={control.id}>
+              {control.label}
+              <StyledFileRow>
+                <StyledInput
+                  id={control.id}
+                  type="file"
+                  accept={control.accept}
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (file === undefined) return;
+                    // Only the styles part is kept: a whole .docx would be
+                    // megabytes of content this setting does not need.
+                    const stylesXml = extractManuscriptDocxStyles(
+                      new Uint8Array(await file.arrayBuffer()),
+                    );
+                    event.target.value = '';
+                    onChange({
+                      [control.field]: stylesXml ?? '',
+                      [control.sourceNameField]:
+                        stylesXml === null ? '' : file.name,
+                    } as ManuscriptExportStyleOverrides);
+                  }}
+                />
+                <StyledFileSummary>
+                  {describeManuscriptDocxTemplate(
+                    typeof style[control.field] === 'string'
+                      ? (style[control.field] as string)
+                      : null,
+                    typeof style[control.sourceNameField] === 'string'
+                      ? (style[control.sourceNameField] as string)
+                      : null,
+                  )}
+                </StyledFileSummary>
+                {typeof style[control.field] === 'string' &&
+                (style[control.field] as string).length > 0 ? (
+                  <StyledClearButton
+                    type="button"
+                    onClick={() =>
+                      onChange({
+                        [control.field]: '',
+                        [control.sourceNameField]: '',
+                      } as ManuscriptExportStyleOverrides)
+                    }
+                  >
+                    Remove
+                  </StyledClearButton>
+                ) : null}
+              </StyledFileRow>
+              <StyledFileSummary>{control.description}</StyledFileSummary>
+            </StyledField>
+          ))}
           {group.texts.map((control) => (
             <StyledField key={control.id}>
               {control.label}

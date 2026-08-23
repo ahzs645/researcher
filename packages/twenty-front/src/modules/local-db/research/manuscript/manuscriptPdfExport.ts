@@ -11,6 +11,7 @@ import {
   EQUATION_LABEL_SEPARATOR,
 } from './manuscriptBlocks';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { latexToUnicodeText } from './manuscriptMathText';
 
@@ -23,7 +24,9 @@ import { latexToUnicodeText } from './manuscriptMathText';
 export const exportManuscriptToPdfBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
-  bundle = await prepareManuscriptBundleWithCsl(bundle);
+  bundle = await prepareManuscriptDiagramImages(
+    await prepareManuscriptBundleWithCsl(bundle),
+  );
   const { editor, blocks } = buildBlockNoteDocument(bundle);
   const fontFamily = /times/i.test(bundle.style.fontFamily ?? '')
     ? 'Times-Roman'
@@ -44,7 +47,11 @@ export const exportManuscriptToPdfBlob = async (
     return content
       .map((inline) => {
         if (typeof inline !== 'object' || inline === null) return '';
-        const record = inline as { type?: string; text?: string; content?: unknown };
+        const record = inline as {
+          type?: string;
+          text?: string;
+          content?: unknown;
+        };
         if (record.type === 'text') return record.text ?? '';
         return plainText(record.content);
       })

@@ -3,7 +3,10 @@ import { isNonEmptyString } from '@sniptt/guards';
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
-import { parseMarkdownTable } from './manuscriptTables';
+import {
+  parseManuscriptTableGrid,
+  type ManuscriptTableCell,
+} from './manuscriptTableGrid';
 import { type NumberedFigure } from './manuscriptTypes';
 
 // ANSI/NISO Z39.96 JATS — the exchange format publishers, preprint servers and
@@ -54,16 +57,30 @@ const figureHref = (figure: NumberedFigure): string | null => {
 };
 
 const tableGridToJats = (tableData: string): string => {
-  const rows = parseMarkdownTable(tableData);
-  if (rows.length === 0) return '';
-  const [header, ...body] = rows;
-  const cell = (tag: string) => (value: string) =>
-    `      <${tag}>${inlineToJats(value)}</${tag}>`;
+  const grid = parseManuscriptTableGrid(tableData);
+  if (grid.rows.length === 0) return '';
+  const cell =
+    (tag: string) =>
+    (value: ManuscriptTableCell): string => {
+      const span = [
+        value.colSpan > 1 ? ` colspan="${value.colSpan}"` : '',
+        value.rowSpan > 1 ? ` rowspan="${value.rowSpan}"` : '',
+      ].join('');
+      return `      <${tag}${span}>${inlineToJats(value.text)}</${tag}>`;
+    };
+  const header = grid.rows.slice(0, grid.headerRows);
+  const body = grid.rows.slice(grid.headerRows);
   return [
     '    <table>',
-    '     <thead>',
-    `      <tr>${header.map(cell('th')).join('')}</tr>`,
-    '     </thead>',
+    ...(header.length > 0
+      ? [
+          '     <thead>',
+          ...header.map(
+            (row) => `      <tr>${row.map(cell('th')).join('')}</tr>`,
+          ),
+          '     </thead>',
+        ]
+      : []),
     '     <tbody>',
     ...body.map((row) => `      <tr>${row.map(cell('td')).join('')}</tr>`),
     '     </tbody>',

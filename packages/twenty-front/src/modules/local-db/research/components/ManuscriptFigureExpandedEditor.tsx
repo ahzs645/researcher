@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { ManuscriptDiagramEditor } from '@/local-db/research/components/ManuscriptDiagramEditor';
 import { ManuscriptFigureMetadataFields } from '@/local-db/research/components/ManuscriptFigureMetadataFields';
 import { ManuscriptTableEditor } from '@/local-db/research/components/ManuscriptTableEditor';
 import {
@@ -53,6 +54,13 @@ const UNASSIGNED_SECTION = '__UNASSIGNED__';
 
 // A chart figure is a FIGURE-kind record whose pixels we rendered from a data
 // grid — those stay re-plottable instead of becoming a dead PNG.
+// A diagram figure draws its picture from Mermaid source rather than pixels,
+// so it stays editable as text instead of freezing into an image.
+const isDiagramFigure = (figure: NumberedFigure): boolean =>
+  figure.imageSource === 'DIAGRAM' ||
+  (typeof figure.diagramSource === 'string' &&
+    figure.diagramSource.trim().length > 0);
+
 const isChartFigure = (figure: NumberedFigure): boolean =>
   figure.assetKind === 'FIGURE' &&
   (figure.imageSource === 'GENERATED' || figure.imageSource === 'DATASET') &&
@@ -174,6 +182,7 @@ export const ManuscriptFigureExpandedEditor = ({
   const [tableDraft, setTableDraft] = useState(figure.tableData ?? '');
   const [chartKindDraft, setChartKindDraft] = useState<ChartKind>('bar');
   const [isReplotting, setIsReplotting] = useState(false);
+  const [diagramDraft, setDiagramDraft] = useState(figure.diagramSource ?? '');
   const [equationDraft, setEquationDraft] = useState(
     figure.equationLatex ?? '',
   );
@@ -433,6 +442,33 @@ export const ManuscriptFigureExpandedEditor = ({
                   })
                   .finally(() => setIsReplotting(false));
               }}
+            />
+          </StyledActions>
+        </>
+      ) : null}
+      {isDiagramFigure(figure) ? (
+        <>
+          <ManuscriptDiagramEditor
+            source={diagramDraft}
+            onChange={setDiagramDraft}
+          />
+          <StyledActions>
+            <Button
+              title="Save diagram"
+              variant="primary"
+              accent="blue"
+              size="small"
+              disabled={
+                diagramDraft.trim() === (figure.diagramSource ?? '').trim()
+              }
+              onClick={() =>
+                onPersist({
+                  diagramSource: diagramDraft.trim(),
+                  imageSource: 'DIAGRAM',
+                  // A stale raster would win over the new source at export.
+                  imageUrl: '',
+                })
+              }
             />
           </StyledActions>
         </>

@@ -1,3 +1,8 @@
+// A `---` entry among the title-page lines is vertical space, which is how a
+// cover page pushes its degree and institution blocks apart.
+export const isTitlePageSpacerLine = (line: string): boolean =>
+  /^-{3,}$/.test(line.trim());
+
 export const parseManuscriptTitlePageExtraLines = (
   value: string | null | undefined,
 ): string[] => {

@@ -251,8 +251,7 @@ export const bibliographyHtmlToInlineRuns = (
       runs.push({
         type: 'text',
         text,
-        styles:
-          tag === 'i' || tag === 'em' ? { italic: true } : { bold: true },
+        styles: tag === 'i' || tag === 'em' ? { italic: true } : { bold: true },
       });
       continue;
     }
@@ -299,6 +298,30 @@ const citationKeysFromCluster = (inner: string): string[] =>
 export const citationClusterKey = (keys: string[]): string =>
   keys.join('\u001f');
 
+// ── Citation anchors ───────────────────────────────────────────────────────
+// Rendering a citation cluster loses which references it pointed at, which is
+// fine for Word and PDF but leaves an HTML export unable to link "[3]" to
+// entry 3. Exporters that want the link ask for anchors, and the rendered text
+// carries the keys alongside the label inside control characters that cannot
+// occur in manuscript prose. Everything else strips them.
+const CITATION_ANCHOR_OPEN = '\u0002';
+const CITATION_ANCHOR_SPLIT = '\u0011';
+const CITATION_ANCHOR_CLOSE = '\u0003';
+
+export const CITATION_ANCHOR_PATTERN =
+  /\u0002([^\u0002\u0011\u0003]*)\u0011([^\u0003]*)\u0003/g;
+
+export const wrapCitationAnchor = (keys: string[], label: string): string =>
+  `${CITATION_ANCHOR_OPEN}${citationClusterKey(keys)}${CITATION_ANCHOR_SPLIT}${label}${CITATION_ANCHOR_CLOSE}`;
+
+export const citationAnchorKeys = (encoded: string): string[] =>
+  encoded.split('\u001f').filter((key) => key.length > 0);
+
+export const stripCitationAnchors = (value: string): string =>
+  value.replace(CITATION_ANCHOR_PATTERN, (_match, _keys, label: string) =>
+    String(label),
+  );
+
 export const extractCitationClusters = (markdown: string): string[][] =>
   [...markdown.matchAll(CITATION_CLUSTER)].map((match) =>
     citationKeysFromCluster(match[1]),
@@ -307,23 +330,26 @@ export const extractCitationClusters = (markdown: string): string[][] =>
 export const renderCitationsInText = (
   markdown: string,
   context: CitationContext,
+  withAnchors = false,
 ): string =>
   markdown.replace(CITATION_CLUSTER, (_match, inner: string) => {
     const keys = citationKeysFromCluster(inner);
-    return formatInTextCitation(keys, context);
+    const label = formatInTextCitation(keys, context);
+    return withAnchors ? wrapCitationAnchor(keys, label) : label;
   });
 
 export const renderCitationsInTextWithLabels = (
   markdown: string,
   labelsByCluster: ReadonlyMap<string, string>,
   fallbackContext: CitationContext,
+  withAnchors = false,
 ): string =>
   markdown.replace(CITATION_CLUSTER, (_match, inner: string) => {
     const keys = citationKeysFromCluster(inner);
-    return (
+    const label =
       labelsByCluster.get(citationClusterKey(keys)) ??
-      formatInTextCitation(keys, fallbackContext)
-    );
+      formatInTextCitation(keys, fallbackContext);
+    return withAnchors ? wrapCitationAnchor(keys, label) : label;
   });
 
 // ── Seam for full CSL rendering (citeproc-js / @citeproc-rs) ────────────────

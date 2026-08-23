@@ -130,7 +130,8 @@ describe('manuscript citeproc', () => {
     const runs = bibliographyHtmlToInlineRuns(htmlEntry!.html!);
     expect(
       runs.some(
-        (run) => run.styles.italic === true && run.text.includes('Journal of Testing'),
+        (run) =>
+          run.styles.italic === true && run.text.includes('Journal of Testing'),
       ),
     ).toBe(true);
   });

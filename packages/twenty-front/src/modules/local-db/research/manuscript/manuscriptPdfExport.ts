@@ -3,7 +3,7 @@ import {
   pdfDefaultSchemaMappings,
 } from '@blocknote/xl-pdf-exporter';
 import { pdf, Text } from '@react-pdf/renderer';
-import { createElement } from 'react';
+import { cloneElement, createElement, type ReactElement } from 'react';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import {
@@ -15,12 +15,19 @@ import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { isImageDataUrl } from './manuscriptImages';
 import { latexToUnicodeText } from './manuscriptMathText';
+import {
+  hasManuscriptScripts,
+  manuscriptScriptSegments,
+} from './manuscriptScripts';
 
 // PDF export from the *same* BlockNote block model the DOCX exporter builds —
 // BlockNote's PDF exporter renders blocks to a react-pdf document, which
 // react-pdf then turns into a PDF Blob. No DOCX round-trip and no LaTeX/Typst
 // toolchain. Fully client-side: figures embed and tables render as real tables,
 // identical to the Word output.
+
+// A4 at 72 dpi, which is the page size BlockNote's PDF exporter fixes.
+const A4_HEIGHT_POINTS = 841.89;
 
 export const exportManuscriptToPdfBlob = async (
   bundle: ManuscriptBundle,
@@ -131,6 +138,39 @@ export const exportManuscriptToPdfBlob = async (
     isImageDataUrl(url)
       ? (await fetch(url)).blob()
       : (resolveExternalFile?.(url) ?? url);
+  // The importer marks a run like "PM2.5" or "mg/m3" with invisible sentinels
+  // so every exporter can raise or lower it. Word reads them; react-pdf never
+  // did, so the sentinels printed as stray glyphs. Split the run and let
+  // react-pdf shift the pieces.
+  const transformStyledText = exporter.transformStyledText.bind(exporter);
+  exporter.transformStyledText = (styledText) => {
+    if (!hasManuscriptScripts(styledText.text)) {
+      return transformStyledText(styledText);
+    }
+    const base = transformStyledText({ ...styledText, text: '' });
+    const scriptSize = Math.round((bundle.style.bodyFontSize ?? 12) * 0.75);
+    return cloneElement(
+      base,
+      {},
+      ...manuscriptScriptSegments(styledText.text).map((segment, index) =>
+        createElement(
+          Text,
+          {
+            key: `script-${index}`,
+            style:
+              segment.position === 'BASELINE'
+                ? {}
+                : {
+                    fontSize: scriptSize,
+                    verticalAlign:
+                      segment.position === 'SUPERSCRIPT' ? 'super' : 'sub',
+                  },
+          },
+          segment.text,
+        ),
+      ),
+    );
+  };
   exporter.styles.page = {
     ...exporter.styles.page,
     paddingTop: 72,
@@ -140,19 +180,46 @@ export const exportManuscriptToPdfBlob = async (
     fontSize: bundle.style.bodyFontSize ?? 12,
     lineHeight: bodyLineSpacing,
   };
-  const document = await exporter.toReactPDFDocument(blocks, {
-    ...(bundle.style.pageNumbering === true
-      ? {
-          footer: createElement(Text, {
-            fixed: true,
-            render: ({ pageNumber }: { pageNumber: number }) =>
-              String(pageNumber),
-            style: { fontFamily, fontSize: 10, textAlign: 'center' },
-          }),
-        }
-      : {}),
+  // Page numbers deliberately bypass BlockNote's `footer` option, which nests
+  // the number inside its own fixed container. react-pdf re-renders a `render`
+  // node on every page and resets its measured height first; nested one level
+  // down, that height never comes back — the number silently draws nothing, and
+  // on a long document the container's `bottom`-derived offset runs away to a
+  // coordinate PDF cannot write ("unsupported number: -2.4e+22"). The number has
+  // to be the fixed, absolutely positioned node itself, and anchored from the
+  // top: `bottom` is resolved from the height that resolution just cleared.
+  const document = await exporter.toReactPDFDocument(blocks, {});
+  if (bundle.style.pageNumbering !== true) return pdf(document).toBlob();
+
+  const footerFontSize = 10;
+  const pageNumber = createElement(Text, {
+    fixed: true,
+    render: ({ pageNumber: value }: { pageNumber: number }) => String(value),
+    style: {
+      fontFamily,
+      fontSize: footerFontSize,
+      left: 72,
+      lineHeight: 1.2,
+      position: 'absolute',
+      right: 72,
+      textAlign: 'center',
+      top: A4_HEIGHT_POINTS - 36 - Math.ceil(footerFontSize * 1.2),
+    },
   });
-  return pdf(document).toBlob();
+  const page = document.props.children as ReactElement<{ children?: unknown }>;
+  const pageChildren = page.props.children;
+  return pdf(
+    cloneElement(
+      document,
+      {},
+      cloneElement(
+        page,
+        {},
+        ...(Array.isArray(pageChildren) ? pageChildren : [pageChildren]),
+        pageNumber,
+      ),
+    ),
+  ).toBlob();
 };
 
 export const blocknotePdfExporter: ManuscriptExporter = {

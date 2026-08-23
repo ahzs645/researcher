@@ -3,7 +3,13 @@ import {
   pdfDefaultSchemaMappings,
 } from '@blocknote/xl-pdf-exporter';
 import { pdf, Text } from '@react-pdf/renderer';
-import { cloneElement, createElement, type ReactElement } from 'react';
+import {
+  cloneElement,
+  createElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import {
@@ -78,32 +84,80 @@ export const exportManuscriptToPdfBlob = async (
         : {}),
     };
   };
+  // Points of first-line indent, on body prose only — the abstract, captions
+  // and the author block are all tagged paragraphs and stay flush.
+  const firstLineIndent = Math.max(
+    0,
+    bundle.style.paragraphFirstLineIndent ?? 0,
+  );
+  const BLOCK_PARAGRAPH_TAGS = [
+    'abstract-body',
+    'affiliation-line',
+    'author-line',
+    'equation',
+    'figure-caption',
+    'table-caption',
+  ];
+  // react-pdf takes the line indent from the first *fragment* of the paragraph,
+  // and a paragraph built from inline runs has its own nested Text there — so
+  // the indent has to ride on that run, not only on the paragraph around it.
+  // …and a run can itself be a wrapper — a superscript-bearing word is a Text
+  // of Texts — so the indent follows the first child all the way down.
+  const indentFirstRun = (node: ReactNode): ReactNode => {
+    if (!isValidElement(node)) return node;
+    const element = node as ReactElement<{
+      children?: ReactNode;
+      style?: Record<string, unknown>;
+    }>;
+    const children = element.props.children;
+    const runs = Array.isArray(children) ? children : [children];
+    const style = { ...element.props.style, textIndent: firstLineIndent };
+    return isValidElement(runs[0])
+      ? cloneElement(
+          element,
+          { style },
+          indentFirstRun(runs[0]),
+          ...runs.slice(1),
+        )
+      : cloneElement(element, { style });
+  };
+  const withFirstLineIndent = (runs: ReactNode[]): ReactNode[] =>
+    isValidElement(runs[0])
+      ? [indentFirstRun(runs[0]), ...runs.slice(1)]
+      : runs;
   const paragraphMapping: (typeof pdfDefaultSchemaMappings.blockMapping)['paragraph'] =
-    (block, exporter) =>
+    (block, exporter) => {
+      const indent =
+        firstLineIndent > 0 &&
+        !BLOCK_PARAGRAPH_TAGS.includes(block.props.textColor);
+      const children =
+        block.props.textColor === 'equation'
+          ? (() => {
+              const { equation, label } = equationChildren(block);
+              return label !== undefined ? `${equation}    ${label}` : equation;
+            })()
+          : (() => {
+              const runs = exporter.transformInlineContent(block.content);
+              return indent ? withFirstLineIndent(runs) : runs;
+            })();
       // The exporter declares ReactElement<Text> instead of TextProps. The
       // runtime component is correct; bridge the upstream generic mismatch.
-      createElement(Text, {
+      return createElement(Text, {
         key: `paragraph${block.id}`,
         style: {
           lineHeight:
             block.props.textColor === 'abstract-body'
               ? abstractLineSpacing
               : bodyLineSpacing,
+          ...(indent ? { textIndent: firstLineIndent } : {}),
           textAlign:
             block.props.textAlignment === 'justify'
               ? 'justify'
               : block.props.textAlignment,
         },
-        children:
-          block.props.textColor === 'equation'
-            ? (() => {
-                const { equation, label } = equationChildren(block);
-                return label !== undefined
-                  ? `${equation}    ${label}`
-                  : equation;
-              })()
-            : exporter.transformInlineContent(block.content),
+        children,
       }) as unknown as PdfTextElement;
+    };
   const headingMapping: (typeof pdfDefaultSchemaMappings.blockMapping)['heading'] =
     (block, exporter) =>
       createElement(Text, {

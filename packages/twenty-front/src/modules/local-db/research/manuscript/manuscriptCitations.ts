@@ -1,6 +1,7 @@
 import { isNonEmptyString } from '@sniptt/guards';
 
 import { type CitationMode, type ReferenceLike } from './manuscriptTypes';
+import { decodeXmlEntities } from './manuscriptXmlEntities';
 
 // In-text citations + bibliography, formatted by the journal's citation mode.
 //
@@ -218,32 +219,6 @@ export const bibliographyHtmlToMarkdown = (html: string): string =>
       .replace(/\s+/g, ' ')
       .trim(),
   );
-
-const NAMED_XML_ENTITIES: Record<string, string> = {
-  '&amp;': '&',
-  '&apos;': "'",
-  '&gt;': '>',
-  '&lt;': '<',
-  '&quot;': '"',
-};
-
-const XML_ENTITY = /&(?:amp|apos|gt|lt|quot|#(\d{1,7})|#x([0-9a-fA-F]{1,6}));/g;
-
-// One pass, so a decoded `&` can never be read as the start of another entity.
-// citeproc writes numeric references for punctuation it escapes (`&#38;` for
-// an ampersand in a journal name); decoding only the named five left that text
-// literal, and the exporters then escaped its `&` into `&amp;#38;`.
-const decodeXmlEntities = (value: string): string =>
-  value.replace(XML_ENTITY, (entity, decimal?: string, hex?: string) => {
-    const codePoint =
-      decimal !== undefined
-        ? Number(decimal)
-        : hex !== undefined
-          ? Number.parseInt(hex, 16)
-          : Number.NaN;
-    if (Number.isNaN(codePoint)) return NAMED_XML_ENTITIES[entity] ?? entity;
-    return codePoint > 0x10ffff ? entity : String.fromCodePoint(codePoint);
-  });
 
 // CSL HTML → BlockNote-style inline content runs (bold/italic styles kept).
 export type BibliographyInlineRun = {

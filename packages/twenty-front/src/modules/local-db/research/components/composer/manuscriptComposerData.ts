@@ -217,6 +217,7 @@ export const JOURNAL_GQL = {
   lineSpacing: true,
   abstractLineSpacing: true,
   paragraphSpacingAfter: true,
+  paragraphFirstLineIndent: true,
   bodyAlignment: true,
   affiliationAlignment: true,
   affiliationNumberStyle: true,

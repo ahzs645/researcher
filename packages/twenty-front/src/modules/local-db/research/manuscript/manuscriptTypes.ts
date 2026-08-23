@@ -124,6 +124,9 @@ export type JournalStyle = {
   lineSpacing?: number | null;
   abstractLineSpacing?: number | null;
   paragraphSpacingAfter?: number | null;
+  // Points of first-line indent on body paragraphs. Thesis and APA body copy
+  // indents instead of leaving a blank line between paragraphs.
+  paragraphFirstLineIndent?: number | null;
   bodyAlignment?: string | null;
   affiliationAlignment?: string | null;
   affiliationNumberStyle?: string | null;

@@ -136,6 +136,30 @@ describe('manuscript citeproc', () => {
     ).toBe(true);
   });
 
+  it('decodes a numeric entity in an in-text citation too', async () => {
+    // Two authors make APA render an ampersand, and citeproc escapes it as
+    // `&#38;`. Left literal, the exporters escape its `&` again and the reader
+    // sees "Brunekreef &#38; Forsberg" on the page.
+    const engine = await createCiteprocEngine({
+      styleId: 'apa',
+      references: [
+        {
+          id: 'pair',
+          citationKey: 'pair',
+          name: 'Coarse particles',
+          authors: 'Brunekreef, Bert; Forsberg, Bertil',
+          year: 2005,
+          cslType: 'ARTICLE_JOURNAL',
+        },
+      ],
+    });
+    const [label] = formatCslCitations(engine!, [['pair']]);
+
+    expect(label).toContain('&');
+    expect(label).not.toContain('&#38;');
+    expect(label).toContain('Brunekreef');
+  });
+
   it('separates a numbered entry from its text and decodes numeric entities', () => {
     // What a `second-field-align` style (Vancouver, AMA) actually emits: the
     // marker and the entry are two blocks, and citeproc escapes the ampersand

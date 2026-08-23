@@ -103,6 +103,10 @@ export const buildManuscriptHtmlCss = (style: JournalStyle): string => {
     8,
     cssNumber(style.figureCaptionFontSize, bodyFontSize - 2),
   );
+  const firstLineIndent = Math.max(
+    0,
+    cssNumber(style.paragraphFirstLineIndent, 0),
+  );
   const bodyAlignment =
     style.bodyAlignment === 'JUSTIFIED' ? 'justify' : 'left';
   const headingColor =
@@ -190,7 +194,18 @@ export const buildManuscriptHtmlCss = (style: JournalStyle): string => {
   .abstract { line-height: ${abstractLineSpacing}; }
   .keywords { color: var(--muted); font-size: ${Math.max(8, bodyFontSize - 1)}pt; }
 
-  p { margin: 0 0 0.75em; text-align: ${bodyAlignment}; }
+  p {
+    margin: 0 0 ${firstLineIndent > 0 ? '0' : '0.75em'};
+    text-align: ${bodyAlignment};
+    text-indent: ${firstLineIndent}pt;
+  }
+  /* Indented body copy runs on; everything with its own block shape does not. */
+  .abstract p,
+  figcaption,
+  .equation,
+  li,
+  blockquote,
+  .references li { text-indent: 0; }
 
   h1, h2, h3, h4, h5, h6 {
     color: var(--heading-ink);

@@ -1329,6 +1329,7 @@ export const recordTables = {
     lineSpacing: v.optional(v.number()),
     abstractLineSpacing: v.optional(v.number()),
     paragraphSpacingAfter: v.optional(v.number()),
+    paragraphFirstLineIndent: v.optional(v.number()),
     bodyAlignment: v.optional(v.string()),
     affiliationAlignment: v.optional(v.string()),
     affiliationLineSpacing: v.optional(v.number()),

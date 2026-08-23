@@ -111,7 +111,9 @@ const readIfd = (
     if (valueOffset + size * count > view.byteLength) continue;
     const values: number[] = [];
     for (let item = 0; item < count; item += 1) {
-      values.push(readValue(view, valueOffset + item * size, type, littleEndian));
+      values.push(
+        readValue(view, valueOffset + item * size, type, littleEndian),
+      );
     }
     entries.set(tag, { type, count, values });
   }
@@ -142,7 +144,8 @@ const decodeLzw = (input: Uint8Array): Uint8Array => {
     bitBuffer = (bitBuffer << 8) | input[index];
     bitCount += 8;
     while (bitCount >= codeWidth) {
-      const code = (bitBuffer >> (bitCount - codeWidth)) & ((1 << codeWidth) - 1);
+      const code =
+        (bitBuffer >> (bitCount - codeWidth)) & ((1 << codeWidth) - 1);
       bitCount -= codeWidth;
 
       if (code === 256) {
@@ -267,7 +270,11 @@ export const decodeTiff = async (
   if (width <= 0 || height <= 0 || width * height > 64_000_000) return null;
 
   const compression = first(entries, TAG_COMPRESSION, COMPRESSION_NONE);
-  const photometric = first(entries, TAG_PHOTOMETRIC, PHOTOMETRIC_BLACK_IS_ZERO);
+  const photometric = first(
+    entries,
+    TAG_PHOTOMETRIC,
+    PHOTOMETRIC_BLACK_IS_ZERO,
+  );
   const samplesPerPixel = first(entries, TAG_SAMPLES_PER_PIXEL, 1);
   const bitsPerSample = entries.get(TAG_BITS_PER_SAMPLE)?.values ?? [1];
   const planarConfig = first(entries, TAG_PLANAR_CONFIG, 1);
@@ -278,17 +285,17 @@ export const decodeTiff = async (
   const colorMap = entries.get(TAG_COLOR_MAP)?.values;
   const hasAlpha = (entries.get(TAG_EXTRA_SAMPLES)?.values[0] ?? 0) !== 0;
 
-  const bilevel = bitsPerSample.every((bits) => bits === 1) && samplesPerPixel === 1;
+  const bilevel =
+    bitsPerSample.every((bits) => bits === 1) && samplesPerPixel === 1;
   const eightBit = bitsPerSample.every((bits) => bits === 8);
   if (!bilevel && !eightBit) return null;
   if (planarConfig !== 1) return null;
   if (predictor !== 1 && predictor !== 2) return null;
   if (stripOffsets.length === 0 || rowsPerStrip <= 0) return null;
-  if (photometric === PHOTOMETRIC_PALETTE && colorMap === undefined) return null;
+  if (photometric === PHOTOMETRIC_PALETTE && colorMap === undefined)
+    return null;
 
-  const bytesPerRow = bilevel
-    ? Math.ceil(width / 8)
-    : width * samplesPerPixel;
+  const bytesPerRow = bilevel ? Math.ceil(width / 8) : width * samplesPerPixel;
   const pixels = new Uint8ClampedArray(width * height * 4);
   // A palette is stored as three 16-bit ramps, all reds then greens then blues.
   const paletteEntries = colorMap === undefined ? 0 : colorMap.length / 3;
@@ -296,7 +303,8 @@ export const decodeTiff = async (
   for (let strip = 0; strip < stripOffsets.length; strip += 1) {
     const offset = stripOffsets[strip];
     const byteCount =
-      stripByteCounts[strip] ?? Math.min(bytes.length - offset, bytesPerRow * rowsPerStrip);
+      stripByteCounts[strip] ??
+      Math.min(bytes.length - offset, bytesPerRow * rowsPerStrip);
     if (offset < 0 || offset + byteCount > bytes.length) return null;
     const decoded = await decompressStrip(
       bytes.subarray(offset, offset + byteCount),

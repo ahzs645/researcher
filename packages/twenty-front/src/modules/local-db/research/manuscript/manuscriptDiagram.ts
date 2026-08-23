@@ -77,6 +77,14 @@ export const renderMermaidToSvg = async (
       securityLevel: 'strict',
       theme: 'neutral',
       fontFamily: 'inherit',
+      // Draw labels as SVG text, not HTML inside <foreignObject>. An SVG shown
+      // in an <img> — which is how the DOCX and PDF rasterizer reads it — is
+      // parsed as XML, and Mermaid's HTML labels carry `&nbsp;` and unclosed
+      // `<br>`, either of which fails that parse outright. With SVG labels the
+      // same picture reaches every format.
+      htmlLabels: false,
+      flowchart: { htmlLabels: false },
+      class: { htmlLabels: false },
     });
     diagramCounter += 1;
     const { svg } = await mermaid.render(
@@ -100,6 +108,42 @@ export const renderManuscriptDiagrams = async (
   return rendered;
 };
 
+// Named HTML entities an XML parser does not know. Mermaid emits `&nbsp;` in
+// several diagram types regardless of the label setting.
+const XML_UNSAFE_ENTITY = /&(nbsp|ensp|emsp|thinsp|shy|zwnj|zwj);/g;
+const XML_ENTITY_CODE_POINTS: Record<string, number> = {
+  emsp: 8195,
+  ensp: 8194,
+  nbsp: 160,
+  shy: 173,
+  thinsp: 8201,
+  zwj: 8205,
+  zwnj: 8204,
+};
+
+// Inline in a page, an SVG is HTML; in an <img> it is a standalone XML
+// document that has to size itself. Mermaid's `width="100%"` has nothing to be
+// a percentage of there, so pin the box from the viewBox and swap the entities
+// XML will not accept.
+export const standaloneSvgDocument = (svg: string): string => {
+  const viewBox = /viewBox="([\d.\-+eE\s]+)"/
+    .exec(svg)?.[1]
+    ?.trim()
+    .split(/\s+/);
+  const width = Number(viewBox?.[2]);
+  const height = Number(viewBox?.[3]);
+  const sized =
+    Number.isFinite(width) && Number.isFinite(height) && width > 0
+      ? svg
+          .replace(/^<svg\b/, `<svg width="${width}" height="${height}"`)
+          .replace(/\swidth="100%"/, '')
+      : svg;
+  return sized.replace(
+    XML_UNSAFE_ENTITY,
+    (entity, name: string) => `&#${XML_ENTITY_CODE_POINTS[name] ?? 32};`,
+  );
+};
+
 // SVG → PNG data URL, for the exporters that cannot embed vector art. Uses the
 // browser's own rasterizer; null off-browser or when the SVG will not decode.
 export const rasterizeSvgToPngDataUrl = async (
@@ -107,7 +151,9 @@ export const rasterizeSvgToPngDataUrl = async (
   targetWidth = RASTERIZED_DIAGRAM_WIDTH,
 ): Promise<string | null> => {
   if (!isBrowserEnvironment()) return null;
-  const encoded = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  const encoded = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    standaloneSvgDocument(svg),
+  )}`;
 
   try {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {

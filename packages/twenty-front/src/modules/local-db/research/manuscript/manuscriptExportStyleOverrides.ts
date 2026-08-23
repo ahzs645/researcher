@@ -35,6 +35,7 @@ export const MANUSCRIPT_EXPORT_STYLE_OVERRIDE_KEYS = [
   'lineSpacing',
   'abstractLineSpacing',
   'paragraphSpacingAfter',
+  'paragraphFirstLineIndent',
   'bodyAlignment',
   'affiliationAlignment',
   'affiliationNumberStyle',

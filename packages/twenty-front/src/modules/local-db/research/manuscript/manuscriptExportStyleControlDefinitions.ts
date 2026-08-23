@@ -61,6 +61,15 @@ const fontSizeOptions = (minimum: number, maximum: number) =>
     return { value, label: `${value} pt` };
   });
 
+// Stored in points, labelled in inches: a thesis handbook says "half an inch",
+// a Word dialog says 36 pt, and both should be recognisable here.
+const firstLineIndentOptions: SelectOption<string>[] = [
+  { value: '0', label: 'None (flush left)' },
+  { value: '18', label: 'Quarter inch (18 pt)' },
+  { value: '36', label: 'Half inch (36 pt)' },
+  { value: '54', label: 'Three quarters (54 pt)' },
+];
+
 const spacingOptions: SelectOption<string>[] = [
   { value: '0', label: 'None (0 pt)' },
   { value: '3', label: 'Tight (3 pt)' },
@@ -199,6 +208,14 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
         defaultValue: '0',
         valueType: 'NUMBER',
         options: spacingOptions,
+      },
+      {
+        id: 'manuscript-export-first-line-indent-select',
+        label: 'First-line indent',
+        field: 'paragraphFirstLineIndent',
+        defaultValue: '0',
+        valueType: 'NUMBER',
+        options: firstLineIndentOptions,
       },
       {
         id: 'manuscript-export-two-column-select',

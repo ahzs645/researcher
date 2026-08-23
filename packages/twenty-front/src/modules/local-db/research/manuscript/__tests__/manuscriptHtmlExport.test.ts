@@ -223,6 +223,28 @@ describe('exportManuscriptToHtml', () => {
     expect(stylesheet).not.toContain('color: red');
   });
 
+  it('indents the first line of body prose, and nothing else', async () => {
+    const indented = await exportManuscriptToHtml(
+      buildManuscriptBundle({
+        ...input,
+        style: { ...input.style, paragraphFirstLineIndent: 36 },
+      }),
+    );
+    const stylesheet = /<style>([\s\S]*?)<\/style>/.exec(indented)?.[1] ?? '';
+
+    expect(stylesheet).toContain('text-indent: 36pt;');
+    // Indented copy runs on: the blank line between paragraphs is what the
+    // indent replaces, so keeping both would double the separation.
+    expect(stylesheet).toMatch(/p \{\s*margin: 0 0 0;/);
+    expect(stylesheet).toContain('.abstract p,');
+    // Off by default, and then paragraphs are separated by space instead.
+    const plain = await exportManuscriptToHtml(buildManuscriptBundle(input));
+    const plainStylesheet = /<style>([\s\S]*?)<\/style>/.exec(plain)?.[1] ?? '';
+
+    expect(plainStylesheet).toContain('text-indent: 0pt;');
+    expect(plainStylesheet).toMatch(/p \{\s*margin: 0 0 0.75em;/);
+  });
+
   it('escapes prose that looks like markup', async () => {
     const withMarkup = await exportManuscriptToHtml(
       buildManuscriptBundle({

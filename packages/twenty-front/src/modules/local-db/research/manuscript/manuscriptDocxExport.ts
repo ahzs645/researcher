@@ -51,6 +51,7 @@ type ManuscriptDocxMappingOptions = {
   bodyLineSpacing: number;
   abstractLineSpacing: number;
   paragraphSpacingAfter: number;
+  paragraphFirstLineIndent: number;
   affiliationLineSpacing: number;
   affiliationSpacingAfter: number;
   tableStyle: ManuscriptTableStyle;
@@ -139,6 +140,7 @@ const createManuscriptDocxMappings = ({
   bodyLineSpacing,
   abstractLineSpacing,
   paragraphSpacingAfter,
+  paragraphFirstLineIndent,
   affiliationLineSpacing,
   affiliationSpacingAfter,
   tableStyle,
@@ -357,8 +359,16 @@ const createManuscriptDocxMappings = ({
                 : exporter.transformInlineContent([content]);
             })
           : exporter.transformInlineContent(block.content);
+      // Body copy only: an indented caption, abstract or affiliation line reads
+      // as a mistake, and the equation and author-line paragraphs returned
+      // above never reach here.
+      const isBodyProse =
+        !isAbstract && !isTableCaption && !isFigureCaption && !isAffiliation;
       return new Paragraph({
         alignment,
+        ...(isBodyProse && paragraphFirstLineIndent > 0
+          ? { indent: { firstLine: Math.round(paragraphFirstLineIndent * 20) } }
+          : {}),
         spacing: {
           after: isTableCaption
             ? 0
@@ -417,6 +427,10 @@ export const exportManuscriptToDocxBlob = async (
     0,
     bundle.style.paragraphSpacingAfter ?? 0,
   );
+  const paragraphFirstLineIndent = Math.max(
+    0,
+    bundle.style.paragraphFirstLineIndent ?? 0,
+  );
   const affiliationLineSpacing = Math.max(
     1,
     bundle.style.affiliationLineSpacing ?? 1,
@@ -448,6 +462,7 @@ export const exportManuscriptToDocxBlob = async (
       bodyLineSpacing: lineSpacing,
       abstractLineSpacing,
       paragraphSpacingAfter,
+      paragraphFirstLineIndent,
       affiliationLineSpacing,
       affiliationSpacingAfter,
       tableStyle,

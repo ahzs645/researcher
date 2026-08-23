@@ -163,7 +163,8 @@ export const getBridgeDataSource = () => {
       //          their relations
       //   7 → 8  journal export page-layout and typography fields
       //   8 → 9  figure.diagramSource (Mermaid) and journal.titlePageTemplate
-      schemaVersion: 9,
+      //   9 → 10 journal.paragraphFirstLineIndent
+      schemaVersion: 10,
     });
   }
   return cachedDataSource;

@@ -2291,6 +2291,12 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconLineHeight',
       },
       {
+        name: 'paragraphFirstLineIndent',
+        label: 'First-line indent (pt)',
+        type: 'NUMBER',
+        icon: 'IconIndentIncrease',
+      },
+      {
         name: 'bodyAlignment',
         label: 'Body alignment',
         type: 'SELECT',

@@ -1,6 +1,10 @@
 import { isNonEmptyString } from '@sniptt/guards';
 
 import { type ManuscriptBundle } from './manuscriptAssembly';
+import {
+  PRINTABLE_FIGURE_HEIGHT_PX,
+  PRINTABLE_WIDTH_PX,
+} from './manuscriptPageMetrics';
 import { resolveFigureImage } from './manuscriptImages';
 
 // Fit a figure to the page before either block-based exporter places it.
@@ -12,12 +16,6 @@ import { resolveFigureImage } from './manuscriptImages';
 // scaling it down, so the picture comes out stretched. Word simply runs it off
 // the page. Measuring the image and narrowing the request until the height
 // fits is what keeps the proportions.
-
-// The printable column `figureToBlocks` sizes against, in the same CSS pixels.
-const PRINTABLE_WIDTH_PX = 600;
-// A4 less one-inch margins is 697 pt ≈ 930 px at the 0.75 pt/px the exporters
-// use; leave room for the caption and the paragraph that follows it.
-const PRINTABLE_HEIGHT_PX = 840;
 
 const isBrowserEnvironment = (): boolean =>
   typeof document !== 'undefined' && typeof window !== 'undefined';
@@ -45,7 +43,7 @@ export const fittedFigureWidthPercent = (
   requestedPercent: number,
 ): number | null => {
   const widest = Math.min(100, Math.max(10, requestedPercent));
-  const tallestFittingWidth = PRINTABLE_HEIGHT_PX * aspectRatio;
+  const tallestFittingWidth = PRINTABLE_FIGURE_HEIGHT_PX * aspectRatio;
   const fitted = Math.floor((tallestFittingWidth / PRINTABLE_WIDTH_PX) * 100);
   return fitted >= widest ? null : Math.max(10, fitted);
 };

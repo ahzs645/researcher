@@ -23,6 +23,13 @@ import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { isImageDataUrl } from './manuscriptImages';
 import { latexToScriptedText } from './manuscriptMathText';
 import {
+  A4_HEIGHT_POINTS,
+  PRINTABLE_WIDTH_POINTS,
+  PX_TO_POINTS,
+} from './manuscriptPageMetrics';
+import { createManuscriptPdfTableMapping } from './manuscriptPdfTable';
+import { resolveManuscriptTableStyle } from './manuscriptTableStyleOptions';
+import {
   hasManuscriptScripts,
   manuscriptScriptSegments,
 } from './manuscriptScripts';
@@ -32,9 +39,6 @@ import {
 // react-pdf then turns into a PDF Blob. No DOCX round-trip and no LaTeX/Typst
 // toolchain. Fully client-side: figures embed and tables render as real tables,
 // identical to the Word output.
-
-// A4 at 72 dpi, which is the page size BlockNote's PDF exporter fixes.
-const A4_HEIGHT_POINTS = 841.89;
 
 export const exportManuscriptToPdfBlob = async (
   bundle: ManuscriptBundle,
@@ -192,26 +196,6 @@ export const exportManuscriptToPdfBlob = async (
         },
         children: exporter.transformInlineContent(block.content),
       }) as unknown as PdfTextElement;
-  const exporter = new PDFExporter(editor.schema, {
-    ...pdfDefaultSchemaMappings,
-    blockMapping: {
-      ...pdfDefaultSchemaMappings.blockMapping,
-      paragraph: paragraphMapping,
-      heading: headingMapping,
-    },
-  });
-  // BlockNote resolves every file through its hosted CORS proxy, data URLs
-  // included — which sends the author's figures to a third party and fails
-  // outright with no network. An embedded image is already here: read it.
-  const resolveExternalFile = exporter.options.resolveFileUrl;
-  exporter.options.resolveFileUrl = async (url) =>
-    isImageDataUrl(url)
-      ? (await fetch(url)).blob()
-      : (resolveExternalFile?.(url) ?? url);
-  // The importer marks a run like "PM2.5" or "mg/m3" with invisible sentinels
-  // so every exporter can raise or lower it. Word reads them; react-pdf never
-  // did, so the sentinels printed as stray glyphs. Split the run and let
-  // react-pdf shift the pieces.
   // Sub- and superscript runs, from the importer's sentinels or the equation
   // linearizer's. react-pdf can shift a run; Unicode cannot supply a subscript
   // "d" or "f", which is what left `C_d` reading as literal LaTeX.
@@ -233,6 +217,52 @@ export const exportManuscriptToPdfBlob = async (
         segment.text,
       ),
     );
+  // BlockNote's DOCX mapper reads a column width as CSS pixels and converts it
+  // (×0.75 to points, ×20 to twips); its PDF mapper hands the same number to
+  // react-pdf as points, so a full-width table came out a third too wide and
+  // its last column wrapped on top of the first. Convert here, and clamp so a
+  // table can never be wider than the page it is drawn on.
+  const tableColumnWidths = (widths: (number | undefined)[]): number[] => {
+    const resolved = widths.map((width) => width ?? 120);
+    const total = resolved.reduce((sum, width) => sum + width, 0);
+    const scale =
+      total > 0
+        ? Math.min(PX_TO_POINTS, PRINTABLE_WIDTH_POINTS / total)
+        : PX_TO_POINTS;
+    return resolved.map((width) => Math.floor(width * scale));
+  };
+  const tableMapping = createManuscriptPdfTableMapping({
+    tableStyle: resolveManuscriptTableStyle(bundle.style.tableStyle),
+    fontFamily,
+    tableFontSize: Math.max(
+      8,
+      bundle.style.tableFontSize ?? (bundle.style.bodyFontSize ?? 12) - 2,
+    ),
+    tableLineSpacing: Math.max(1, bundle.style.tableLineSpacing ?? 1),
+    columnWidths: tableColumnWidths,
+    renderText: scriptRuns,
+  }) as (typeof pdfDefaultSchemaMappings.blockMapping)['table'];
+  const exporter = new PDFExporter(editor.schema, {
+    ...pdfDefaultSchemaMappings,
+    blockMapping: {
+      ...pdfDefaultSchemaMappings.blockMapping,
+      paragraph: paragraphMapping,
+      heading: headingMapping,
+      table: tableMapping,
+    },
+  });
+  // BlockNote resolves every file through its hosted CORS proxy, data URLs
+  // included — which sends the author's figures to a third party and fails
+  // outright with no network. An embedded image is already here: read it.
+  const resolveExternalFile = exporter.options.resolveFileUrl;
+  exporter.options.resolveFileUrl = async (url) =>
+    isImageDataUrl(url)
+      ? (await fetch(url)).blob()
+      : (resolveExternalFile?.(url) ?? url);
+  // The importer marks a run like "PM2.5" or "mg/m3" with invisible sentinels
+  // so every exporter can raise or lower it. Word reads them; react-pdf never
+  // did, so the sentinels printed as stray glyphs. Split the run and let
+  // react-pdf shift the pieces.
   const transformStyledText = exporter.transformStyledText.bind(exporter);
   exporter.transformStyledText = (styledText) => {
     if (!hasManuscriptScripts(styledText.text)) {

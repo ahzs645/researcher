@@ -13,6 +13,7 @@ import { resolveFigureImage } from './manuscriptImages';
 import { wrapManuscriptScript } from './manuscriptScripts';
 import { parseManuscriptTableGrid } from './manuscriptTableGrid';
 import { titlePageSpacerLineCount } from './manuscriptTitlePage';
+import { PRINTABLE_WIDTH_PX } from './manuscriptPageMetrics';
 import { type NumberedFigure } from './manuscriptTypes';
 
 // Build a BlockNote document from the neutral document-node model. Shared by the
@@ -122,9 +123,11 @@ const tableToBlocks = (
   const grid = parseManuscriptTableGrid(figure.tableData);
   if (grid.rows.length > 0 && grid.columnCount > 0) {
     // BlockNote's DOCX mapper treats these values as CSS pixels and converts
-    // them to twips. 624 px maps to the 9,360 DXA usable width of a Letter page
-    // with one-inch margins, preventing narrow content-sized tables.
-    const columnWidth = Math.floor(624 / grid.columnCount);
+    // them to twips, so this is the usable width of the page with one-inch
+    // margins — it stops tables shrinking to fit their content. A4 is the
+    // narrower of the two page sizes the exporters produce, so it sets the
+    // number: 600 px is 450 pt, and A4 less its margins is 451.
+    const columnWidth = Math.floor(PRINTABLE_WIDTH_PX / grid.columnCount);
     blocks.push({
       type: 'table',
       content: {

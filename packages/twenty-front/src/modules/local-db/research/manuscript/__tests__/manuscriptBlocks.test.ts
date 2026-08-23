@@ -89,7 +89,8 @@ describe('buildBlockNoteDocument', () => {
     expect(serialized).toContain('C_{f}=\\\\frac{C_{metal}}{C_{background}}');
     expect(serialized).toContain('"textColor":"equation"');
     expect(serialized).not.toContain('$$');
-    expect(serialized).toContain('"columnWidths":[312,312]');
+    // Two columns of the printable width, which A4 sets.
+    expect(serialized).toContain('"columnWidths":[300,300]');
     expect(serialized).toContain('"previewWidth":600');
     expect(serialized).toContain('Figure 1. Chart');
   });

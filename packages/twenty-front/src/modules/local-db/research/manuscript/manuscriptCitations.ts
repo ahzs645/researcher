@@ -219,15 +219,31 @@ export const bibliographyHtmlToMarkdown = (html: string): string =>
       .trim(),
   );
 
+const NAMED_XML_ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&apos;': "'",
+  '&gt;': '>',
+  '&lt;': '<',
+  '&quot;': '"',
+};
+
+const XML_ENTITY = /&(?:amp|apos|gt|lt|quot|#(\d{1,7})|#x([0-9a-fA-F]{1,6}));/g;
+
+// One pass, so a decoded `&` can never be read as the start of another entity.
+// citeproc writes numeric references for punctuation it escapes (`&#38;` for
+// an ampersand in a journal name); decoding only the named five left that text
+// literal, and the exporters then escaped its `&` into `&amp;#38;`.
 const decodeXmlEntities = (value: string): string =>
-  value
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'");
+  value.replace(XML_ENTITY, (entity, decimal?: string, hex?: string) => {
+    const codePoint =
+      decimal !== undefined
+        ? Number(decimal)
+        : hex !== undefined
+          ? Number.parseInt(hex, 16)
+          : Number.NaN;
+    if (Number.isNaN(codePoint)) return NAMED_XML_ENTITIES[entity] ?? entity;
+    return codePoint > 0x10ffff ? entity : String.fromCodePoint(codePoint);
+  });
 
 // CSL HTML → BlockNote-style inline content runs (bold/italic styles kept).
 export type BibliographyInlineRun = {
@@ -236,6 +252,9 @@ export type BibliographyInlineRun = {
   styles: { bold?: true; italic?: true };
 };
 
+const BIBLIOGRAPHY_BLOCK_TAG =
+  /^<\/?(?:div|p|br|li|ol|ul|tr|td|th|section|table)\b/i;
+
 export const bibliographyHtmlToInlineRuns = (
   html: string,
 ): BibliographyInlineRun[] => {
@@ -243,6 +262,21 @@ export const bibliographyHtmlToInlineRuns = (
   const pattern = /<(i|em|b|strong)\b[^>]*>([\s\S]*?)<\/\1>|<[^>]*>|([^<]+)/gi;
   for (const match of html.matchAll(pattern)) {
     const [, tag, inner, plain] = match;
+    if (tag === undefined && plain === undefined) {
+      // A block tag citeproc uses for layout — `csl-left-margin` holding "1."
+      // next to `csl-right-inline` holding the entry. Dropping it silently
+      // glued the two together as "1.McMichael"; a block is a word boundary.
+      // Inline tags are not: `m<sup>3</sup>` must stay one word.
+      const previous = runs.at(-1)?.text ?? '';
+      if (
+        BIBLIOGRAPHY_BLOCK_TAG.test(match[0]) &&
+        previous.length > 0 &&
+        !/\s$/.test(previous)
+      ) {
+        runs.push({ type: 'text', text: ' ', styles: {} });
+      }
+      continue;
+    }
     if (tag !== undefined) {
       const text = decodeXmlEntities(
         inner.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' '),
@@ -267,6 +301,7 @@ export const bibliographyHtmlToInlineRuns = (
       runs.push({ type: 'text', text, styles: {} });
     }
   }
+  while ((runs.at(-1)?.text ?? 'x').trim().length === 0) runs.pop();
   return runs;
 };
 

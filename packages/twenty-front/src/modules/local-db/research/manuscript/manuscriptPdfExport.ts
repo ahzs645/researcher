@@ -13,6 +13,7 @@ import {
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
+import { isImageDataUrl } from './manuscriptImages';
 import { latexToUnicodeText } from './manuscriptMathText';
 
 // PDF export from the *same* BlockNote block model the DOCX exporter builds —
@@ -122,6 +123,14 @@ export const exportManuscriptToPdfBlob = async (
       heading: headingMapping,
     },
   });
+  // BlockNote resolves every file through its hosted CORS proxy, data URLs
+  // included — which sends the author's figures to a third party and fails
+  // outright with no network. An embedded image is already here: read it.
+  const resolveExternalFile = exporter.options.resolveFileUrl;
+  exporter.options.resolveFileUrl = async (url) =>
+    isImageDataUrl(url)
+      ? (await fetch(url)).blob()
+      : (resolveExternalFile?.(url) ?? url);
   exporter.styles.page = {
     ...exporter.styles.page,
     paddingTop: 72,

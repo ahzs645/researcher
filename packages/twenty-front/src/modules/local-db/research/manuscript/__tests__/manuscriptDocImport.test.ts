@@ -148,7 +148,7 @@ describe('parseMarkdownDocument', () => {
     ]);
   });
 
-  it('preserves heading levels and lets subsections inherit their parent type', () => {
+  it('anchors the shallowest heading at level 1 and lets subsections inherit their parent type', () => {
     const doc = parseMarkdownDocument(
       [
         '## Methods',
@@ -159,15 +159,18 @@ describe('parseMarkdownDocument', () => {
         'Twenty volunteers.',
       ].join('\n'),
     );
+    // The document's own top level is `##`, so that is level 1 — a Word file
+    // whose sections are all "Heading 2" must not export a level deeper than
+    // the one its author wrote.
     // "Study site" matches the METHODS rule directly; "Participants" matches no
     // rule and inherits METHODS from its ancestor instead of falling to OTHER.
     expect(doc.sections).toMatchObject([
-      { name: 'Methods', sectionType: 'METHODS', placement: 'MAIN', level: 2 },
+      { name: 'Methods', sectionType: 'METHODS', placement: 'MAIN', level: 1 },
       {
         name: 'Study site',
         sectionType: 'METHODS',
         placement: 'MAIN',
-        level: 3,
+        level: 2,
       },
       {
         name: 'Participants',
@@ -176,6 +179,22 @@ describe('parseMarkdownDocument', () => {
         level: 3,
       },
     ]);
+  });
+
+  it('keeps relative depth when a document starts below the title', () => {
+    const doc = parseMarkdownDocument(
+      [
+        '# Metals downtown',
+        '',
+        '## Results',
+        'Numbers.',
+        '### Metals',
+        'Cu.',
+      ].join('\n'),
+    );
+
+    expect(doc.title).toBe('Metals downtown');
+    expect(doc.sections.map((section) => section.level)).toEqual([1, 2]);
   });
 
   it('inherits SUPPLEMENT for supplement subsections but not across front matter', () => {

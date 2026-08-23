@@ -348,6 +348,18 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
     }
   }
 
+  // A document whose own top-level headings are Word's "Heading 2" is still a
+  // document with top-level headings. Anchor the shallowest one at 1 so the
+  // outline depth an author sees matches the one they wrote, instead of every
+  // section exporting one level deeper than the title it sits under.
+  const body = blocks.slice(startIndex);
+  const shallowest = Math.min(...body.map((block) => block.level || 1));
+  if (Number.isFinite(shallowest) && shallowest > 1) {
+    for (const block of body) {
+      block.level = Math.max(1, (block.level || 1) - (shallowest - 1));
+    }
+  }
+
   const sections: ImportedSectionDraft[] = [];
   // "2.1 Sampling sites" under "2 Method" is still Method: an unrecognised
   // subsection inherits its nearest classified body ancestor instead of falling

@@ -66,18 +66,42 @@ const tableStyleRules = (): string =>
   }`,
   ].join('\n  ');
 
+// Style values reach this module from the journal profile, from a manuscript's
+// saved overrides, and from the `exportStyle` of an imported package — so they
+// are not all self-authored. A font family is a name; anything that could close
+// the string literal and reopen the stylesheet is stripped, because injected
+// CSS could add the remote requests this export exists to avoid.
+const cssFontFamily = (value: string | null | undefined): string =>
+  (value ?? '')
+    // An allowlist rather than a blocklist: a font name (or a stack of them)
+    // is letters, digits, spaces and separators, and nothing that could close
+    // the string literal or read as a url().
+    .replace(/[^A-Za-z0-9 ,.\-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Times New Roman';
+
+// Likewise a size is a number, whatever the stored JSON happens to hold.
+const cssNumber = (value: unknown, fallback: number): number =>
+  Number.isFinite(Number(value)) ? Number(value) : fallback;
+
 export const buildManuscriptHtmlCss = (style: JournalStyle): string => {
-  const fontFamily = style.fontFamily?.trim() || 'Times New Roman';
-  const bodyFontSize = style.bodyFontSize ?? 12;
-  const titleFontSize = style.titleFontSize ?? 16;
-  const headingFontSize = style.headingFontSize ?? 12;
-  const subheadingFontSize = style.subheadingFontSize ?? bodyFontSize;
-  const lineSpacing = Math.max(1, style.lineSpacing ?? 1.5);
-  const abstractLineSpacing = Math.max(1, style.abstractLineSpacing ?? 1.15);
-  const tableFontSize = Math.max(8, style.tableFontSize ?? bodyFontSize - 2);
+  const fontFamily = cssFontFamily(style.fontFamily);
+  const bodyFontSize = cssNumber(style.bodyFontSize, 12);
+  const titleFontSize = cssNumber(style.titleFontSize, 16);
+  const headingFontSize = cssNumber(style.headingFontSize, 12);
+  const subheadingFontSize = cssNumber(style.subheadingFontSize, bodyFontSize);
+  const lineSpacing = Math.max(1, cssNumber(style.lineSpacing, 1.5));
+  const abstractLineSpacing = Math.max(
+    1,
+    cssNumber(style.abstractLineSpacing, 1.15),
+  );
+  const tableFontSize = Math.max(
+    8,
+    cssNumber(style.tableFontSize, bodyFontSize - 2),
+  );
   const captionFontSize = Math.max(
     8,
-    style.figureCaptionFontSize ?? bodyFontSize - 2,
+    cssNumber(style.figureCaptionFontSize, bodyFontSize - 2),
   );
   const bodyAlignment =
     style.bodyAlignment === 'JUSTIFIED' ? 'justify' : 'left';
@@ -252,7 +276,7 @@ export const buildManuscriptHtmlCss = (style: JournalStyle): string => {
   figcaption {
     font-size: ${captionFontSize}pt;
     font-style: italic;
-    line-height: ${Math.max(1, style.figureCaptionLineSpacing ?? 1)};
+    line-height: ${Math.max(1, cssNumber(style.figureCaptionLineSpacing, 1))};
     margin-top: 0.4rem;
     text-align: left;
   }
@@ -262,7 +286,7 @@ export const buildManuscriptHtmlCss = (style: JournalStyle): string => {
   table {
     border-collapse: collapse;
     font-size: ${tableFontSize}pt;
-    line-height: ${Math.max(1, style.tableLineSpacing ?? 1)};
+    line-height: ${Math.max(1, cssNumber(style.tableLineSpacing, 1))};
     margin: 0 auto;
     width: 100%;
   }

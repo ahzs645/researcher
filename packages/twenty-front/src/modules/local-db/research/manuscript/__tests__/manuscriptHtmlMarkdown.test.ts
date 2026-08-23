@@ -26,6 +26,31 @@ const context = (
 });
 
 describe('manuscriptInlineToHtml', () => {
+  it('strips attributes from a passthrough tag, keeping only its id', () => {
+    // Section bodies are not all self-authored — an imported package or .docx
+    // can put anything in one — so a whitelisted tag name must not carry a
+    // whitelisted attribute list with it.
+    expect(
+      manuscriptInlineToHtml(
+        '<a href="javascript:alert(1)">click</a>',
+        context(),
+      ),
+    ).toBe('<a>click</a>');
+    expect(
+      manuscriptInlineToHtml(
+        '<span onmouseover="fetch(1)">metals</span>',
+        context(),
+      ),
+    ).toBe('<span>metals</span>');
+    expect(manuscriptInlineToHtml('<b ONCLICK=alert(1)>x</b>', context())).toBe(
+      '<b>x</b>',
+    );
+    // The pipeline's own cross-reference anchor still survives intact.
+    expect(manuscriptInlineToHtml('<a id="fig-1"></a>x', context())).toBe(
+      '<a id="fig-1"></a>x',
+    );
+  });
+
   it('escapes text that looks like markup but keeps pipeline anchors', () => {
     expect(manuscriptInlineToHtml('Levels <50% <b>bold</b>', context())).toBe(
       'Levels &lt;50% <b>bold</b>',

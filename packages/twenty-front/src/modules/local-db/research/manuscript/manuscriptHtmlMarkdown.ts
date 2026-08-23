@@ -34,7 +34,27 @@ const PLACEHOLDER = '\u0000';
 // Tags the manuscript pipeline itself emits (cross-reference anchors, script
 // runs). Anything else — `<50%`, a stray `<` in prose — is escaped as text.
 const PASSTHROUGH_TAG =
-  /<\/?(?:a|sup|sub|br|em|strong|i|b|span)(?:\s[^<>]*?)?\/?>/gi;
+  /<(\/?)(a|sup|sub|br|em|strong|i|b|span)((?:\s[^<>]*?)?)\/?>/gi;
+
+// The only attribute the pipeline itself puts on a passthrough tag.
+const PASSTHROUGH_ID =
+  /\bid\s*=\s*(?:"([A-Za-z0-9_:.-]+)"|'([A-Za-z0-9_:.-]+)'|([A-Za-z0-9_:.-]+))/i;
+
+// Rebuild a whitelisted tag from its name and, at most, its id. Section bodies
+// are not all self-authored — an imported package or .docx can put anything in
+// one — so echoing the original tag would carry `href="javascript:…"` and every
+// `on*` handler straight into a file the author goes on to share.
+const sanitizePassthroughTag = (
+  closing: string,
+  name: string,
+  attributes: string,
+): string => {
+  const tag = name.toLowerCase();
+  if (closing === '/') return `</${tag}>`;
+  const match = PASSTHROUGH_ID.exec(attributes);
+  const id = match?.[1] ?? match?.[2] ?? match?.[3];
+  return `<${tag}${id === undefined ? '' : ` id="${id}"`}>`;
+};
 
 export const escapeHtml = (value: string): string =>
   value
@@ -96,7 +116,11 @@ export const manuscriptInlineToHtml = (
         `<img src="${escapeHtmlAttribute(sanitizeUrl(String(src)))}" alt="${escapeHtmlAttribute(alt)}">`,
       ),
     )
-    .replace(PASSTHROUGH_TAG, (tag) => protect(tag));
+    .replace(
+      PASSTHROUGH_TAG,
+      (_match, closing: string, name: string, attributes: string) =>
+        protect(sanitizePassthroughTag(closing, name, attributes)),
+    );
 
   working = escapeHtml(working);
 

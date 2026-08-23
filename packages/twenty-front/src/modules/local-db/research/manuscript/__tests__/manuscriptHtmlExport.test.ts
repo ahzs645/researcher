@@ -190,6 +190,39 @@ describe('exportManuscriptToHtml', () => {
     expect(html).toMatch(/id="view-table-academic"\s+checked/);
   });
 
+  it('keeps a hostile style value out of the stylesheet', async () => {
+    // `fontFamily` is restored verbatim from an imported package's exportStyle,
+    // so it must not be able to close the CSS string and reopen the sheet. The
+    // attacker's characters are neutralised, not their letters: what matters is
+    // that nothing functional survives.
+    const injected = await exportManuscriptToHtml(
+      buildManuscriptBundle({
+        ...input,
+        style: {
+          ...input.style,
+          fontFamily:
+            'Times"; } body { background: url("https://evil.example/x',
+          bodyFontSize: '12; } body { color: red' as unknown as number,
+        },
+      }),
+    );
+    const stylesheet = /<style>([\s\S]*?)<\/style>/.exec(injected)?.[1] ?? '';
+
+    // The declaration is still one well-formed quoted font stack.
+    expect(stylesheet).toContain(
+      '--body-font: "Times body background url https evil.example x", "Times New Roman", Times, serif;',
+    );
+    // Nothing that would fetch, and no escape from the literal. (The only
+    // remaining `http://` in the file is the MathML namespace declaration,
+    // which names a spec rather than requesting anything.)
+    expect(stylesheet).not.toContain('url(');
+    expect(stylesheet).not.toMatch(/https?:\/\//);
+    expect(injected).not.toMatch(/(?:src|href)="https?:\/\//);
+    // A non-numeric size falls back rather than injecting a declaration.
+    expect(stylesheet).toContain('--body-size: 12pt;');
+    expect(stylesheet).not.toContain('color: red');
+  });
+
   it('escapes prose that looks like markup', async () => {
     const withMarkup = await exportManuscriptToHtml(
       buildManuscriptBundle({

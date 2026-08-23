@@ -106,6 +106,7 @@ export const exportManuscriptToPdfBlob = async (
     'equation',
     'figure-caption',
     'table-caption',
+    'title-line',
   ];
   // react-pdf takes the line indent from the first *fragment* of the paragraph,
   // and a paragraph built from inline runs has its own nested Text there — so
@@ -159,7 +160,11 @@ export const exportManuscriptToPdfBlob = async (
           lineHeight:
             block.props.textColor === 'abstract-body'
               ? abstractLineSpacing
-              : bodyLineSpacing,
+              : // A cover page is laid out by counting lines, so a title-page
+                // line is one line — not one line times the body's spacing.
+                block.props.textColor === 'title-line'
+                ? 1
+                : bodyLineSpacing,
           ...(indent ? { textIndent: firstLineIndent } : {}),
           textAlign:
             block.props.textAlignment === 'justify'

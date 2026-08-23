@@ -317,7 +317,11 @@ const createManuscriptDocxMappings = ({
             ? figureCaptionLineSpacing
             : isAffiliation
               ? affiliationLineSpacing
-              : bodyLineSpacing;
+              : // A cover page is laid out by counting lines, so a title-page
+                // line is one line — not one line times the body's spacing.
+                block.props.textColor === 'title-line'
+                ? 1
+                : bodyLineSpacing;
       const children = isFigureCaption
         ? manuscriptScriptSegments(equation).map(
             (segment) =>
@@ -364,7 +368,11 @@ const createManuscriptDocxMappings = ({
       // as a mistake, and the equation and author-line paragraphs returned
       // above never reach here.
       const isBodyProse =
-        !isAbstract && !isTableCaption && !isFigureCaption && !isAffiliation;
+        !isAbstract &&
+        !isTableCaption &&
+        !isFigureCaption &&
+        !isAffiliation &&
+        block.props.textColor !== 'title-line';
       return new Paragraph({
         alignment,
         ...(isBodyProse && paragraphFirstLineIndent > 0

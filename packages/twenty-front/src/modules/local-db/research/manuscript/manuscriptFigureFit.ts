@@ -74,7 +74,9 @@ export const fitManuscriptFigureImages = async (
     figure: T,
   ): T => {
     const percent = percentByRefKey.get(figure.refKey ?? figure.id);
-    return percent === undefined ? figure : { ...figure, widthPercent: percent };
+    return percent === undefined
+      ? figure
+      : { ...figure, widthPercent: percent };
   };
 
   return {

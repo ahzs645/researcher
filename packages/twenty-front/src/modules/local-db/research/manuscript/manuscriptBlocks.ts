@@ -209,10 +209,13 @@ const proseToBlocks = (
 const pageBreakBlock = (): ExportPartialBlock => ({ type: 'pageBreak' });
 
 // A blank centred paragraph — the vertical space a cover page is built from.
+// A no-break space, not an empty string: react-pdf gives a text node with no
+// characters no line box at all, so an empty paragraph was worth nothing and a
+// twelve-line gap collapsed to almost nothing.
 const titlePageSpacerBlock = (): ExportPartialBlock => ({
   type: 'paragraph',
-  props: { textAlignment: 'center' },
-  content: '',
+  props: { textAlignment: 'center', textColor: 'title-line' },
+  content: '\u00a0',
 });
 
 const numberNestedHeadings = (
@@ -323,7 +326,10 @@ const bundleToBlocks = (
           ? [
               {
                 type: 'paragraph',
-                props: { textAlignment: affiliationAlignment },
+                props: {
+                  textAlignment: affiliationAlignment,
+                  textColor: 'title-line',
+                },
                 content: line,
               },
             ]

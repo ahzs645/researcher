@@ -480,21 +480,24 @@ describe('buildBlockNoteDocument', () => {
 });
 
 describe('front matter pagination and title page templates', () => {
-  const frontMatterBundle = (style: Record<string, unknown>) =>
+  const frontMatterBundle = (
+    style: Record<string, unknown>,
+    titlePageExtraLines: string[] = [
+      'by',
+      'Student # (230235918)',
+      '---',
+      'THESIS SUBMITTED IN PARTIAL FULFILLMENT OF',
+      '---',
+      'MARCH 2023',
+    ],
+  ) =>
     buildManuscriptBundle({
       manuscript: {
         id: 'paper',
         name: 'Assessing particulate bound metals',
         authorLine: 'Ahmad Jalil',
         affiliations: 'University of Northern British Columbia',
-        titlePageExtraLines: [
-          'by',
-          'Student # (230235918)',
-          '---',
-          'THESIS SUBMITTED IN PARTIAL FULFILLMENT OF',
-          '---',
-          'MARCH 2023',
-        ],
+        titlePageExtraLines,
       },
       style: { name: 'Thesis', ...style },
       sections: [
@@ -579,13 +582,40 @@ describe('front matter pagination and title page templates', () => {
     expect(serialized).toContain('THESIS SUBMITTED IN PARTIAL FULFILLMENT OF');
     // The `---` lines became blank spacers, not literal rules.
     expect(serialized).not.toContain('---');
+    // A spacer carries a no-break space rather than nothing: react-pdf gives a
+    // text node with no characters no line box, so an empty paragraph took up
+    // no room and the gap the author asked for disappeared.
     expect(
       coverBlocks.filter(
         (block) =>
           block.type === 'paragraph' &&
-          ['""', '[]'].includes(JSON.stringify(block.content)),
+          JSON.stringify(block.content) === '"\u00a0"',
       ).length,
     ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('stacks a counted spacer into that many blank lines', () => {
+    const { blocks } = buildBlockNoteDocument(
+      frontMatterBundle(
+        {
+          frontMatterLayout: 'SEPARATE_TITLE_PAGE',
+          titlePageTemplate: 'THESIS',
+        },
+        ['by', '--- 6', 'MARCH 2023'],
+      ),
+    );
+    const coverBlocks = blocks.slice(
+      blocks.findIndex((block) => block.type === 'heading'),
+      blocks.findIndex((block) => block.type === 'pageBreak'),
+    );
+
+    expect(
+      coverBlocks.filter(
+        (block) => JSON.stringify(block.content) === '"\u00a0"',
+      ).length,
+      // Six from the `--- 6`, plus the one a thesis cover puts under its title.
+    ).toBe(7);
+    expect(JSON.stringify(coverBlocks)).not.toContain('--- 6');
   });
 
   it('leaves the journal masthead alignment alone by default', () => {

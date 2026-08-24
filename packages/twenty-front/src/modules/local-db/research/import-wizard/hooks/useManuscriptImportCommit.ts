@@ -288,6 +288,7 @@ export const useManuscriptImportCommit = ({
       createSection,
       enqueueErrorSnackBar,
       enqueueSuccessSnackBar,
+      existingExportStyleOverrides,
       existingSectionCount,
       existingReferences,
       failed,

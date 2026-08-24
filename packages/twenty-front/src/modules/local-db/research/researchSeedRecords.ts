@@ -1164,6 +1164,56 @@ const ARCHIVES_ENVIRONMENTAL_CONTAMINATION_SUBMISSION_REQUIREMENTS =
     ['CONSENT_FOR_PUBLICATION', true],
   ]);
 
+const ATMOSPHERIC_MEASUREMENT_TECHNIQUES_SUBMISSION_REQUIREMENTS =
+  journalSubmissionRequirements([
+    ['FULL_TITLE', true],
+    ['ARTICLE_TYPE', true],
+    ['ABSTRACT', true],
+    ['KEYWORDS', false],
+    ['AUTHOR_ORDER', true],
+    ['CORRESPONDING_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR_INSTITUTION', true],
+    ['CORRESPONDING_AUTHOR_COUNTRY', true],
+    ['AFFILIATIONS', true],
+    ['FUNDING_INFORMATION', false],
+    ['MANUSCRIPT_FILE', true],
+    ['ACKNOWLEDGMENTS', true],
+    ['COMPETING_INTERESTS', true],
+    ['DATA_AVAILABILITY', true],
+  ]);
+
+const ATMOSPHERIC_MEASUREMENT_TECHNIQUES_SECTION_SKELETON = JSON.stringify([
+  { name: 'Title page', sectionType: 'TITLE_PAGE', placement: 'FRONT_MATTER' },
+  { name: 'Abstract', sectionType: 'ABSTRACT', placement: 'FRONT_MATTER' },
+  { name: 'Introduction', sectionType: 'INTRODUCTION', placement: 'MAIN' },
+  { name: 'Methods', sectionType: 'METHODS', placement: 'MAIN' },
+  { name: 'Results', sectionType: 'RESULTS', placement: 'MAIN' },
+  { name: 'Discussion', sectionType: 'DISCUSSION', placement: 'MAIN' },
+  { name: 'Conclusions', sectionType: 'CONCLUSION', placement: 'MAIN' },
+  {
+    name: 'Code and data availability',
+    sectionType: 'DATA_AVAILABILITY',
+    placement: 'BACK_MATTER',
+  },
+  {
+    name: 'Author contributions',
+    sectionType: 'AUTHOR_CONTRIBUTIONS',
+    placement: 'BACK_MATTER',
+  },
+  {
+    name: 'Competing interests',
+    sectionType: 'CONFLICTS',
+    placement: 'BACK_MATTER',
+  },
+  {
+    name: 'Acknowledgements',
+    sectionType: 'ACKNOWLEDGMENTS',
+    placement: 'BACK_MATTER',
+  },
+  { name: 'References', sectionType: 'REFERENCES', placement: 'BACK_MATTER' },
+  { name: 'Appendix A', sectionType: 'APPENDIX', placement: 'SUPPLEMENT' },
+]);
+
 const ATMOSPHERIC_ENVIRONMENT_SUBMISSION_REQUIREMENTS =
   journalSubmissionRequirements([
     ['FULL_TITLE', true],
@@ -1289,18 +1339,46 @@ const journalTemplateRecords = (): SeedRecord[] => [
     tableCaptionPosition: 'ABOVE',
     abstractWordLimit: 250,
     sectionSkeleton: JSON.stringify([
-      { name: 'Title page', sectionType: 'TITLE_PAGE', placement: 'FRONT_MATTER' },
+      {
+        name: 'Title page',
+        sectionType: 'TITLE_PAGE',
+        placement: 'FRONT_MATTER',
+      },
       { name: 'Abstract', sectionType: 'ABSTRACT', placement: 'FRONT_MATTER' },
       { name: 'Keywords', sectionType: 'KEYWORDS', placement: 'FRONT_MATTER' },
       { name: 'Introduction', sectionType: 'INTRODUCTION', placement: 'MAIN' },
-      { name: 'Results and discussion', sectionType: 'RESULTS', placement: 'MAIN' },
+      {
+        name: 'Results and discussion',
+        sectionType: 'RESULTS',
+        placement: 'MAIN',
+      },
       { name: 'Methods', sectionType: 'METHODS', placement: 'MAIN' },
-      { name: 'Acknowledgements', sectionType: 'ACKNOWLEDGMENTS', placement: 'BACK_MATTER' },
-      { name: 'Author contributions', sectionType: 'AUTHOR_CONTRIBUTIONS', placement: 'BACK_MATTER' },
+      {
+        name: 'Acknowledgements',
+        sectionType: 'ACKNOWLEDGMENTS',
+        placement: 'BACK_MATTER',
+      },
+      {
+        name: 'Author contributions',
+        sectionType: 'AUTHOR_CONTRIBUTIONS',
+        placement: 'BACK_MATTER',
+      },
       { name: 'Funding', sectionType: 'FUNDING', placement: 'BACK_MATTER' },
-      { name: 'Conflicts of interest', sectionType: 'CONFLICTS', placement: 'BACK_MATTER' },
-      { name: 'Data availability', sectionType: 'DATA_AVAILABILITY', placement: 'BACK_MATTER' },
-      { name: 'References', sectionType: 'REFERENCES', placement: 'BACK_MATTER' },
+      {
+        name: 'Conflicts of interest',
+        sectionType: 'CONFLICTS',
+        placement: 'BACK_MATTER',
+      },
+      {
+        name: 'Data availability',
+        sectionType: 'DATA_AVAILABILITY',
+        placement: 'BACK_MATTER',
+      },
+      {
+        name: 'References',
+        sectionType: 'REFERENCES',
+        placement: 'BACK_MATTER',
+      },
     ]),
     twoColumn: true,
     referenceDocUrl: '',
@@ -1571,6 +1649,45 @@ const journalTemplateRecords = (): SeedRecord[] => [
     outputFormats: ['DOCX', 'PDF', 'ZIP'],
     notes:
       'Co-author review layout derived from the Addis Ababa working draft: compact title and abstract, tightly stacked left-aligned affiliations, justified double-spaced body, and single-spaced academic tables.',
+  }),
+  makeRecord('journalTemplate', 'amt-copernicus', 15, {
+    name: 'Atmospheric Measurement Techniques (Copernicus)',
+    profileKey: 'copernicus-atmospheric-measurement-techniques',
+    citationMode: 'AUTHOR_DATE',
+    citationStyleId: 'copernicus-publications',
+    figureLabelFormat: 'Figure {n}',
+    tableLabelFormat: 'Table {n}',
+    supplementPrefix: 'S',
+    numberingScope: 'CONTINUOUS',
+    crossRefFormat: 'Fig. {n}',
+    // Copernicus sets figure captions under the artwork and table captions over
+    // the grid, and numbers its display equations on the right margin.
+    figureCaptionPosition: 'BELOW',
+    tableCaptionPosition: 'ABOVE',
+    abstractWordLimit: 350,
+    keywordMinimum: 0,
+    keywordMaximum: 12,
+    sectionSkeleton: ATMOSPHERIC_MEASUREMENT_TECHNIQUES_SECTION_SKELETON,
+    requiredArtifacts: ['COVER_LETTER', 'SUGGESTED_REVIEWERS'],
+    submissionRequirements:
+      ATMOSPHERIC_MEASUREMENT_TECHNIQUES_SUBMISSION_REQUIREMENTS,
+    lineNumbering: true,
+    pageNumbering: true,
+    sectionNumbering: true,
+    twoColumn: false,
+    frontMatterLayout: 'TITLE_WITH_ABSTRACT',
+    fontFamily: 'Times New Roman',
+    bodyFontSize: 12,
+    titleFontSize: 18,
+    headingFontSize: 13,
+    subheadingFontSize: 12,
+    lineSpacing: 1.5,
+    abstractLineSpacing: 1.5,
+    bodyAlignment: 'JUSTIFIED',
+    referenceDocUrl: '',
+    outputFormats: ['DOCX', 'PDF', 'ZIP'],
+    notes:
+      'Copernicus author-date profile (AMT, ACP, ESSD): numbered sections, numbered display equations, and a code-and-data availability statement.',
   }),
 ];
 

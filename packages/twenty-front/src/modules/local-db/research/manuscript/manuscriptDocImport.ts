@@ -14,8 +14,11 @@ import {
   TABLE_SPAN_LEFT_MARKER,
   TABLE_SPAN_UP_MARKER,
 } from './manuscriptTableGrid';
-import { gridToMarkdownTable } from './manuscriptTables';
-import { wrapManuscriptScript } from './manuscriptScripts';
+import { gridToMarkdownTable, parseMarkdownTable } from './manuscriptTables';
+import {
+  stripManuscriptScriptMarkers,
+  wrapManuscriptScript,
+} from './manuscriptScripts';
 import { type PortableResearchPaperManifest } from './manuscriptPortableManifest';
 import { type AssetKind } from './manuscriptTypes';
 
@@ -311,6 +314,7 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
 
   let title: string | undefined;
   let startIndex = 0;
+  let titlePageBlock: Block | null = null;
 
   const first = blocks[0];
   if (first.heading === null) {
@@ -325,6 +329,7 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
       first.heading = 'Title page';
       first.level = 1;
       first.body = remainder;
+      titlePageBlock = first;
     } else {
       startIndex = 1;
     }
@@ -342,6 +347,7 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
       if (first.body.length > 0) {
         first.heading = 'Title page';
         first.level = 1;
+        titlePageBlock = first;
       } else {
         startIndex = 1;
       }
@@ -353,7 +359,15 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
   // outline depth an author sees matches the one they wrote, instead of every
   // section exporting one level deeper than the title it sits under.
   const body = blocks.slice(startIndex);
-  const shallowest = Math.min(...body.map((block) => block.level || 1));
+  // The synthetic "Title page" block is ours, not the author's: anchoring the
+  // outline on its level 1 left a document whose own top-level sections are
+  // Word "Heading 2" exporting one level too deep.
+  const outlineBody = body.filter((block) => block !== titlePageBlock);
+  const shallowest = Math.min(
+    ...(outlineBody.length > 0 ? outlineBody : body).map(
+      (block) => block.level || 1,
+    ),
+  );
   if (Number.isFinite(shallowest) && shallowest > 1) {
     for (const block of body) {
       block.level = Math.max(1, (block.level || 1) - (shallowest - 1));
@@ -886,6 +900,28 @@ const headingBlock = (
   };
 };
 
+// A styled paragraph longer than this is a mis-styled body paragraph, not a
+// heading — the longest real title in the seeded template library is ~180
+// characters.
+const STYLED_HEADING_MAX_LENGTH = 250;
+
+// "Ahmad Jalil and Hossein Kazemian", "A. Jalil^1*, H. Kazemian^1" — the author
+// line of a journal title block. Word centres and bolds it exactly like a
+// heading, so without this it became a section whose body swallowed the
+// affiliation, the correspondence line and everything up to the abstract.
+const looksLikeAuthorList = (text: string): boolean => {
+  const stripped = stripManuscriptScriptMarkers(text).trim();
+  if (stripped.length === 0 || stripped.includes('@')) return false;
+  if (!/^[\p{Lu}]/u.test(stripped)) return false;
+  const words = stripped.split(/\s+/);
+  if (words.length > 15) return false;
+  if (!/(?:,|;|\band\b|&)/.test(stripped)) return false;
+  const nameLike = words.filter((word) =>
+    /^[\p{Lu}][\p{L}'’.-]*[,;]?$/u.test(word),
+  ).length;
+  return nameLike >= 2 && nameLike >= words.length - 3;
+};
+
 const wordParagraphToMarkdown = (
   paragraphXml: string,
   options: WordImportOptions,
@@ -946,16 +982,27 @@ const wordParagraphToMarkdown = (
   let headingSource: WordMarkdownBlock['headingSource'];
   let finalLevel = 0;
   // A multi-line paragraph is prose with breaks in it, never a single heading.
-  if (math.length === 0 && !isProseLike(text) && !text.includes('\n')) {
-    if (level > 0) {
+  if (math.length === 0 && !text.includes('\n')) {
+    if (level > 0 && text.length <= STYLED_HEADING_MAX_LENGTH) {
+      // Word's own heading style is a declaration, not a guess — trust it even
+      // when the text reads like prose. "2. Introduction" ends its number with
+      // a full stop and a real paper title runs well past a sentence, and both
+      // used to be demoted to body text, taking every section under them with
+      // it.
       finalLevel = Math.min(level, 3);
       headingSource = 'style';
-    } else if (detectedLevel > 0) {
-      finalLevel = detectedLevel;
-      headingSource = 'semantic';
-    } else if (isDirectlyBold(paragraphXml) && text.length <= 100) {
-      finalLevel = 3;
-      headingSource = 'bold';
+    } else if (!isProseLike(text)) {
+      if (detectedLevel > 0) {
+        finalLevel = detectedLevel;
+        headingSource = 'semantic';
+      } else if (
+        isDirectlyBold(paragraphXml) &&
+        text.length <= 100 &&
+        !looksLikeAuthorList(text)
+      ) {
+        finalLevel = 3;
+        headingSource = 'bold';
+      }
     }
   }
   const renderedText =
@@ -1018,6 +1065,13 @@ const wordTableToMarkdown = (tableXml: string): string => {
   );
   const grid = rows.filter((cells) => cells.length > 0);
   if (grid.length === 0) return '';
+  // A one-cell table is a boxed note ("Working-draft status: …"), not data.
+  // Left as a table it became a captionless one-cell `Table 1` that renumbered
+  // every real table after it.
+  if (grid.length === 1 && grid[0].length === 1) {
+    const text = grid[0][0].trim();
+    if (text.length > 0) return `\n${text}\n`;
+  }
   // Word marks repeated header rows with `w:tblHeader`; a leading run of them
   // is the table's header deck.
   const headerFlags = rowMatches
@@ -1201,6 +1255,89 @@ const removeDuplicateTitleBlocks = (
   });
 };
 
+// The title block of a journal manuscript is a stack of centred, bold lines —
+// the title continuation, a subtitle, the author list — that Word never styles
+// as headings. Our own bold/semantic guesses turn each of them into a section
+// whose body then swallows the affiliation and the correspondence line. Once a
+// document proves it uses real heading styles, treat every *guessed* heading
+// before its first recognisable section (Abstract, Keywords, Introduction…) as
+// title-page furniture instead.
+const demoteLeadingTitleBlockHeadings = (
+  blocks: WordMarkdownBlock[],
+): WordMarkdownBlock[] => {
+  if (!blocks.some((block) => block.headingSource === 'style')) return blocks;
+  const boundary = blocks.findIndex(
+    (block) =>
+      block.sourceHeadingLevel !== undefined &&
+      classifyHeading(
+        block.markdown.replace(/^\s*#{1,6}\s*/, '').split('\n')[0],
+      ).sectionType !== 'OTHER',
+  );
+  if (boundary < 0) return blocks;
+
+  return blocks.map((block, index) => {
+    if (
+      index >= boundary ||
+      block.headingSource === undefined ||
+      block.headingSource === 'style'
+    ) {
+      return block;
+    }
+    const {
+      sourceHeadingLevel: _level,
+      headingSource: _source,
+      ...rest
+    } = block;
+    return {
+      ...rest,
+      markdown: block.markdown.replace(/^\s*#{1,6}\s+/, '').trimEnd(),
+    };
+  });
+};
+
+const TITLE_STYLE = /\b(?:title|subtitle)\b/i;
+
+// "Keywords:" and a bare abstract paragraph get headings we invent, at a level
+// we picked. Anchor them to the document's own top heading level so the
+// imported outline matches the paper instead of nesting the front matter one
+// step deeper than everything else.
+const alignSyntheticFrontMatterHeadings = (
+  blocks: WordMarkdownBlock[],
+): WordMarkdownBlock[] => {
+  const styledLevels = blocks
+    .filter(
+      (block) =>
+        block.headingSource === 'style' &&
+        // The "Title" style names the document, not its first section, so it
+        // is not the level the sections sit at.
+        !TITLE_STYLE.test(`${block.styleId ?? ''} ${block.styleName ?? ''}`),
+    )
+    .map((block) => block.sourceHeadingLevel ?? 1);
+  if (styledLevels.length === 0) return blocks;
+  const topLevel = Math.min(...styledLevels);
+
+  return blocks.map((block) => {
+    if (
+      block.headingSource !== 'semantic' ||
+      block.sourceHeadingLevel === undefined ||
+      block.sourceHeadingLevel === topLevel ||
+      !/^\s*#{1,6}\s+(keywords|abstract)\s*$/i.test(
+        block.markdown.split('\n\n')[0] ?? '',
+      )
+    ) {
+      return block;
+    }
+    return {
+      ...block,
+      sourceHeadingLevel: topLevel,
+      markdown: block.markdown.replace(
+        /^(\s*)#{1,6}(\s+)/,
+        `$1${'#'.repeat(topLevel)}$2`,
+      ),
+    };
+  });
+};
+
 export const parseWordMlToMarkdownBlocks = (
   documentXml: string,
   options: WordImportOptions = {},
@@ -1216,8 +1353,12 @@ export const parseWordMlToMarkdownBlocks = (
         : wordParagraphToMarkdown(token, options)),
     );
   }
-  return injectAuthorContributionsHeading(
-    injectAbstractHeading(removeDuplicateTitleBlocks(out)),
+  return alignSyntheticFrontMatterHeadings(
+    demoteLeadingTitleBlockHeadings(
+      injectAuthorContributionsHeading(
+        injectAbstractHeading(removeDuplicateTitleBlocks(out)),
+      ),
+    ),
   );
 };
 
@@ -1257,14 +1398,20 @@ const AFFILIATION_LINE =
 const DEGREE_STATEMENT =
   /thesis|dissertation|in partial fulfil|requirements for the degree|degree of\b/i;
 const CORRESPONDING_LINE = /^\*?(?:corresponding author|correspondence)\s*:/i;
+const EMAIL_ADDRESS = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 
-const isAuthorCandidate = (line: string): boolean =>
+const isAuthorCandidate = (line: string, hasConnector: boolean): boolean =>
   line.length <= 200 &&
   !TITLE_PAGE_CONNECTOR.test(line) &&
   !DEGREE_STATEMENT.test(line) &&
   !AFFILIATION_LINE.test(line) &&
   !CORRESPONDING_LINE.test(line) &&
-  !/^\d/.test(line);
+  !/^\d/.test(line) &&
+  // A thesis cover names its author on the line after "by", so anything there
+  // is the author. A journal title block has no connector, and the line under
+  // the title is just as often the rest of the title — take it only when it
+  // reads like a list of people.
+  (hasConnector || looksLikeAuthorList(line));
 
 type TitlePageMetadata = {
   sections: ImportedSectionDraft[];
@@ -1272,6 +1419,10 @@ type TitlePageMetadata = {
   affiliations?: string;
   correspondingAuthor?: string;
   titlePageExtraLines?: string[];
+  // Title lines the source wrapped onto their own paragraphs, in order. A
+  // journal title block sets the title over two or three centred lines; only
+  // the first reached `title`, and the rest used to be filed as furniture.
+  titleContinuationLines?: string[];
 };
 
 const extractTitlePageMetadata = (
@@ -1323,12 +1474,24 @@ const extractTitlePageMetadata = (
     TITLE_PAGE_CONNECTOR.test(line),
   );
   const authorIndex = lines.findIndex(
-    (line, index) => index > connectorIndex && isAuthorCandidate(line),
+    (line, index) =>
+      index > connectorIndex && isAuthorCandidate(line, connectorIndex >= 0),
   );
   const authorLine = authorIndex >= 0 ? lines[authorIndex] : undefined;
-  const correspondingIndex = lines.findIndex((line) =>
+  // Journals print "Correspondence: …"; plenty of drafts just put the author's
+  // name and address on their own line under the affiliation.
+  const explicitCorrespondingIndex = lines.findIndex((line) =>
     CORRESPONDING_LINE.test(line),
   );
+  const correspondingIndex =
+    explicitCorrespondingIndex >= 0
+      ? explicitCorrespondingIndex
+      : lines.findIndex(
+          (line, index) =>
+            index > authorIndex &&
+            EMAIL_ADDRESS.test(line) &&
+            !AFFILIATION_LINE.test(line),
+        );
   const correspondingAuthor =
     correspondingIndex >= 0
       ? lines[correspondingIndex].replace(/^\*|\*$/g, '').trim()
@@ -1348,11 +1511,24 @@ const extractTitlePageMetadata = (
   const affiliationLines = lines.filter((_line, index) =>
     affiliationIndexes.has(index),
   );
+  // Everything above the author line (or above a thesis "by" connector) is
+  // still the title; everything below it is furniture.
+  const titleEnd = connectorIndex >= 0 ? connectorIndex : authorIndex;
+  const isTitleContinuation = (index: number): boolean =>
+    titleEnd > 0 &&
+    index < titleEnd &&
+    index !== correspondingIndex &&
+    !affiliationIndexes.has(index) &&
+    !DEGREE_STATEMENT.test(lines[index]);
+  const titleContinuationLines = lines.filter((_line, index) =>
+    isTitleContinuation(index),
+  );
   const extraLines = lines.filter(
     (_line, index) =>
       index !== authorIndex &&
       index !== correspondingIndex &&
-      !affiliationIndexes.has(index),
+      !affiliationIndexes.has(index) &&
+      !isTitleContinuation(index),
   );
 
   return {
@@ -1363,6 +1539,7 @@ const extractTitlePageMetadata = (
       : {}),
     ...(correspondingAuthor !== undefined ? { correspondingAuthor } : {}),
     ...(extraLines.length > 0 ? { titlePageExtraLines: extraLines } : {}),
+    ...(titleContinuationLines.length > 0 ? { titleContinuationLines } : {}),
   };
 };
 
@@ -1390,12 +1567,16 @@ export const parseWordDocumentFromBlocks = (
     );
   }
 
-  const { sections, ...titlePageMetadata } = extractTitlePageMetadata(
-    document.sections,
-  );
+  const { sections, titleContinuationLines, ...titlePageMetadata } =
+    extractTitlePageMetadata(document.sections);
+  const title =
+    titleContinuationLines === undefined || document.title === undefined
+      ? document.title
+      : [document.title, ...titleContinuationLines].join(' ');
 
   return {
     ...document,
+    ...(title !== undefined ? { title } : {}),
     sections,
     ...titlePageMetadata,
     warnings,
@@ -1432,12 +1613,16 @@ export const parseImportedAssetCaption = (
   kind: 'FIGURE' | 'TABLE',
 ): ImportedAssetCaption | null => {
   const prefix = kind === 'FIGURE' ? '(?:fig(?:ure)?)' : '(?:table|tbl)';
+  // The label may carry an appendix letter ("Table B1", "Fig. A2") or the
+  // supplement's "S" — both are part of the number, not of the caption text.
   const match = new RegExp(
-    `^\\s*${prefix}\\s*\\.?\\s*(?:([sS]?\\d+(?:\\.\\d+)*(?:[a-z])?)\\s*([.:)])?\\s*)?(.*)$`,
+    `^\\s*${prefix}\\s*\\.?\\s*(?:((?:[A-Za-z])?\\d+(?:\\.\\d+)*(?:[a-z])?)\\s*([.:)])?\\s*)?(.*)$`,
     'i',
   ).exec(line);
   if (match === null) return null;
-  let sourceLabel = match[1]?.replace(/^s/i, 'S');
+  let sourceLabel = match[1]?.replace(/^[a-z]/, (letter) =>
+    letter.toUpperCase(),
+  );
   let explicitLabel = match[2] !== undefined;
   let caption = match[3].trim();
   const embeddedSourceLabel =
@@ -1466,6 +1651,117 @@ const importedAssetRefKey = (
     : `imported-${kind.toLowerCase()}-${sourceLabel
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')}`;
+
+// ── Layout tables: numbered equations and single-cell callouts ─────────────
+// Word has no display-equation object, so Copernicus/AMT (and every template
+// derived from theirs) sets an equation in a one-row, two-column borderless
+// table: the equation on the left, "(3)" on the right. Elsevier and Springer
+// drafts do the same. Imported as data, each one became a junk `Table` that
+// renumbered the paper's real tables and printed a bordered grid around the
+// maths. They are equations — the composer already numbers, cross-references
+// and typesets `EQUATION` assets — and a one-cell table is a callout, which is
+// prose.
+
+const EQUATION_NUMBER_CELL = /^\(\s*([A-Za-z]?\d+(?:\.\d+)?[a-z]?)\s*\)$/;
+// An equation body needs a relation or an operator; a stray two-column table of
+// prose must not be swallowed.
+const EQUATION_BODY = /[=<>≤≥≈∝∑∫±]|\\frac|\\sum|\\int/;
+
+const equationRefKey = (label: string): string =>
+  `eq-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+type LayoutTableRewrite =
+  | { kind: 'equation'; latex: string; label: string }
+  | { kind: 'callout'; text: string };
+
+// Decide what a table block really is, from its parsed grid.
+const classifyLayoutTable = (block: string[]): LayoutTableRewrite | null => {
+  const rows = parseMarkdownTable(block.join('\n'));
+  if (rows.length !== 1) return null;
+  const cells = rows[0].map((cell) => cell.trim());
+
+  if (cells.length === 1) {
+    const text = cells[0];
+    return text.length === 0 || text.includes('|')
+      ? null
+      : { kind: 'callout', text };
+  }
+
+  if (cells.length !== 2) return null;
+  const [body, number] = cells;
+  const label = EQUATION_NUMBER_CELL.exec(number)?.[1];
+  if (label === undefined || body.length === 0 || !EQUATION_BODY.test(body)) {
+    return null;
+  }
+  return { kind: 'equation', latex: body, label };
+};
+
+// Rewrite layout tables in place: equations become `EQUATION` assets anchored
+// where they stood, callouts fall back to the prose they always were.
+export const extractLayoutTables = (
+  sections: ImportedSectionDraft[],
+  startOrderIndex = 0,
+  usedRefKeys: Set<string> = new Set<string>(),
+): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
+  const figures: ImportedFigureDraft[] = [];
+  let order = startOrderIndex;
+
+  const nextSections = sections.map((section) => {
+    const lines = section.content.split('\n');
+    const out: string[] = [];
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!isTableLine(lines[index])) {
+        out.push(lines[index]);
+        continue;
+      }
+      let end = index;
+      while (end < lines.length && isTableLine(lines[end])) end += 1;
+      const block = lines.slice(index, end);
+      const rewrite = classifyLayoutTable(block);
+      if (rewrite === null) {
+        out.push(...block);
+        index = end - 1;
+        continue;
+      }
+      if (rewrite.kind === 'callout') {
+        out.push(rewrite.text);
+        index = end - 1;
+        continue;
+      }
+
+      const refKeyBase = equationRefKey(rewrite.label);
+      let refKey = refKeyBase;
+      let duplicateIndex = 2;
+      while (usedRefKeys.has(refKey)) {
+        refKey = `${refKeyBase}-${duplicateIndex}`;
+        duplicateIndex += 1;
+      }
+      usedRefKeys.add(refKey);
+      figures.push({
+        name: `Equation (${rewrite.label})`,
+        assetKind: 'EQUATION',
+        placement: section.placement === 'SUPPLEMENT' ? 'SUPPLEMENT' : 'MAIN',
+        refKey,
+        caption: '',
+        sourceLabel: rewrite.label,
+        sectionOrderIndex: section.orderIndex,
+        equationLatex: rewrite.latex,
+        imageSource: 'NONE',
+        orderIndex: order,
+      });
+      order += 1;
+      out.push(assetPlacementMarker(refKey));
+      index = end - 1;
+    }
+    const content = out
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return { ...section, content, wordCount: countWords(content) };
+  });
+
+  return { sections: nextSections, figures };
+};
 
 export const extractTablesToFigures = (
   sections: ImportedSectionDraft[],
@@ -1794,6 +2090,69 @@ const plainRangeValue = (token: AssetReferenceToken): number | null =>
 // Convert source-visible labels ("Fig. 2.6b", "Fig. S2.18") into stable
 // asset references. The optional panel suffix remains outside the token, so a
 // reordered composite figure renders as the new number plus the same panel.
+// "Eq. (7)", "Eqs. (7) and (8)", "Eq. (11a)" — an equation reference wears its
+// number in parentheses, so it needs its own pass rather than the shared
+// `Fig./Table N` list matcher.
+const IMPORTED_EQUATION_REFERENCE =
+  /\b(Eqs?|Equations?)\.?\s+(\(\s*[A-Za-z]?\d+(?:\.\d+)?[a-z]?\s*\)(?:\s*(?:,|and|&|–|—|to)\s*\(\s*[A-Za-z]?\d+(?:\.\d+)?[a-z]?\s*\))*)/gi;
+const EQUATION_NUMBER_TOKEN = /\(\s*([A-Za-z]?\d+(?:\.\d+)?[a-z]?)\s*\)/g;
+
+const linkImportedEquationReferences = (
+  sections: ImportedSectionDraft[],
+  figures: ImportedFigureDraft[],
+): { sections: ImportedSectionDraft[]; linkedCount: number } => {
+  const byLabel = new Map<string, ImportedFigureDraft>();
+  for (const figure of figures) {
+    if (figure.assetKind !== 'EQUATION' || figure.sourceLabel === undefined) {
+      continue;
+    }
+    const label = figure.sourceLabel.toLowerCase();
+    if (!byLabel.has(label)) byLabel.set(label, figure);
+  }
+  if (byLabel.size === 0) return { sections, linkedCount: 0 };
+
+  let linkedCount = 0;
+  const linkedSections = sections.map((section) => {
+    const content = section.content.replace(
+      IMPORTED_EQUATION_REFERENCE,
+      (original: string, keyword: string, list: string) => {
+        EQUATION_NUMBER_TOKEN.lastIndex = 0;
+        const labels = [...list.matchAll(EQUATION_NUMBER_TOKEN)].map(
+          (match) => match[1],
+        );
+        const targets = labels.map((label) => byLabel.get(label.toLowerCase()));
+        // All or nothing: a half-linked list renders one live number beside a
+        // stale source number, which renumbering then makes wrong.
+        if (targets.some((target) => target === undefined)) return original;
+        linkedCount += targets.length;
+        let cursor = 0;
+        let targetIndex = 0;
+        EQUATION_NUMBER_TOKEN.lastIndex = 0;
+        let result = '';
+        for (const match of list.matchAll(EQUATION_NUMBER_TOKEN)) {
+          const index = match.index ?? 0;
+          result += list.slice(cursor, index);
+          result += `[#${targets[targetIndex]?.refKey ?? ''}]`;
+          cursor = index + match[0].length;
+          targetIndex += 1;
+        }
+        result += list.slice(cursor);
+        // The keyword is part of the rendered label ("(7)" carries no "Eq."),
+        // so it stays in the prose exactly as the author wrote it.
+        return `${keyword}${original.slice(
+          keyword.length,
+          original.length - list.length,
+        )}${result}`;
+      },
+    );
+    return content === section.content
+      ? section
+      : { ...section, content, wordCount: countWords(content) };
+  });
+
+  return { sections: linkedSections, linkedCount };
+};
+
 export const linkImportedAssetReferences = (
   sections: ImportedSectionDraft[],
   figures: ImportedFigureDraft[],
@@ -1915,6 +2274,11 @@ export const linkImportedAssetReferences = (
     const content = replace(withFigures, 'TABLE', IMPORTED_TABLE_REFERENCE);
     return { ...section, content, wordCount: countWords(content) };
   });
+  const withEquations = linkImportedEquationReferences(linkedSections, figures);
 
-  return { sections: linkedSections, figures, linkedCount };
+  return {
+    sections: withEquations.sections,
+    figures,
+    linkedCount: linkedCount + withEquations.linkedCount,
+  };
 };

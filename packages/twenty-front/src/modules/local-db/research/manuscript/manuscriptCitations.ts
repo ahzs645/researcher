@@ -105,26 +105,37 @@ export const buildCitationContext = (
 
 // Render one in-text citation cluster (one or more keys) in the active mode.
 export const formatInTextCitation = (
-  keys: string[],
+  items: string[],
   context: CitationContext,
 ): string => {
-  const known = keys.filter((key) => context.referencesByKey.has(key));
+  const known = items.filter((item) =>
+    context.referencesByKey.has(citationItemKey(item)),
+  );
   if (known.length === 0) return `[?]`;
 
   switch (context.mode) {
     case 'NUMERIC':
     case 'AUTHOR_NUMBER': {
-      const numbers = known.map((key) => context.numberByKey.get(key) ?? 0);
+      const numbers = known.map(
+        (item) => context.numberByKey.get(citationItemKey(item)) ?? 0,
+      );
       return `[${numbers.join(', ')}]`;
     }
     case 'NUMERIC_SUPERSCRIPT': {
-      const numbers = known.map((key) => context.numberByKey.get(key) ?? 0);
+      const numbers = known.map(
+        (item) => context.numberByKey.get(citationItemKey(item)) ?? 0,
+      );
       return toSuperscript(numbers.join(','));
     }
     case 'AUTHOR_DATE': {
-      const rendered = known.map((key) =>
-        authorYear(context.referencesByKey.get(key) as ReferenceLike),
-      );
+      const rendered = known.map((item) => {
+        const reference = context.referencesByKey.get(
+          citationItemKey(item),
+        ) as ReferenceLike;
+        return isAuthorSuppressed(item)
+          ? `${reference.year ?? 'n.d.'}`
+          : authorYear(reference);
+      });
       return `(${rendered.join('; ')})`;
     }
   }
@@ -295,15 +306,25 @@ export const formatBibliography = (
     };
   });
 
-// Rewrite every [@key] / [@a; @b] citation cluster in the Markdown to its
-// formatted in-text form. (A simple pass that handles the common bracket forms.)
-const CITATION_CLUSTER = /\[(@[^\]]+)\]/g;
+// Rewrite every [@key] / [@a; @b] / [-@key] citation cluster in the Markdown to
+// its formatted in-text form. (A simple pass that handles the common bracket
+// forms.) A `-` before the `@` suppresses the author, the Pandoc form the
+// composer's editor already round-trips: "Petzold et al. [-@petzold2013]"
+// renders the year alone, because the prose already names the author.
+const CITATION_CLUSTER = /\[(-?@[^\]]+)\]/g;
+
+// A cluster item keeps its suppression marker, so "[-@a]" and "[@a]" stay
+// distinct all the way to the CSL engine (and to the label cache key).
+export const citationItemKey = (item: string): string => item.replace(/^-/, '');
+
+export const isAuthorSuppressed = (item: string): boolean =>
+  item.startsWith('-');
 
 const citationKeysFromCluster = (inner: string): string[] =>
   inner
     .split(';')
-    .map((part) => part.trim().replace(/^@/, ''))
-    .filter((part) => part.length > 0);
+    .map((part) => part.trim().replace(/^(-?)@/, '$1'))
+    .filter((part) => part.length > 0 && part !== '-');
 
 export const citationClusterKey = (keys: string[]): string =>
   keys.join('\u001f');

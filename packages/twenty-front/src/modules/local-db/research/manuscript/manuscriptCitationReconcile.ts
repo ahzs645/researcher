@@ -14,14 +14,45 @@ import {
 import { generateCitationKey } from './manuscriptReferenceStore';
 import { type ImportedSectionDraft } from './manuscriptDocImport';
 
-const DOI_RE = /10\.\d{4,9}\/[^\s,;)"']+/i;
+// A DOI runs to the first whitespace or quote. Elsevier suffixes carry balanced
+// parentheses ("10.1016/S0021-8502(03)00359-8"), so a closing bracket only ends
+// the DOI when nothing inside it opened one — otherwise the reference kept a
+// truncated identifier that resolved nowhere and defeated de-duplication.
+const DOI_RE = /10\.\d{4,9}\/[^\s"'<>]+/i;
 const YEAR_RE = /\b(?:19|20)\d{2}\b/;
+// The disambiguating suffix is part of the citation: "Weakley et al., 2018a"
+// and "…, 2018b" are two different papers.
+const YEAR_WITH_SUFFIX_RE = /\b((?:19|20)\d{2})([a-z])?\b/;
+
+const trimDoi = (raw: string): string => {
+  let doi = raw.replace(/[.,;:]+$/, '');
+  while (doi.endsWith(')')) {
+    const opens = (doi.match(/\(/g) ?? []).length;
+    const closes = (doi.match(/\)/g) ?? []).length;
+    if (closes <= opens) break;
+    doi = doi.slice(0, -1).replace(/[.,;:]+$/, '');
+  }
+  return doi;
+};
+
+export const extractReferenceDoi = (raw: string): string => {
+  const match = DOI_RE.exec(raw);
+  return match === null ? '' : trimDoi(match[0]);
+};
+
+// The DOI of a 2018 paper contains "2018"; splitting the entry on years then
+// mistook the DOI's own suffix for the title. Read the metadata from the entry
+// with its identifiers removed.
+const withoutIdentifiers = (raw: string): string =>
+  raw.replace(/https?:\/\/\S+/g, ' ').replace(DOI_RE, ' ');
 
 // One parsed reference-list entry: its 1-based list number (for numeric styles)
 // and the draft it became.
 export type ParsedReferenceEntry = {
   index: number;
   draft: ReferenceDraft;
+  // "2018a" → "a": the year suffix the source used to tell two papers apart.
+  yearSuffix?: string;
 };
 
 // Split a References section body into individual entries. Handles numbered
@@ -74,17 +105,45 @@ const firstAuthorFamily = (raw: string): string => {
     ? (beforeComma.split(/\s+/).find((part) => !part.includes('.')) ??
       beforeComma)
     : (beforeComma.split(/\s+/).pop() ?? beforeComma);
-  return token.replace(/[^A-Za-z-]/g, '');
+  // Keep the letters the author actually wrote: stripping non-ASCII turned
+  // "Düsing" into "Dsing" in the printed bibliography. The citation *key* is
+  // transliterated separately.
+  return token.replace(/[^\p{L}-]/gu, '');
 };
 
 // Best-effort title: the text between the author/year head and the next strong
 // delimiter. Falls back to the whole entry so nothing is lost.
+// Where a journal name and volume start, so a Copernicus-style entry
+// ("Authors: Title, J. Geophys. Res., 118, 5380–5552, 2013.") gives up its
+// title without dragging the citation's tail along.
+const CONTAINER_TAIL = /,\s+(?:[A-Z][\w.&-]*\.|\d)/;
+
 const guessTitle = (raw: string): string => {
-  const afterYear = raw.split(YEAR_RE).slice(1).join(' ').trim();
-  const candidate = afterYear.length > 0 ? afterYear : raw;
+  const plain = withoutIdentifiers(raw).replace(/\s+/g, ' ').trim();
+  // "Authors (2013). Title." — everything up to and including the year, its
+  // disambiguating suffix and the punctuation that closes the date, is the
+  // author/date head.
+  const afterYear = plain
+    .replace(/^[\s\S]*?\b(?:19|20)\d{2}[a-z]?\s*[).,:;]*\s*/, '')
+    .trim();
+  // "Authors: Title, Journal, …" — the Copernicus/AMT form, whose year sits at
+  // the end instead.
+  const afterColon = /^[^:]{0,200}?[a-z.][\s]*:\s+(.+)$/.exec(plain)?.[1];
+  const candidate =
+    afterYear.length >= 8
+      ? afterYear
+      : afterColon !== undefined && afterColon.length >= 8
+        ? afterColon
+        : plain;
+  const untilContainer = candidate.split(CONTAINER_TAIL)[0]?.trim() ?? '';
   const firstSentence = candidate.split(/(?<=[.?])\s/)[0]?.trim() ?? candidate;
-  return (firstSentence.length >= 8 ? firstSentence : raw)
-    .replace(/\s+/g, ' ')
+  const title =
+    untilContainer.length >= 8 && untilContainer.length < firstSentence.length
+      ? untilContainer
+      : firstSentence;
+  return (title.length >= 8 ? title : candidate)
+    .replace(/^[).:;,\s]+/, '')
+    .replace(/[,;\s]+$/, '')
     .trim();
 };
 
@@ -92,9 +151,11 @@ const parseEntryToDraft = (
   raw: string,
   referenceIndex: number,
   takenKeys: Set<string>,
-): ReferenceDraft => {
-  const doi = DOI_RE.exec(raw)?.[0] ?? '';
-  const yearText = YEAR_RE.exec(raw)?.[0];
+): { draft: ReferenceDraft; yearSuffix: string } => {
+  const doi = extractReferenceDoi(raw);
+  const yearMatch = YEAR_WITH_SUFFIX_RE.exec(withoutIdentifiers(raw));
+  const yearText = yearMatch?.[1];
+  const yearSuffix = yearMatch?.[2] ?? '';
   const year = yearText === undefined ? undefined : Number(yearText);
   const family = firstAuthorFamily(raw);
   const cslItem: Record<string, unknown> = {
@@ -116,13 +177,22 @@ const parseEntryToDraft = (
     'researcher:referenceIndex': referenceIndex,
   };
   const draft = cslItemToReferenceDraft(cslItem);
-  const citationKey = generateCitationKey(
-    { authors: draft.authors, year: draft.year },
-    takenKeys,
-  );
+  // Reuse the source's own disambiguation when it has one, so a paper cited as
+  // "2018b" keeps that identity instead of being renamed by arrival order.
+  const suffixedKey =
+    yearSuffix.length > 0
+      ? `${generateCitationKey({ authors: draft.authors, year: draft.year }, new Set())}${yearSuffix}`
+      : undefined;
+  const citationKey =
+    suffixedKey !== undefined && !takenKeys.has(suffixedKey)
+      ? suffixedKey
+      : generateCitationKey(
+          { authors: draft.authors, year: draft.year },
+          takenKeys,
+        );
   takenKeys.add(citationKey);
   // Keep the raw entry so an imperfect parse is never lossy.
-  return { ...draft, citationKey, notes: raw };
+  return { draft: { ...draft, citationKey, notes: raw }, yearSuffix };
 };
 
 export const parseReferenceList = (text: string): ParsedReferenceEntry[] => {
@@ -131,10 +201,14 @@ export const parseReferenceList = (text: string): ParsedReferenceEntry[] => {
     .filter(
       ({ raw }) => raw.length > 0 && !/^(?:table|fig(?:ure)?|\[#)/i.test(raw),
     )
-    .map(({ index, raw }) => ({
-      index,
-      draft: parseEntryToDraft(raw, index, taken),
-    }));
+    .map(({ index, raw }) => {
+      const { draft, yearSuffix } = parseEntryToDraft(raw, index, taken);
+      return {
+        index,
+        draft,
+        ...(yearSuffix.length > 0 ? { yearSuffix } : {}),
+      };
+    });
 };
 
 export type CitationStyleGuess = 'numeric' | 'author-date' | 'none';
@@ -183,23 +257,85 @@ const relinkNumeric = (
   return { content: next, linked };
 };
 
+// Every year token in one citation part, including the shorthand a reference
+// list uses for two papers by the same authors in the same year:
+// "Weakley et al., 2018a, b" cites 2018a *and* 2018b.
+const YEARS_IN_PART =
+  /\b((?:19|20)\d{2})([a-z])?\b|(?<=[,;]\s*)([a-z])(?=\s*[,;)]|$)/g;
+
+const partYearTokens = (part: string): string[] => {
+  const tokens: string[] = [];
+  let lastYear = '';
+  YEARS_IN_PART.lastIndex = 0;
+  for (
+    let match = YEARS_IN_PART.exec(part);
+    match !== null;
+    match = YEARS_IN_PART.exec(part)
+  ) {
+    if (match[1] !== undefined) {
+      lastYear = match[1];
+      tokens.push(`${match[1]}${match[2] ?? ''}`);
+      continue;
+    }
+    // A bare letter only continues a year that was itself suffixed.
+    if (lastYear.length > 0 && tokens.at(-1)?.length === 5) {
+      tokens.push(`${lastYear}${match[3]}`);
+    }
+  }
+  return tokens;
+};
+
+// The name(s) immediately before a narrative citation: "Petzold et al. (2013)",
+// "Bond and Doherty (2013)", "Zotter et al. (2017)".
+const NARRATIVE_AUTHOR =
+  /(\p{Lu}[\p{L}'’-]+)(?:\s*(?:,|and|&)\s*\p{Lu}[\p{L}'’-]+)*(?:\s+et\s+al\.?)?[’']?s?\s*$/u;
+
+const ONLY_YEARS =
+  /^[\s(]*(?:(?:19|20)\d{2}[a-z]?)(?:\s*[,;]\s*(?:(?:19|20)\d{2}[a-z]?|[a-z]))*[\s)]*$/;
+
 const relinkAuthorDate = (
   content: string,
   byAuthorYear: Map<string, string>,
 ): { content: string; linked: number } => {
   let linked = 0;
+  const lookup = (family: string, yearToken: string): string | undefined =>
+    byAuthorYear.get(`${family.toLowerCase()}|${yearToken}`) ??
+    // A source that never disambiguated still matches the plain year.
+    byAuthorYear.get(`${family.toLowerCase()}|${yearToken.slice(0, 4)}`);
+
   const next = content.replace(
     /\(([^)]*\b(?:19|20)\d{2}[a-z]?[^)]*)\)/g,
-    (whole, inner: string) => {
+    (whole: string, inner: string, offset: number) => {
+      // Narrative form: the author's name sits in the prose and only the year
+      // is bracketed. The citation is then author-suppressed, so the rendered
+      // year replaces the parentheses without repeating the name.
+      if (ONLY_YEARS.test(inner)) {
+        const family = NARRATIVE_AUTHOR.exec(
+          content.slice(0, offset).trimEnd(),
+        )?.[1];
+        if (family === undefined) return whole;
+        const keys = partYearTokens(inner).map((yearToken) =>
+          lookup(family, yearToken),
+        );
+        if (keys.length === 0 || keys.some((key) => key === undefined)) {
+          return whole;
+        }
+        linked += keys.length;
+        return `[${keys.map((key) => `-@${key}`).join('; ')}]`;
+      }
+
       // Split multiple citations in one paren group: "A, 2019; B et al., 2020".
       const parts = inner.split(';').map((part) => part.trim());
       const keys: string[] = [];
       for (const part of parts) {
-        const year = YEAR_RE.exec(part)?.[0];
-        const family = firstAuthorFamily(part).toLowerCase();
-        const key = year ? byAuthorYear.get(`${family}|${year}`) : undefined;
-        if (key === undefined) return whole; // leave the whole group untouched
-        keys.push(key);
+        const family = firstAuthorFamily(part);
+        const yearTokens = partYearTokens(part);
+        if (family.length === 0 || yearTokens.length === 0) return whole;
+        for (const yearToken of yearTokens) {
+          const key = lookup(family, yearToken);
+          if (key === undefined) return whole; // leave the whole group untouched
+          keys.push(key);
+        }
       }
       linked += keys.length;
       return `[${keys.map((key) => `@${key}`).join('; ')}]`;
@@ -235,12 +371,21 @@ export const reconcileImportedCitations = (
   const byIndex = new Map(
     entries.map((entry) => [entry.index, entry.draft.citationKey as string]),
   );
-  const byAuthorYear = new Map(
-    entries.map((entry) => [
-      `${(entry.draft.authors ?? '').split(/[,;]/)[0]?.trim().toLowerCase()}|${entry.draft.year ?? ''}`,
-      entry.draft.citationKey as string,
-    ]),
-  );
+  const byAuthorYear = new Map<string, string>();
+  for (const entry of entries) {
+    const family = (entry.draft.authors ?? '')
+      .split(/[,;]/)[0]
+      ?.trim()
+      .toLowerCase();
+    const year = entry.draft.year ?? '';
+    const citationKey = entry.draft.citationKey as string;
+    // Suffixed entries answer to both "2018a" and (for the first of them) the
+    // bare year, so a source that cites inconsistently still links.
+    const suffixed = `${family}|${year}${entry.yearSuffix ?? ''}`;
+    if (!byAuthorYear.has(suffixed)) byAuthorYear.set(suffixed, citationKey);
+    const plain = `${family}|${year}`;
+    if (!byAuthorYear.has(plain)) byAuthorYear.set(plain, citationKey);
+  }
 
   const body = sections
     .filter((section) => section.sectionType !== 'REFERENCES')

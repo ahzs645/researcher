@@ -23,10 +23,7 @@ export const normalizeDoi = (doi: string | null | undefined): string =>
 // The identity used for de-duplication: DOI first (most reliable), then citation
 // key, then a title+year fingerprint as a last resort.
 export const referenceIdentity = (
-  reference: Pick<
-    ReferenceLike,
-    'doi' | 'citationKey' | 'name' | 'year'
-  >,
+  reference: Pick<ReferenceLike, 'doi' | 'citationKey' | 'name' | 'year'>,
 ): string => {
   const doi = normalizeDoi(reference.doi);
   if (doi.length > 0) return `doi:${doi}`;
@@ -44,8 +41,21 @@ const firstAuthorFamily = (authors: string | null | undefined): string => {
   if (!isNonEmptyString(authors)) return 'anon';
   // `authors` is "Family, Given; Family2, Given2" — take the first family name.
   const first = authors.split(';')[0]?.trim() ?? '';
-  const family = first.includes(',') ? first.split(',')[0] : first.split(' ').pop() ?? '';
-  const slug = family.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const family = first.includes(',')
+    ? first.split(',')[0]
+    : (first.split(' ').pop() ?? '');
+  // Transliterate before slugging: dropping the accented letter outright made
+  // "Düsing" key as "dsing", which is neither the author's name nor what
+  // anyone would type looking for it.
+  const slug = family
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[øØ]/g, 'o')
+    .replace(/[æÆ]/g, 'ae')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[łŁ]/g, 'l')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
   return slug.length > 0 ? slug : 'anon';
 };
 
@@ -57,7 +67,11 @@ export const generateCitationKey = (
 ): string => {
   const base = `${firstAuthorFamily(reference.authors)}${reference.year ?? 'nd'}`;
   if (!taken.has(base)) return base;
-  for (let suffix = 'a'.charCodeAt(0); suffix <= 'z'.charCodeAt(0); suffix += 1) {
+  for (
+    let suffix = 'a'.charCodeAt(0);
+    suffix <= 'z'.charCodeAt(0);
+    suffix += 1
+  ) {
     const candidate = `${base}${String.fromCharCode(suffix)}`;
     if (!taken.has(candidate)) return candidate;
   }

@@ -110,6 +110,34 @@ describe('author-date citations', () => {
     expect(orderedKeys).toEqual(['doe2019', 'smith2020']);
     expect(formatInTextCitation(['smith2020'], context)).toBe('(Smith, 2020)');
   });
+
+  it('renders a suppressed author as the year alone', () => {
+    const { context } = buildCitationContext(
+      ['smith2020', 'doe2019'],
+      byKey,
+      'AUTHOR_DATE',
+    );
+    // "Smith (2020) showed …" — the prose carries the name already.
+    expect(renderCitationsInText('Smith [-@smith2020] showed', context)).toBe(
+      'Smith (2020) showed',
+    );
+    expect(
+      extractCitationClusters('Smith [-@smith2020] and [@doe2019]'),
+    ).toEqual([['-smith2020'], ['doe2019']]);
+    // The key still counts toward the bibliography.
+    expect(extractCitationKeys('Smith [-@smith2020]')).toEqual(['smith2020']);
+  });
+
+  it('ignores author suppression in numeric modes', () => {
+    const { context } = buildCitationContext(
+      ['smith2020', 'doe2019'],
+      byKey,
+      'NUMERIC',
+    );
+    expect(renderCitationsInText('Smith [-@smith2020]', context)).toBe(
+      'Smith [1]',
+    );
+  });
 });
 
 describe('firstAuthorSurname', () => {

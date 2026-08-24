@@ -190,3 +190,17 @@ The gap list above is historical. Current state:
    lookups inherently need connectivity and now fail with explicit messages.
 7. **Persistence/collaboration — unchanged** (IndexedDB locally; Convex is
    still the planned backend, and its `recordSchema` lags the frontend model).
+
+---
+
+## 7. Second pass (2026-08-24): a real AMT paper
+
+The status list above was verified against a real Copernicus/AMT manuscript in
+its two working shapes, run through the actual pipeline rather than a sample.
+It exposed a further set of defects — Word heading styles losing to a prose
+heuristic, journal title blocks importing as sections, numbered display
+equations importing as tables (and renumbering the real ones), and three
+distinct citation losses — all now fixed, plus a seeded AMT/Copernicus journal
+template. See **`amt-paper-transposition.md`** in this folder for the run, the
+fixes, and what is still open; the end-to-end regression lives in
+`manuscriptAmtPaperImport.test.ts`.

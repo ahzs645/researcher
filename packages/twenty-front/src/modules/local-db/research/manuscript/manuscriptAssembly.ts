@@ -55,7 +55,7 @@ export const slugifyTitle = (value: string): string =>
 export const countWords = (markdown: string): number => {
   const text = stripAssetPlacementMarkers(markdown)
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ') // images
-    .replace(/\[[#@][^\]]*\]/g, ' ') // cross-refs / citations
+    .replace(/\[-?[#@][^\]]*\]/g, ' ') // cross-refs / citations
     .replace(/\$\$[\s\S]*?\$\$|\$[^$\n]*\$/g, ' ') // math
     .replace(/[#*_>`~-]/g, ' ')
     .trim();

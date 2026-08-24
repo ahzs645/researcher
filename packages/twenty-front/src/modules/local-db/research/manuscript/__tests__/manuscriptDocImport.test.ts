@@ -2,6 +2,7 @@ import {
   classifyHeading,
   extractCaptionOnlyFigures,
   extractImagesToFigures,
+  extractLayoutTables,
   extractTablesToFigures,
   linkImportedAssetReferences,
   parseMarkdownDocument,
@@ -298,6 +299,97 @@ describe('parseMarkdownDocument', () => {
       ].join('\n'),
     );
     expect(doc.sections[0].content).toContain('| Site | PM2.5 |');
+  });
+});
+
+describe('extractLayoutTables', () => {
+  it('turns a numbered equation table into an equation asset', () => {
+    const doc = parseMarkdownDocument(
+      [
+        '## Method',
+        'The formulation begins with attenuation:',
+        '',
+        '| ATNλ(t) = 100 ln[I0,λ(t) / Iλ(t)] | (1) |',
+        '| --- | --- |',
+        '',
+        'and the duration-weighted mean is',
+        '',
+        '| x̄j,time = Σi wij xi / Σi wij | (7) |',
+        '| --- | --- |',
+      ].join('\n'),
+    );
+    const { sections, figures } = extractLayoutTables(doc.sections);
+
+    expect(figures).toEqual([
+      expect.objectContaining({
+        assetKind: 'EQUATION',
+        refKey: 'eq-1',
+        sourceLabel: '1',
+        equationLatex: 'ATNλ(t) = 100 ln[I0,λ(t) / Iλ(t)]',
+        placement: 'MAIN',
+      }),
+      expect.objectContaining({
+        assetKind: 'EQUATION',
+        refKey: 'eq-7',
+        sourceLabel: '7',
+        equationLatex: 'x̄j,time = Σi wij xi / Σi wij',
+      }),
+    ]);
+    // Each equation renders where the author put it, not at the end.
+    expect(sections[0].content).toBe(
+      [
+        'The formulation begins with attenuation:',
+        '',
+        '[[asset:eq-1]]',
+        '',
+        'and the duration-weighted mean is',
+        '',
+        '[[asset:eq-7]]',
+      ].join('\n'),
+    );
+  });
+
+  it('keeps a lettered equation number and a two-part number', () => {
+    const doc = parseMarkdownDocument(
+      [
+        '## Method',
+        '| Δj = x̄j,aligned − x̄j,naïve | (11a) |',
+        '| --- | --- |',
+        '',
+        '| f(x) = ax + b | (A2) |',
+        '| --- | --- |',
+      ].join('\n'),
+    );
+    const { figures } = extractLayoutTables(doc.sections);
+    expect(figures.map((figure) => figure.refKey)).toEqual(['eq-11a', 'eq-a2']);
+  });
+
+  it('unwraps a one-cell callout table back into prose', () => {
+    const doc = parseMarkdownDocument(
+      [
+        '## Notes',
+        '| Working-draft status: numbers are provisional. |',
+        '| --- |',
+        '',
+        'Body text.',
+      ].join('\n'),
+    );
+    const { sections, figures } = extractLayoutTables(doc.sections);
+    expect(figures).toEqual([]);
+    expect(sections[0].content).toBe(
+      'Working-draft status: numbers are provisional.\n\nBody text.',
+    );
+  });
+
+  it('leaves a real two-column table alone', () => {
+    const doc = parseMarkdownDocument(
+      ['## Results', '| Site | Value |', '| --- | --- |', '| A | 12 |'].join(
+        '\n',
+      ),
+    );
+    const { sections, figures } = extractLayoutTables(doc.sections);
+    expect(figures).toEqual([]);
+    expect(sections[0].content).toContain('| Site | Value |');
   });
 });
 
@@ -1119,9 +1211,14 @@ describe('title page metadata', () => {
       'A thesis submitted in partial fulfillment of the requirements for the degree of Master of Science',
       'April 2026',
     ]);
-    // Each of those lines used to import as its own empty junk section.
-    expect(doc.sections.map((section) => section.name)).toEqual(['Abstract']);
-    expect(doc.sections.map((section) => section.orderIndex)).toEqual([0]);
+    // Each of those lines used to import as its own empty junk section; they
+    // now stay together in the one title-page block, which the composer
+    // rebuilds from this metadata and excludes from the export.
+    expect(doc.sections.map((section) => section.name)).toEqual([
+      'Title page',
+      'Abstract',
+    ]);
+    expect(doc.sections.map((section) => section.orderIndex)).toEqual([0, 1]);
   });
 
   it('keeps the title page at the top level of the outline', () => {

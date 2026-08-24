@@ -8,6 +8,7 @@ import apaXml from './csl-styles/apa.csl?raw';
 import archivesOfEnvironmentalContaminationAndToxicologyXml from './csl-styles/archives-of-environmental-contamination-and-toxicology.csl?raw';
 import atmosphericEnvironmentXml from './csl-styles/atmospheric-environment.csl?raw';
 import chicagoAuthorDateXml from './csl-styles/chicago-author-date.csl?raw';
+import copernicusPublicationsXml from './csl-styles/copernicus-publications.csl?raw';
 import elsevierHarvardXml from './csl-styles/elsevier-harvard.csl?raw';
 import environmentalScienceAndPollutionResearchXml from './csl-styles/environmental-science-and-pollution-research.csl?raw';
 import ieeeXml from './csl-styles/ieee.csl?raw';
@@ -17,6 +18,7 @@ import natureXml from './csl-styles/nature.csl?raw';
 import scienceXml from './csl-styles/science.csl?raw';
 import springerBasicAuthorDateXml from './csl-styles/springer-basic-author-date.csl?raw';
 import vancouverXml from './csl-styles/vancouver.csl?raw';
+import { citationItemKey, isAuthorSuppressed } from './manuscriptCitations';
 import { type ReferenceLike } from './manuscriptTypes';
 import { decodeXmlEntities } from './manuscriptXmlEntities';
 
@@ -42,6 +44,7 @@ export const VENDORED_CSL_STYLES: VendoredCslStyle[] = [
   vendoredStyle('american-medical-association', americanMedicalAssociationXml),
   vendoredStyle('american-chemical-society', americanChemicalSocietyXml),
   vendoredStyle('chicago-author-date', chicagoAuthorDateXml),
+  vendoredStyle('copernicus-publications', copernicusPublicationsXml),
   vendoredStyle('elsevier-harvard', elsevierHarvardXml),
   vendoredStyle('ieee', ieeeXml),
   vendoredStyle(
@@ -252,7 +255,10 @@ export const formatCslCitations = (
   const labels = clusters.map(() => '[?]');
   const orderedKeys = [
     ...new Set([
-      ...clusters.flat().filter((key) => engine.knownItemKeys.has(key)),
+      ...clusters
+        .flat()
+        .map(citationItemKey)
+        .filter((key) => engine.knownItemKeys.has(key)),
       ...engine.itemKeys,
     ]),
   ];
@@ -261,8 +267,13 @@ export const formatCslCitations = (
   const precedingCitations: [string, number][] = [];
   clusters.forEach((cluster, clusterIndex) => {
     const citationItems = cluster
-      .filter((key) => engine.knownItemKeys.has(key))
-      .map((id) => ({ id }));
+      .filter((item) => engine.knownItemKeys.has(citationItemKey(item)))
+      .map((item) => ({
+        id: citationItemKey(item),
+        // "Petzold et al. (2013)" — the prose already carries the name, so the
+        // rendered citation is the year alone.
+        ...(isAuthorSuppressed(item) ? { 'suppress-author': true } : {}),
+      }));
     if (citationItems.length === 0) return;
 
     const citationID = `manuscript-citation-${clusterIndex}`;

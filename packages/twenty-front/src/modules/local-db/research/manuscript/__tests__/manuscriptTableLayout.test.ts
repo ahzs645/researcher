@@ -10,7 +10,9 @@ describe('manuscriptTablePlacement', () => {
     // Table 6 of the thesis: a header spanning three columns over a second
     // header row, with the corner cell spanning both rows.
     const { rows, covered } = manuscriptTablePlacement([
-      { cells: [cell('Sample Size', 1, 2), cell('Percent of Data Censored', 3)] },
+      {
+        cells: [cell('Sample Size', 1, 2), cell('Percent of Data Censored', 3)],
+      },
       { cells: [cell('<50%'), cell('50-80%'), cell('>80%')] },
       { cells: [cell('n<50'), cell('ROS'), cell('ROS'), cell('Too censored')] },
     ]);

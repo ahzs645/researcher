@@ -44,7 +44,12 @@ const TABLE_RULES: Record<ManuscriptTableStyle, TableRule> = {
     vertical: false,
     innerOnlyUnderHeader: false,
   },
-  GRID: { outer: 0.75, inner: 0.75, vertical: true, innerOnlyUnderHeader: false },
+  GRID: {
+    outer: 0.75,
+    inner: 0.75,
+    vertical: true,
+    innerOnlyUnderHeader: false,
+  },
   SHADED_HEADER: {
     outer: 0.75,
     inner: 0.75,
@@ -144,7 +149,8 @@ export const createManuscriptPdfTableMapping = ({
                   fontSize: tableFontSize,
                   fontWeight: isHeader ? 'bold' : 'normal',
                   lineHeight: tableLineSpacing,
-                  textAlign: tableStyle === 'GRID' && !isHeader ? 'left' : 'center',
+                  textAlign:
+                    tableStyle === 'GRID' && !isHeader ? 'left' : 'center',
                 },
               },
               ...renderText(text, tableFontSize),
@@ -210,8 +216,7 @@ export const createManuscriptPdfTableMapping = ({
             wrap: false,
             style: {
               borderBottomColor: OUTER_COLOR,
-              borderBottomWidth:
-                rowIndex === rows.length - 1 ? rule.outer : 0,
+              borderBottomWidth: rowIndex === rows.length - 1 ? rule.outer : 0,
               borderTopColor: rowIndex === 0 ? OUTER_COLOR : INNER_COLOR,
               borderTopWidth: rowIndex === 0 ? rule.outer : internalRule,
               flexDirection: 'row',

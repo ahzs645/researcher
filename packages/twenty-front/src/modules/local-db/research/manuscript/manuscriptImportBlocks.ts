@@ -1,4 +1,5 @@
 import {
+  classifyLayoutTable,
   parseImportedAssetCaption,
   parseMarkdownDocument,
   type ImportedDocument,
@@ -114,7 +115,15 @@ const blockText = (markdown: string, role: ImportBlockRole): string => {
     return IMAGE_LINE.exec(markdown.trim())?.[1]?.trim() ?? '';
   }
   if (role === 'equation') {
+    const layout = classifyLayoutTable(markdown.trim().split('\n'));
+    if (layout?.kind === 'equation') {
+      return `${layout.source}\u2003(${layout.label})`;
+    }
     return EQUATION_BLOCK.exec(markdown.trim())?.[1]?.trim() ?? markdown.trim();
+  }
+  if (role === 'body') {
+    const layout = classifyLayoutTable(markdown.trim().split('\n'));
+    if (layout?.kind === 'callout') return layout.text;
   }
   return markdown.trim();
 };
@@ -150,8 +159,18 @@ const classifyBlock = (
   }
 
   if (wordBlock?.kind === 'table' || isGfmTableBlock(normalized)) {
+    // Word sets a numbered display equation as a one-row, two-column table and
+    // a boxed note as a one-cell table. The import lifts both back out, so the
+    // review list has to name them for what they are — otherwise a reader
+    // "corrects" fourteen equations that were never tables.
+    const layout = classifyLayoutTable(normalized.split('\n'));
     return {
-      role: 'table',
+      role:
+        layout?.kind === 'equation'
+          ? 'equation'
+          : layout?.kind === 'callout'
+            ? 'body'
+            : 'table',
       roleConfidence: 'certain',
       ...(wordBlock?.styleName !== undefined
         ? { sourceStyleName: wordBlock.styleName }
@@ -420,12 +439,17 @@ const serializeBlock = (
     return `${'#'.repeat(headingLevel)} ${stripMarkdownDelimiters(markdown)}`;
   }
   if (role === 'equation') {
+    // A numbered equation keeps the shape the extractor reads, so it lands as
+    // a numbered `EQUATION` asset rather than as anonymous display math.
+    if (classifyLayoutTable(markdown.trim().split('\n'))?.kind === 'equation') {
+      return markdown.trim();
+    }
     return `$$${stripMarkdownDelimiters(markdown)}$$`;
   }
   if (role === 'caption') {
     return serializeCaption(block, override, blocks, blocksById, overrides);
   }
-  if (role === 'body' && block.role === 'table') {
+  if (role === 'body' && isGfmTableBlock(markdown.trim())) {
     return parseMarkdownTable(markdown)
       .map((row) => row.join(' '))
       .join('\n')

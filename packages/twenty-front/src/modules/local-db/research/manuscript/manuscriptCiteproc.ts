@@ -265,6 +265,11 @@ export const formatCslCitations = (
   engine.processor.updateItems(orderedKeys);
 
   const precedingCitations: [string, number][] = [];
+  // citeproc reports its updates by position in the citations it has been
+  // given, not by our cluster index. A cluster we skip — one whose keys have
+  // no reference — makes those two diverge, and every later label lands on the
+  // wrong citation. Keep the mapping explicit.
+  const submittedClusterIndexes: number[] = [];
   clusters.forEach((cluster, clusterIndex) => {
     const citationItems = cluster
       .filter((item) => engine.knownItemKeys.has(citationItemKey(item)))
@@ -281,15 +286,17 @@ export const formatCslCitations = (
       {
         citationID,
         citationItems,
-        properties: { noteIndex: clusterIndex + 1 },
+        properties: { noteIndex: submittedClusterIndexes.length + 1 },
       },
       precedingCitations,
       [],
     );
+    submittedClusterIndexes.push(clusterIndex);
     for (const [updatedIndex, html] of updates) {
-      labels[updatedIndex] = plainTextFromHtml(html);
+      const target = submittedClusterIndexes[updatedIndex];
+      if (target !== undefined) labels[target] = plainTextFromHtml(html);
     }
-    precedingCitations.push([citationID, clusterIndex + 1]);
+    precedingCitations.push([citationID, submittedClusterIndexes.length]);
   });
 
   return labels;

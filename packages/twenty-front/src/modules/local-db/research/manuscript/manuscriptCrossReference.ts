@@ -15,8 +15,12 @@ import { type NumberedFigure } from './manuscriptTypes';
 // a refKey with a dot a live chip in the editor but literal text in exports.
 const CROSS_REF_PATTERN = /\[#([^\]\s]+)\]/g;
 // Citation keys: @key inside the text, key starts with a letter/digit and may
-// contain word chars, ':', '.', '-'. Matches Pandoc citekeys.
-const CITATION_PATTERN = /@([A-Za-z0-9_][\w:.-]*)/g;
+// contain word chars, ':', '.', '-'. Matches Pandoc citekeys — which never
+// follow a word character, so "ajalil@unbc.ca" on a title page is an email
+// address rather than a citation of "unbc.ca". Reading it as one put a key
+// with no reference into the cited list, which shifted every CSL label after
+// it by one and mislabelled the citation chips in the editor.
+const CITATION_PATTERN = /(?:^|[^\w@])@([A-Za-z0-9_][\w:.-]*)/g;
 
 export type CrossReferenceResult = {
   text: string;

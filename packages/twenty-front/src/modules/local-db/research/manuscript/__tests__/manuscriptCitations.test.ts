@@ -50,6 +50,17 @@ describe('cross references', () => {
 });
 
 describe('citation extraction', () => {
+  it('never reads an email address as a citation', () => {
+    // A title page's correspondence line is not a citation of "unbc.ca" — and
+    // a phantom key with no reference shifts every rendered label after it.
+    expect(
+      extractCitationKeys('Correspondence: Ahmad Jalil (ajalil@unbc.ca)'),
+    ).toEqual([]);
+    expect(
+      extractCitationKeys('Mail a@b.com about [@smith2020] and [-@doe2019]'),
+    ).toEqual(['smith2020', 'doe2019']);
+  });
+
   it('extracts keys in first-use order, deduped', () => {
     expect(
       extractCitationKeys('text [@doe2019] more [@smith2020; @doe2019]'),

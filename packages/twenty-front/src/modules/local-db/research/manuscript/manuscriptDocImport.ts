@@ -1709,12 +1709,19 @@ const EQUATION_BODY = /[=<>≤≥≈∝∑∫±]|\\frac|\\sum|\\int/;
 const equationRefKey = (label: string): string =>
   `eq-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
-type LayoutTableRewrite =
-  | { kind: 'equation'; latex: string; label: string }
+export type LayoutTableRewrite =
+  // `source` is the equation exactly as the document showed it, for a review
+  // list that should read like the author's own page; `latex` is what gets
+  // stored and typeset.
+  | { kind: 'equation'; latex: string; source: string; label: string }
   | { kind: 'callout'; text: string };
 
-// Decide what a table block really is, from its parsed grid.
-const classifyLayoutTable = (block: string[]): LayoutTableRewrite | null => {
+// Decide what a table block really is, from its parsed grid. Exported so the
+// import map shows the same answer the import will act on: a numbered equation
+// reads as an equation in the review list, not as a table.
+export const classifyLayoutTable = (
+  block: string[],
+): LayoutTableRewrite | null => {
   const rows = parseMarkdownTable(block.join('\n'));
   if (rows.length !== 1) return null;
   const cells = rows[0].map((cell) => cell.trim());
@@ -1734,7 +1741,12 @@ const classifyLayoutTable = (block: string[]): LayoutTableRewrite | null => {
   }
   // Word flattened the maths to characters; recover the LaTeX the renderers
   // expect so the equation typesets instead of printing as text.
-  return { kind: 'equation', latex: unicodeMathToLatex(body), label };
+  return {
+    kind: 'equation',
+    latex: unicodeMathToLatex(body),
+    source: body,
+    label,
+  };
 };
 
 // Rewrite layout tables in place: equations become `EQUATION` assets anchored

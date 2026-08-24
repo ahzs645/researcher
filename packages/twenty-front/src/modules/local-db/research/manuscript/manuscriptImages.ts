@@ -99,6 +99,16 @@ export const figureToMarkdown = (figure: NumberedFigure): string => {
 
 // A short, human description of where a figure's image comes from, for the UI.
 export const describeImageSource = (figure: FigureLike): string => {
+  // An equation is typeset, not pictured — "No image yet" reads as a missing
+  // asset when nothing is missing.
+  if (figure.assetKind === 'EQUATION') {
+    return isNonEmptyString(figure.equationLatex)
+      ? 'Typeset from LaTeX'
+      : 'No equation body yet';
+  }
+  if (figure.assetKind === 'TABLE' && isNonEmptyString(figure.tableData)) {
+    return 'Table grid';
+  }
   const resolved = resolveFigureImage(figure);
   if (resolved.kind === 'dataurl' || resolved.kind === 'url') {
     switch (figure.imageSource) {

@@ -406,3 +406,49 @@ describe('manuscript import blocks', () => {
     });
   });
 });
+
+describe('layout tables in the import map', () => {
+  const wordTable = (rows: string[][]): string =>
+    [rows[0].map((c) => c).join(' | '), rows[0].map(() => '---').join(' | ')]
+      .map((line) => `| ${line} |`)
+      .join('\n');
+
+  it('names a numbered equation an equation, and keeps its number', () => {
+    const markdown = wordTable([['x̄j,time = Σi wij xi / Σi wij', '(7)']]);
+    const blocks = deriveImportBlocks([
+      { kind: 'paragraph', markdown: '## Method', sourceHeadingLevel: 2 },
+      { kind: 'table', markdown },
+    ]);
+
+    expect(blocks[1].role).toBe('equation');
+    // The review list shows the maths and its number as the page showed them,
+    // not a table grid.
+    expect(blocks[1].text).toBe('x̄j,time = Σi wij xi / Σi wij\u2003(7)');
+    // And it still serializes as the table the extractor lifts into a
+    // numbered EQUATION asset, rather than anonymous display math.
+    expect(assembleImportedDocument(blocks, {}).sections[0].content).toContain(
+      '| (7) |',
+    );
+  });
+
+  it('names a one-cell callout body, and unwraps it', () => {
+    const markdown = wordTable([['Working-draft status: provisional.']]);
+    const blocks = deriveImportBlocks([
+      { kind: 'paragraph', markdown: '## Notes', sourceHeadingLevel: 2 },
+      { kind: 'table', markdown },
+    ]);
+
+    expect(blocks[1].role).toBe('body');
+    expect(blocks[1].text).toBe('Working-draft status: provisional.');
+    expect(assembleImportedDocument(blocks, {}).sections[0].content).toBe(
+      'Working-draft status: provisional.',
+    );
+  });
+
+  it('leaves a real data table a table', () => {
+    const markdown = wordTable([['Site', 'Value']]);
+    expect(deriveImportBlocks([{ kind: 'table', markdown }])[0].role).toBe(
+      'table',
+    );
+  });
+});

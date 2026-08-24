@@ -153,8 +153,13 @@ export const ManuscriptImportReviewStep = ({
           <StyledSummary>
             {preparedImport.sections.length} sections ·{' '}
             {preparedImport.tableCount} tables · {preparedImport.imageCount}{' '}
-            figures · {document.stats?.equationCount ?? 0} equations ·{' '}
-            {preparedImport.references.length} references ·{' '}
+            figures ·{' '}
+            {/* Equations set as layout tables become numbered assets, so the
+                source document's own inline-math count is not the total. */}
+            {preparedImport.figures.filter(
+              (figure) => figure.assetKind === 'EQUATION',
+            ).length + (document.stats?.equationCount ?? 0)}{' '}
+            equations · {preparedImport.references.length} references ·{' '}
             {preparedImport.linkedCount} linked citations
           </StyledSummary>
         )}

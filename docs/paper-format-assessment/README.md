@@ -201,6 +201,11 @@ It exposed a further set of defects — Word heading styles losing to a prose
 heuristic, journal title blocks importing as sections, numbered display
 equations importing as tables (and renumbering the real ones), and three
 distinct citation losses — all now fixed, plus a seeded AMT/Copernicus journal
-template. See **`amt-paper-transposition.md`** in this folder for the run, the
-fixes, and what is still open; the end-to-end regression lives in
+template. A second round then fixed what only shows up in the finished
+document: full reference-entry parsing (co-authors, initials, journal, volume,
+pages — an imported bibliography now exports as the paper wrote it), byline and
+affiliation splitting, Unicode maths recovered as LaTeX, and a switch that
+keeps the source document's own asset numbering. See
+**`amt-paper-transposition.md`** in this folder for the run, the fixes, and
+what is still open; the end-to-end regression lives in
 `manuscriptAmtPaperImport.test.ts`.

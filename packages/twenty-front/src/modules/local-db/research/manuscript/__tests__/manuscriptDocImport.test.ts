@@ -325,14 +325,15 @@ describe('extractLayoutTables', () => {
         assetKind: 'EQUATION',
         refKey: 'eq-1',
         sourceLabel: '1',
-        equationLatex: 'ATNλ(t) = 100 ln[I0,λ(t) / Iλ(t)]',
+        // Word flattened the maths to characters; the import recovers LaTeX.
+        equationLatex: 'ATN\\lambda(t) = 100 ln[I0,\\lambda(t) / I\\lambda(t)]',
         placement: 'MAIN',
       }),
       expect.objectContaining({
         assetKind: 'EQUATION',
         refKey: 'eq-7',
         sourceLabel: '7',
-        equationLatex: 'x̄j,time = Σi wij xi / Σi wij',
+        equationLatex: '\\bar{x}j,time = \\sum_{i} wij xi / \\sum_{i} wij',
       }),
     ]);
     // Each equation renders where the author put it, not at the end.

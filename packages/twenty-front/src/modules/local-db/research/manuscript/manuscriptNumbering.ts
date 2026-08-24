@@ -104,6 +104,21 @@ export const numberAssets = (
   return ordered.map((figure) => {
     const kind = asKind(figure.assetKind);
     const supplement = isSupplement(figure.placement);
+    // The source's own label wins when the journal keeps it — "(11a)" and
+    // "Table B1" carry information a continuous sequence would throw away.
+    const sourceNumber =
+      style.keepSourceNumbers === true ? (figure.sourceLabel ?? '').trim() : '';
+    if (sourceNumber.length > 0) {
+      return {
+        ...figure,
+        number: sourceNumber,
+        label: applyTemplate(labelFormatFor(kind, style), sourceNumber),
+        crossRefLabel: applyTemplate(
+          crossRefFormatFor(kind, style),
+          sourceNumber,
+        ),
+      };
+    }
     let chapter = 0;
     if (perSection && !supplement) {
       const assigned =

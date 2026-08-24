@@ -9,6 +9,7 @@
 import { countWords } from './manuscriptAssembly';
 import { assetPlacementMarker } from './manuscriptAssetPlacement';
 import { COMMAND_TEXT } from './manuscriptMathGlyphs';
+import { unicodeMathToLatex } from './manuscriptMathUnicode';
 import {
   escapeManuscriptTableCellSpanMarker,
   TABLE_SPAN_LEFT_MARKER,
@@ -1693,7 +1694,9 @@ const classifyLayoutTable = (block: string[]): LayoutTableRewrite | null => {
   if (label === undefined || body.length === 0 || !EQUATION_BODY.test(body)) {
     return null;
   }
-  return { kind: 'equation', latex: body, label };
+  // Word flattened the maths to characters; recover the LaTeX the renderers
+  // expect so the equation typesets instead of printing as text.
+  return { kind: 'equation', latex: unicodeMathToLatex(body), label };
 };
 
 // Rewrite layout tables in place: equations become `EQUATION` assets anchored

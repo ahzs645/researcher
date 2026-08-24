@@ -3,48 +3,21 @@
 // section as one block. This turns those into live citations: it parses the
 // reference list into `reference` drafts (CSL-JSON-first), assigns citation
 // keys, and rewrites the in-text markers to `[@key]` so the composer can
-// re-style them and build a bibliography. Pure and unit-tested; free-text
-// reference parsing is heuristic (author/year/DOI are reliable; title/journal
-// are best-effort), so records may need light cleanup — but the linking is exact.
+// re-style them and build a bibliography. Pure and unit-tested; entry fields
+// are read by `manuscriptReferenceParse`, and the verbatim entry travels with
+// the record so an imperfect parse is never lossy — the linking is exact.
 
 import {
   cslItemToReferenceDraft,
   type ReferenceDraft,
 } from './manuscriptReferenceImport';
+import { parseReferenceEntryFields } from './manuscriptReferenceParse';
 import { generateCitationKey } from './manuscriptReferenceStore';
 import { type ImportedSectionDraft } from './manuscriptDocImport';
 
-// A DOI runs to the first whitespace or quote. Elsevier suffixes carry balanced
-// parentheses ("10.1016/S0021-8502(03)00359-8"), so a closing bracket only ends
-// the DOI when nothing inside it opened one — otherwise the reference kept a
-// truncated identifier that resolved nowhere and defeated de-duplication.
-const DOI_RE = /10\.\d{4,9}\/[^\s"'<>]+/i;
-const YEAR_RE = /\b(?:19|20)\d{2}\b/;
 // The disambiguating suffix is part of the citation: "Weakley et al., 2018a"
 // and "…, 2018b" are two different papers.
-const YEAR_WITH_SUFFIX_RE = /\b((?:19|20)\d{2})([a-z])?\b/;
-
-const trimDoi = (raw: string): string => {
-  let doi = raw.replace(/[.,;:]+$/, '');
-  while (doi.endsWith(')')) {
-    const opens = (doi.match(/\(/g) ?? []).length;
-    const closes = (doi.match(/\)/g) ?? []).length;
-    if (closes <= opens) break;
-    doi = doi.slice(0, -1).replace(/[.,;:]+$/, '');
-  }
-  return doi;
-};
-
-export const extractReferenceDoi = (raw: string): string => {
-  const match = DOI_RE.exec(raw);
-  return match === null ? '' : trimDoi(match[0]);
-};
-
-// The DOI of a 2018 paper contains "2018"; splitting the entry on years then
-// mistook the DOI's own suffix for the title. Read the metadata from the entry
-// with its identifiers removed.
-const withoutIdentifiers = (raw: string): string =>
-  raw.replace(/https?:\/\/\S+/g, ' ').replace(DOI_RE, ' ');
+const YEAR_RE = /\b(?:19|20)\d{2}\b/;
 
 // One parsed reference-list entry: its 1-based list number (for numeric styles)
 // and the draft it became.
@@ -113,64 +86,36 @@ const firstAuthorFamily = (raw: string): string => {
 
 // Best-effort title: the text between the author/year head and the next strong
 // delimiter. Falls back to the whole entry so nothing is lost.
-// Where a journal name and volume start, so a Copernicus-style entry
-// ("Authors: Title, J. Geophys. Res., 118, 5380–5552, 2013.") gives up its
-// title without dragging the citation's tail along.
-const CONTAINER_TAIL = /,\s+(?:[A-Z][\w.&-]*\.|\d)/;
-
-const guessTitle = (raw: string): string => {
-  const plain = withoutIdentifiers(raw).replace(/\s+/g, ' ').trim();
-  // "Authors (2013). Title." — everything up to and including the year, its
-  // disambiguating suffix and the punctuation that closes the date, is the
-  // author/date head.
-  const afterYear = plain
-    .replace(/^[\s\S]*?\b(?:19|20)\d{2}[a-z]?\s*[).,:;]*\s*/, '')
-    .trim();
-  // "Authors: Title, Journal, …" — the Copernicus/AMT form, whose year sits at
-  // the end instead.
-  const afterColon = /^[^:]{0,200}?[a-z.][\s]*:\s+(.+)$/.exec(plain)?.[1];
-  const candidate =
-    afterYear.length >= 8
-      ? afterYear
-      : afterColon !== undefined && afterColon.length >= 8
-        ? afterColon
-        : plain;
-  const untilContainer = candidate.split(CONTAINER_TAIL)[0]?.trim() ?? '';
-  const firstSentence = candidate.split(/(?<=[.?])\s/)[0]?.trim() ?? candidate;
-  const title =
-    untilContainer.length >= 8 && untilContainer.length < firstSentence.length
-      ? untilContainer
-      : firstSentence;
-  return (title.length >= 8 ? title : candidate)
-    .replace(/^[).:;,\s]+/, '')
-    .replace(/[,;\s]+$/, '')
-    .trim();
-};
-
 const parseEntryToDraft = (
   raw: string,
   referenceIndex: number,
   takenKeys: Set<string>,
 ): { draft: ReferenceDraft; yearSuffix: string } => {
-  const doi = extractReferenceDoi(raw);
-  const yearMatch = YEAR_WITH_SUFFIX_RE.exec(withoutIdentifiers(raw));
-  const yearText = yearMatch?.[1];
-  const yearSuffix = yearMatch?.[2] ?? '';
-  const year = yearText === undefined ? undefined : Number(yearText);
-  const family = firstAuthorFamily(raw);
+  const fields = parseReferenceEntryFields(raw);
+  const yearSuffix = fields.yearSuffix ?? '';
   const cslItem: Record<string, unknown> = {
     id: 'tmp',
     type: 'article-journal',
-    title: guessTitle(raw),
-    ...(family.length > 0 ? { author: [{ family }] } : {}),
-    ...(year !== undefined && Number.isFinite(year)
-      ? { issued: { 'date-parts': [[year]] } }
+    title: fields.title ?? raw,
+    ...(fields.authors.length > 0 ? { author: fields.authors } : {}),
+    ...(fields.year !== undefined
+      ? { issued: { 'date-parts': [[fields.year]] } }
       : {}),
-    ...(doi.length > 0 ? { DOI: doi } : {}),
+    ...(fields.containerTitle !== undefined
+      ? { 'container-title': fields.containerTitle }
+      : {}),
+    ...(fields.volume !== undefined ? { volume: fields.volume } : {}),
+    ...(fields.issue !== undefined ? { issue: fields.issue } : {}),
+    ...(fields.pages !== undefined ? { page: fields.pages } : {}),
+    ...(fields.doi !== undefined ? { DOI: fields.doi } : {}),
+    ...(fields.url !== undefined ? { URL: fields.url } : {}),
     // Keep the exact source entry inside the portable CSL record. The fallback
     // bibliography formatter can then reproduce imported references verbatim
     // instead of duplicating best-effort parsed fields and DOI text.
     'researcher:rawReference': raw,
+    // The source truncated its own author list, so a style that would print
+    // every name has fewer to print than the paper did.
+    ...(fields.truncatedAuthors ? { 'researcher:truncatedAuthors': true } : {}),
     // Keep numbered-list order portable even though the reference object has
     // no custom orderIndex field. The linker also supports older imports via
     // their record creation timestamps.

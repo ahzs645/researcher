@@ -89,6 +89,10 @@ export type JournalStyle = {
   tableLabelFormat?: string | null;
   supplementPrefix?: string | null;
   numberingScope?: string | null;
+  // Keep the numbers the source document used ("Eq. (11a)", "Table B1")
+  // instead of renumbering continuously. An author re-exporting their own
+  // submitted draft wants their numbering back, not ours.
+  keepSourceNumbers?: boolean | null;
   crossRefFormat?: string | null;
   figureCaptionPosition?: string | null;
   figureCaptionFontSize?: number | null;

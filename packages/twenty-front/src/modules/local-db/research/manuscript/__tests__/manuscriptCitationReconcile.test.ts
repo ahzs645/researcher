@@ -70,7 +70,7 @@ describe('parseReferenceList', () => {
     const [entry] = parseReferenceList(
       'Düsing, S., Wehner, B., and Müller, T. (2019). The effect of rapid relative humidity changes. Atmospheric Measurement Techniques, 12, 5879–5895. https://doi.org/10.5194/amt-12-5879-2019',
     );
-    expect(entry.draft.authors).toBe('Düsing');
+    expect(entry.draft.authors).toBe('Düsing, S.; Wehner, B.; Müller, T.');
     expect(entry.draft.citationKey).toBe('dusing2019');
   });
 
@@ -88,7 +88,7 @@ describe('parseReferenceList', () => {
     // The year inside each DOI is not the entry's year, and not its title.
     expect(entries[1].draft.year).toBe(2018);
     expect(entries[1].draft.name).toBe(
-      'Thermal/optical reflectance equivalent organic and elemental carbon.',
+      'Thermal/optical reflectance equivalent organic and elemental carbon',
     );
   });
 

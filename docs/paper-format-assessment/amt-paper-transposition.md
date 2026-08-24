@@ -118,25 +118,94 @@ in it is something a working scientist's document actually does.
 
 ---
 
-## 4. Still open
+## 4. What the export needed next
 
-1. **Equation bodies are plain Unicode, not LaTeX.** Layout-table equations
-   carry the text Word showed (`x̄j,time = Σi wij xi / Σi wij`). It typesets
-   and exports, but it is not structured maths — unlike the OMML path, which
-   produces real LaTeX. Recovering LaTeX from the flattened text would let the
-   equation editor work on imported equations.
-2. **Equation numbers renumber; the source's do not.** An imported `(11a)` is
-   kept as the *source* label and re-numbered continuously on export. A paper
-   that renumbers 11a/11b to 11/12 is correct per the journal, but the author
-   may expect their own numbering preserved — there is no per-manuscript
-   "keep source numbering" switch yet.
-3. **Reference field parsing stays heuristic.** Author/year/DOI are reliable and
-   the title now survives both the APA and Copernicus forms, but journal,
-   volume and pages are still best-effort; the raw entry is kept verbatim in
-   `notes` and printed by the fallback formatter.
-4. **Multi-line titles lose their punctuation.** A title split across Word lines
-   is rejoined with a space, so the AMT draft's title comes back without the
-   colon its numbered sibling has.
-5. **Superscript affiliation markers stay inline.** `Ahmad Jalil¹*` imports with
-   the marker attached to the name rather than resolved into an affiliation
-   link.
+Fixing the import surfaced the defects that only show up in the *finished*
+document. All four are now built.
+
+### The bibliography lost every co-author, initial, journal, volume and page
+The importer kept one family name and a year per entry, so the exported
+Copernicus bibliography read
+
+> Bond: Bounding the role of black carbon in the climate system: A scientific
+> assessment., https://doi.org/10.1002/jgrd.50171, 2013.
+
+and every in-text citation read "(Bond, 2013)" where the paper said
+"(Bond et al., 2013)" — citeproc renders CSL fields, and there were none to
+render. `manuscriptReferenceParse.ts` now reads the whole entry, in the three
+shapes reference lists actually come in:
+
+| Shape | Example |
+| --- | --- |
+| author-date | `Bond, T. C., and Doherty, S. J. (2013). Title. Journal, 118, 5380–5552.` |
+| Copernicus | `Bond, T. C., and Doherty, S. J.: Title, J. Geophys. Res., 118, 5380–5552, 2013.` |
+| ACS / Vancouver | `Mendell MJ, Eliseeva EA, et al. Title. Indoor Air. 2013;23(6):515-528.` |
+
+It reads families and initials apart (`C.-H.`, `MJ`, `A. S. H.`), the journal
+(keeping the abbreviating period in `J. Geophys. Res.-Atmos.`), volume, issue
+and pages, and it records that the source itself truncated the list. The same
+entry now exports as the paper wrote it. An entry with no punctuated author
+head — an institutional or web reference — is deliberately left whole rather
+than having a journal invented for it.
+
+### The byline imported as one author, the affiliation as two institutions
+`Ahmad Jalil and Hossein Kazemian` was a single contributor named after both
+of them, and the affiliation, wrapped onto a second Word line mid-clause,
+became two institutions. Author lines now split on `and` / `&` / commas — but
+only when every piece still reads as a whole name, so `Smith, J.` stays one
+person — a wrapped affiliation line rejoins its predecessor, and a
+single-institution paper (which prints no markers at all) attaches that one
+affiliation to every author.
+
+### Equations imported as text, not maths
+A layout-table equation arrives as characters — `x̄j,time = Σi wij xi / Σi wij`
+— and both the MathML and OMML renderers expect LaTeX, so it printed as a
+sentence instead of typesetting. `manuscriptMathUnicode.ts` recovers what the
+characters state outright: named symbols (`λ` → `\lambda`, `∩` → `\cap`), the
+Unicode sub/superscript alphabets (`b₁` → `b_{1}`, `r⁻ᵅ` → `r^{-\alpha}`), a
+combining accent (`x̄` → `\bar{x}`), and a summation written against its index
+(`Σi` → `\sum_{i}`). It never infers structure the source did not write:
+`wij` keeps its letters, because only the author knows which of them is an
+index. LaTeX that came from the OMML path is left untouched.
+
+### Renumbering threw away numbering the author chose
+An imported `(11a)`/`(11b)` pair collapsed to `(11)`/`(12)`, and the appendix's
+`Table B1` became `Table S1`. `keepSourceNumbers` — an export-style switch in
+the Numbering section, off by default — keeps the labels the source used, for
+an author re-exporting their own submitted draft. Assets added after the
+import have no source label and still take the next number in their sequence.
+
+---
+
+## 5. The test
+
+`manuscriptAmtPaperImport.test.ts` runs the paper end to end against the
+fixture in `__tests__/fixtures/amtPaperWordMl.ts` — the real document's
+headings, equations, captions, table shapes and complete reference list, with
+body prose trimmed to the sentences carrying citations and cross-references.
+It asserts the full outline, the 15 equation assets and their placement, that
+only the real tables are numbered, every citation form, the parsed reference
+fields, the contributors, the CSL-rendered bibliography, both numbering modes,
+and the assembled export (labels, cross-references, the
+`Abstract is 361 words (limit 350)` warning, and the JATS article).
+
+It is deliberately a *transposition* rather than a synthetic case: everything
+in it is something a working scientist's document actually does.
+
+---
+
+## 6. Still open
+
+1. **"et al." cannot be forced back on.** CSL-JSON has no flag for "the source
+   truncated this list", so a style whose et-al threshold sits above the number
+   of names the entry printed will list them all. The fact is recorded
+   (`researcher:truncatedAuthors`) but nothing consumes it yet.
+2. **Reference parsing has no publisher/edition/chapter support.** Journal
+   articles read well; books, chapters and reports fall back to title + year,
+   with the verbatim entry in `notes`.
+3. **Multi-line titles lose their punctuation.** A title split across Word
+   lines is rejoined with a space, so the AMT draft's title comes back without
+   the colon its numbered sibling has.
+4. **Equation structure beyond the characters.** `wij` stays `wij`: recovering
+   `w_{ij}` would need either the original OMML or an author decision. Imported
+   equations are editable as LaTeX, which is where that decision belongs.

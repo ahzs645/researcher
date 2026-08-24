@@ -64,6 +64,47 @@ describe('manuscript contributors', () => {
     ).toBe('Ahmad Jalil [2*]; Ann Duong [1,2]');
   });
 
+  it('splits a journal byline that separates its authors with "and"', () => {
+    const affiliations = parseManuscriptAffiliations(
+      'Environmental Science Program, Faculty of Environment,\nUniversity of Northern British Columbia, Canada',
+    );
+
+    // The affiliation wrapped onto a second line mid-clause: one institution,
+    // not two.
+    expect(affiliations).toEqual([
+      {
+        id: 'affiliation-1',
+        name: 'Environmental Science Program, Faculty of Environment, University of Northern British Columbia, Canada',
+      },
+    ]);
+
+    const authors = parseManuscriptAuthors(
+      'Ahmad Jalil and Hossein Kazemian',
+      affiliations,
+    );
+    expect(authors.map((author) => author.name)).toEqual([
+      'Ahmad Jalil',
+      'Hossein Kazemian',
+    ]);
+    // A single-institution paper prints no markers, so both authors belong to
+    // the one affiliation it lists.
+    expect(authors.map((author) => author.affiliationIds)).toEqual([
+      ['affiliation-1'],
+      ['affiliation-1'],
+    ]);
+  });
+
+  it('does not mistake "Family, Given" for two authors', () => {
+    expect(
+      parseManuscriptAuthors('Smith, J.', []).map((author) => author.name),
+    ).toEqual(['Smith, J.']);
+    expect(
+      parseManuscriptAuthors('Jane Smith, John Doe, and Ann Lee', []).map(
+        (author) => author.name,
+      ),
+    ).toEqual(['Jane Smith', 'John Doe', 'Ann Lee']);
+  });
+
   it('formats references as superscripts and exposes semantic Word runs', () => {
     const display = formatManuscriptAuthorLine(
       'Ahmad Jalil [1*]; Ann Duong [1,2]',

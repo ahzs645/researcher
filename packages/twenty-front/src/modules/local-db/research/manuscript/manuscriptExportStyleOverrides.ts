@@ -8,6 +8,7 @@ export const MANUSCRIPT_EXPORT_STYLE_OVERRIDE_KEYS = [
   'tableLabelFormat',
   'supplementPrefix',
   'numberingScope',
+  'keepSourceNumbers',
   'crossRefFormat',
   'figureCaptionPosition',
   'figureCaptionFontSize',
@@ -117,6 +118,7 @@ const NUMBER_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
 ]);
 
 const BOOLEAN_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
+  'keepSourceNumbers',
   'supplementCoverPage',
   'lineNumbering',
   'pageNumbering',

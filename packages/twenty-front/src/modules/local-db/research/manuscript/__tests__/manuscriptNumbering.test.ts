@@ -85,18 +85,82 @@ describe('numberAssets', () => {
 
   it('numbers per top-level section when the journal scope is PER_SECTION', () => {
     const sections = [
-      { id: 'intro', name: 'Introduction', placement: 'MAIN', orderIndex: 0, level: 1 },
-      { id: 'methods', name: 'Methods', placement: 'MAIN', orderIndex: 1, level: 1 },
-      { id: 'sub', name: 'Study site', placement: 'MAIN', orderIndex: 2, level: 2 },
-      { id: 'results', name: 'Results', placement: 'MAIN', orderIndex: 3, level: 1 },
-      { id: 'refs', name: 'References', placement: 'BACK_MATTER', orderIndex: 4, level: 1 },
+      {
+        id: 'intro',
+        name: 'Introduction',
+        placement: 'MAIN',
+        orderIndex: 0,
+        level: 1,
+      },
+      {
+        id: 'methods',
+        name: 'Methods',
+        placement: 'MAIN',
+        orderIndex: 1,
+        level: 1,
+      },
+      {
+        id: 'sub',
+        name: 'Study site',
+        placement: 'MAIN',
+        orderIndex: 2,
+        level: 2,
+      },
+      {
+        id: 'results',
+        name: 'Results',
+        placement: 'MAIN',
+        orderIndex: 3,
+        level: 1,
+      },
+      {
+        id: 'refs',
+        name: 'References',
+        placement: 'BACK_MATTER',
+        orderIndex: 4,
+        level: 1,
+      },
     ];
     const chapterFigures: FigureLike[] = [
-      { id: 'a', refKey: 'a', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 0, sectionId: 'intro' },
-      { id: 'b', refKey: 'b', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 1, sectionId: 'sub' },
-      { id: 'c', refKey: 'c', assetKind: 'TABLE', placement: 'MAIN', orderIndex: 2, sectionId: 'results' },
-      { id: 'd', refKey: 'd', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 3, sectionId: 'results' },
-      { id: 'e', refKey: 'e', assetKind: 'FIGURE', placement: 'SUPPLEMENT', orderIndex: 4 },
+      {
+        id: 'a',
+        refKey: 'a',
+        assetKind: 'FIGURE',
+        placement: 'MAIN',
+        orderIndex: 0,
+        sectionId: 'intro',
+      },
+      {
+        id: 'b',
+        refKey: 'b',
+        assetKind: 'FIGURE',
+        placement: 'MAIN',
+        orderIndex: 1,
+        sectionId: 'sub',
+      },
+      {
+        id: 'c',
+        refKey: 'c',
+        assetKind: 'TABLE',
+        placement: 'MAIN',
+        orderIndex: 2,
+        sectionId: 'results',
+      },
+      {
+        id: 'd',
+        refKey: 'd',
+        assetKind: 'FIGURE',
+        placement: 'MAIN',
+        orderIndex: 3,
+        sectionId: 'results',
+      },
+      {
+        id: 'e',
+        refKey: 'e',
+        assetKind: 'FIGURE',
+        placement: 'SUPPLEMENT',
+        orderIndex: 4,
+      },
     ];
     const numbered = numberAssets(
       chapterFigures,
@@ -114,13 +178,38 @@ describe('numberAssets', () => {
 
   it('assigns unanchored figures to the preceding chapter', () => {
     const sections = [
-      { id: 'intro', name: 'Introduction', placement: 'MAIN', orderIndex: 0, level: 1 },
+      {
+        id: 'intro',
+        name: 'Introduction',
+        placement: 'MAIN',
+        orderIndex: 0,
+        level: 1,
+      },
     ];
     const numbered = numberAssets(
       [
-        { id: 'a', refKey: 'a', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 0 },
-        { id: 'b', refKey: 'b', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 1, sectionId: 'intro' },
-        { id: 'c', refKey: 'c', assetKind: 'FIGURE', placement: 'MAIN', orderIndex: 2 },
+        {
+          id: 'a',
+          refKey: 'a',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+          orderIndex: 0,
+        },
+        {
+          id: 'b',
+          refKey: 'b',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+          orderIndex: 1,
+          sectionId: 'intro',
+        },
+        {
+          id: 'c',
+          refKey: 'c',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+          orderIndex: 2,
+        },
       ],
       { numberingScope: 'PER_SECTION' },
       sections,
@@ -139,5 +228,67 @@ describe('asset lookup', () => {
     expect(resolveAssetKey('fig:arpes', lookup)?.label).toBe('Figure 1');
     expect(resolveAssetKey('tab:growth', lookup)?.label).toBe('Table 1');
     expect(resolveAssetKey('missing', lookup)).toBeUndefined();
+  });
+});
+
+describe('keepSourceNumbers', () => {
+  it('keeps the labels the source document used', () => {
+    const numbered = numberAssets(
+      [
+        {
+          id: 'e1',
+          refKey: 'eq-11a',
+          assetKind: 'EQUATION',
+          sourceLabel: '11a',
+          orderIndex: 0,
+        },
+        {
+          id: 'e2',
+          refKey: 'eq-11b',
+          assetKind: 'EQUATION',
+          sourceLabel: '11b',
+          orderIndex: 1,
+        },
+        {
+          id: 't1',
+          refKey: 'tab-b1',
+          assetKind: 'TABLE',
+          sourceLabel: 'B1',
+          placement: 'SUPPLEMENT',
+          orderIndex: 2,
+        },
+        { id: 'f1', refKey: 'fig-new', assetKind: 'FIGURE', orderIndex: 3 },
+      ],
+      { keepSourceNumbers: true, tableLabelFormat: 'Table {n}' },
+    );
+
+    expect(numbered.map((asset) => asset.label)).toEqual([
+      '(11a)',
+      '(11b)',
+      // An asset the author added after the import has no source label, so it
+      // still takes the next number in its own sequence.
+      'Figure 1',
+      'Table B1',
+    ]);
+  });
+
+  it('renumbers continuously by default', () => {
+    const numbered = numberAssets([
+      {
+        id: 'e1',
+        refKey: 'eq-11a',
+        assetKind: 'EQUATION',
+        sourceLabel: '11a',
+        orderIndex: 0,
+      },
+      {
+        id: 'e2',
+        refKey: 'eq-11b',
+        assetKind: 'EQUATION',
+        sourceLabel: '11b',
+        orderIndex: 1,
+      },
+    ]);
+    expect(numbered.map((asset) => asset.label)).toEqual(['(1)', '(2)']);
   });
 });

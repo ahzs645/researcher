@@ -17,6 +17,11 @@ import {
   type BuildBundleInput,
 } from '@/local-db/research/manuscript/manuscriptAssembly';
 import { buildJatsArticle } from '@/local-db/research/manuscript/manuscriptJatsExport';
+import { prepareManuscriptBundleWithCsl } from '@/local-db/research/manuscript/manuscriptCslIntegration';
+import {
+  parseManuscriptAffiliations,
+  parseManuscriptAuthors,
+} from '@/local-db/research/manuscript/manuscriptContributors';
 import { buildManuscriptImportSummary } from '@/local-db/research/import-wizard/utils/buildManuscriptImportSummary';
 import {
   AMT_PAPER_IMAGES,
@@ -134,7 +139,9 @@ describe('AMT manuscript import (real Copernicus paper)', () => {
     ]);
     expect(equations[6]).toMatchObject({
       refKey: 'eq-7',
-      equationLatex: 'x̄j,time = Σi wij xi / Σi wij',
+      // Word had only characters to work with; the import recovers the LaTeX
+      // the MathML and OMML renderers need to typeset it.
+      equationLatex: '\\bar{x}j,time = \\sum_{i} wij xi / \\sum_{i} wij',
       imageSource: 'NONE',
     });
     // Each equation stays where the author put it.
@@ -230,8 +237,16 @@ describe('AMT manuscript import (real Copernicus paper)', () => {
       ]),
     );
 
-    // Diacritics survive into the printed bibliography.
-    expect(byKey.get('dusing2019')?.authors).toBe('Düsing');
+    // Every co-author and initial reaches the record, diacritics included —
+    // the bibliography prints what the paper's own reference list said.
+    expect(byKey.get('dusing2019')?.authors).toBe(
+      'Düsing, S.; Wehner, B.; Müller, T.; Stöcker, A.; Wiedensohler, A.',
+    );
+    expect(byKey.get('dusing2019')).toMatchObject({
+      containerTitle: 'Atmospheric Measurement Techniques',
+      volume: '12',
+      pages: '5879–5895',
+    });
     // A DOI whose suffix carries balanced parentheses is not truncated.
     expect(byKey.get('weingartner2003')?.doi).toBe(
       '10.1016/S0021-8502(03)00359-8',
@@ -325,7 +340,9 @@ describe('AMT manuscript import (real Copernicus paper)', () => {
 
     // Each equation is typeset where it stood, under its own number.
     expect(bundle.mainMarkdown).toContain(
-      ['$$x̄j,time = Σi wij xi / Σi wij$$', '', '(7)'].join('\n'),
+      ['$$\\bar{x}j,time = \\sum_{i} wij xi / \\sum_{i} wij$$', '', '(7)'].join(
+        '\n',
+      ),
     );
     expect(bundle.warnings).not.toContain('(7) has no equation body yet');
 
@@ -346,5 +363,82 @@ describe('AMT manuscript import (real Copernicus paper)', () => {
     const jats = buildJatsArticle(bundle);
     expect(jats).toContain('<article-title>');
     expect(jats).toContain('Atmospheric Measurement Techniques');
+  });
+
+  it('splits the byline into contributors with their affiliation', () => {
+    const { document } = importAmtPaper();
+    const affiliations = parseManuscriptAffiliations(document.affiliations);
+    const authors = parseManuscriptAuthors(document.authorLine, affiliations);
+
+    // The affiliation wraps onto a second line in the source; it is one
+    // institution, and both authors belong to it.
+    expect(affiliations).toHaveLength(1);
+    expect(authors.map((author) => author.name)).toEqual([
+      'Ahmad Jalil',
+      'Hossein Kazemian',
+    ]);
+    expect(authors.every((author) => author.affiliationIds.length === 1)).toBe(
+      true,
+    );
+  });
+
+  it('renders a Copernicus bibliography from the imported entries', async () => {
+    const { document, prepared } = importAmtPaper();
+    const bundle = buildManuscriptBundle({
+      manuscript: { id: 'amt', name: document.title ?? '' },
+      style: AMT_STYLE,
+      authors: document.authorLine ?? '',
+      sections: prepared.sections.map((section, index) => ({
+        id: `s${index}`,
+        ...section,
+      })),
+      figures: prepared.figures.map((figure, index) => ({
+        id: `f${index}`,
+        ...figure,
+      })),
+      references: prepared.references.map((reference, index) => ({
+        id: `r${index}`,
+        ...reference,
+      })),
+    });
+    const formatted = await prepareManuscriptBundleWithCsl(bundle);
+
+    // Co-authors, initials, journal, volume and pages all reach the printed
+    // entry — the whole reason the fields are parsed rather than guessed.
+    expect(formatted.bibliography[0].text).toBe(
+      'Bond, T. C., Doherty, S. J., and Fahey, D. W.: Bounding the role of black carbon in the climate system: A scientific assessment, Journal of Geophysical Research: Atmospheres, 118, 5380–5552, https://doi.org/10.1002/jgrd.50171, 2013.',
+    );
+    // And the in-text citation knows there is more than one author.
+    expect(formatted.mainMarkdown).toContain(
+      '(Drinovec et al., 2015; Weingartner et al., 2003)',
+    );
+  });
+
+  it('can keep the numbering the source document used', () => {
+    const { document, prepared } = importAmtPaper();
+    const bundle = buildManuscriptBundle({
+      manuscript: { id: 'amt', name: document.title ?? '' },
+      style: { ...AMT_STYLE, keepSourceNumbers: true },
+      authors: document.authorLine ?? '',
+      sections: prepared.sections.map((section, index) => ({
+        id: `s${index}`,
+        ...section,
+      })),
+      figures: prepared.figures.map((figure, index) => ({
+        id: `f${index}`,
+        ...figure,
+      })),
+      references: [],
+    });
+
+    const numbered = new Map(
+      bundle.numberedFigures.map((figure) => [figure.refKey, figure.label]),
+    );
+    // (11a) and (11b) stay as the author wrote them instead of collapsing to
+    // (11) and (12), and the appendix table keeps its letter.
+    expect(numbered.get('eq-11a')).toBe('(11a)');
+    expect(numbered.get('eq-11b')).toBe('(11b)');
+    expect(numbered.get('imported-table-b1')).toBe('Table B1');
+    expect(bundle.mainMarkdown).toContain('Eqs. (7) and (8) coincide');
   });
 });

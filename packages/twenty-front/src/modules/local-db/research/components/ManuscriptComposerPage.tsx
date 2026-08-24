@@ -424,6 +424,7 @@ const ManuscriptComposerPageContent = () => {
               selectedSection={composer.selectedSection}
               style={composer.effectiveStyle}
               exportTableStyle={exportTableStyle}
+              exportStyleOverrides={manuscript.exportStyleOverrides}
               targetJournal={linkedJournal}
               submissionExtras={manuscript.submissionExtras}
               competingInterests={manuscript.competingInterests}

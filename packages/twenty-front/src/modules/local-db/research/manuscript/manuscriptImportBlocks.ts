@@ -15,6 +15,8 @@ export type ImportedSourceInfo = Pick<
   | 'titlePageExtraLines'
   | 'warnings'
   | 'stats'
+  | 'sourceStylesXml'
+  | 'sourceDocumentName'
 >;
 
 export type ImportBlockRole =
@@ -531,6 +533,12 @@ export const assembleImportedDocument = (
       ? { warnings: sourceInfo.warnings }
       : {}),
     ...(sourceInfo.stats !== undefined ? { stats: sourceInfo.stats } : {}),
+    ...(sourceInfo.sourceStylesXml !== undefined
+      ? { sourceStylesXml: sourceInfo.sourceStylesXml }
+      : {}),
+    ...(sourceInfo.sourceDocumentName !== undefined
+      ? { sourceDocumentName: sourceInfo.sourceDocumentName }
+      : {}),
     ...(suppressedAssetLineSignatures.size > 0
       ? {
           suppressedAssetLineSignatures: [...suppressedAssetLineSignatures],

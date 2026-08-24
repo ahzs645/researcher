@@ -8,6 +8,7 @@ import {
 } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 import { portableManuscriptRecordUpdate } from '@/local-db/research/manuscript/manuscriptPortableImport';
 import { type SubmissionTransposeUpdate } from '@/local-db/research/manuscript/manuscriptSubmissionTranspose';
+import { withImportedSourceStyles } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { serializeManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';
 import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
@@ -20,6 +21,9 @@ type UseManuscriptImportCommitOptions = {
   manuscriptName?: string | null;
   existingSectionCount: number;
   existingReferences: ExistingImportReference[];
+  // What the manuscript already carries, so an imported document's own Word
+  // styles are adopted without overwriting a template the author picked.
+  existingExportStyleOverrides?: string | null;
 };
 
 export type ManuscriptImportCreatedCounts = {
@@ -74,6 +78,7 @@ export const useManuscriptImportCommit = ({
   manuscriptName,
   existingSectionCount,
   existingReferences,
+  existingExportStyleOverrides,
 }: UseManuscriptImportCommitOptions) => {
   const { createOneRecord: createSection } = useCreateOneRecord({
     objectNameSingular: 'manuscriptSection',
@@ -230,6 +235,16 @@ export const useManuscriptImportCommit = ({
             serializeManuscriptTitlePageExtraLines(
               document.titlePageExtraLines,
             );
+        }
+        // The source .docx's own styles become the export style base, so the
+        // file this manuscript exports looks like the file it came from.
+        const importedStyles = withImportedSourceStyles(
+          existingExportStyleOverrides,
+          document.sourceStylesXml,
+          document.sourceDocumentName,
+        );
+        if (importedStyles !== undefined) {
+          manuscriptUpdate.exportStyleOverrides = importedStyles;
         }
         if (submissionTransposeUpdate !== undefined) {
           Object.assign(manuscriptUpdate, submissionTransposeUpdate);

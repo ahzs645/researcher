@@ -22,6 +22,7 @@ type ManuscriptImportPanelProps = {
   existingFigureRefKeys: string[];
   onChanged: () => void;
   exportTableStyle?: ManuscriptTableStyle;
+  exportStyleOverrides?: string | null;
   targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
   submissionExtras?: string | null;
   competingInterests?: string | null;
@@ -49,6 +50,7 @@ export const ManuscriptImportPanel = ({
   existingFigureRefKeys,
   onChanged,
   exportTableStyle,
+  exportStyleOverrides,
   targetJournal,
   submissionExtras,
   competingInterests,
@@ -78,6 +80,7 @@ export const ManuscriptImportPanel = ({
             existingFigureRefKeys,
             onChanged,
             exportTableStyle,
+            exportStyleOverrides,
             targetJournal,
             submissionExtras,
             competingInterests,

@@ -82,6 +82,7 @@ export const useManuscriptImportReviewState = ({
       manuscriptName: options.manuscriptName,
       existingSectionCount: options.existingSectionCount,
       existingReferences: options.existingReferences,
+      existingExportStyleOverrides: options.exportStyleOverrides,
     });
 
   useEffect(() => {

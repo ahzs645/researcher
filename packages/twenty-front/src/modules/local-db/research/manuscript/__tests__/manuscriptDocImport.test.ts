@@ -1180,6 +1180,38 @@ describe('OMML → LaTeX', () => {
   });
 });
 
+describe('bookmarked master documents', () => {
+  const para = (text: string, style?: string): string =>
+    `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t>${text}</w:t></w:r></w:p>`;
+  // An editing kit stamps invisible bookmarks around every addressable
+  // paragraph and table cell so edits can be targeted by ID. They must be
+  // invisible to the importer too.
+  const bookmarked = (id: string, inner: string): string =>
+    inner.replace(/<w:r>/, `<w:bookmarkStart w:id="1" w:name="${id}"/><w:r>`) +
+    `<w:bookmarkEnd w:id="1"/>`;
+
+  it('reads a document whose paragraphs carry stable bookmarks', () => {
+    const xml = `<w:document><w:body>${[
+      bookmarked('title.p01', para('Airborne trace metals', 'Heading1')),
+      bookmarked('abstract.h', para('Abstract', 'Heading1')),
+      bookmarked('abstract.p01', para('We measured trace metals.')),
+      bookmarked('intro.h', para('1 Introduction', 'Heading1')),
+      bookmarked('intro.p01', para('Metals matter.')),
+    ].join('')}</w:body></w:document>`;
+
+    const doc = parseWordDocument(xml, {
+      styles: { Heading1: { name: 'heading 1', headingLevel: 1 } },
+    });
+
+    expect(doc.title).toBe('Airborne trace metals');
+    expect(doc.sections.map((section) => section.name)).toEqual([
+      'Abstract',
+      'Introduction',
+    ]);
+    expect(doc.sections[1].content).toBe('Metals matter.');
+  });
+});
+
 describe('title page metadata', () => {
   const para = (text: string, style?: string): string =>
     `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t>${text}</w:t></w:r></w:p>`;

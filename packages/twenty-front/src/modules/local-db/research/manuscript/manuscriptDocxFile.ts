@@ -20,6 +20,7 @@ import {
   type ImportedSourceInfo,
 } from './manuscriptImportBlocks';
 import { extractPdfText } from './manuscriptPdfFile';
+import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
 import { readPortableResearchPaperZip } from './manuscriptPortableZip';
 import { tiffToPngDataUrl } from './manuscriptTiff';
 
@@ -193,6 +194,7 @@ const readOptionalXmlEntry = async (
 
 type ImportedWordSource = {
   documentXml: string;
+  stylesXml: string;
   options: WordImportOptions;
   hasTiff: boolean;
 };
@@ -212,6 +214,7 @@ const readImportedWordSource = async (
   );
   return {
     documentXml,
+    stylesXml,
     options: {
       styles: parseWordStyleDefinitions(stylesXml),
       imageByRelationshipId,
@@ -236,6 +239,16 @@ const addTiffWarning = (
       }
     : document;
 
+// The source's own styles are worth carrying only when they are a real Word
+// style table small enough to store with the manuscript.
+const sourceStyleFields = (
+  stylesXml: string,
+  fileName: string,
+): Pick<ImportedDocument, 'sourceStylesXml' | 'sourceDocumentName'> =>
+  isManuscriptDocxStylesXml(stylesXml)
+    ? { sourceStylesXml: stylesXml, sourceDocumentName: fileName }
+    : {};
+
 const sourceInfoFromDocument = (
   document: ImportedDocument,
 ): ImportedSourceInfo => ({
@@ -254,16 +267,26 @@ const sourceInfoFromDocument = (
     : {}),
   ...(document.warnings !== undefined ? { warnings: document.warnings } : {}),
   ...(document.stats !== undefined ? { stats: document.stats } : {}),
+  ...(document.sourceStylesXml !== undefined
+    ? { sourceStylesXml: document.sourceStylesXml }
+    : {}),
+  ...(document.sourceDocumentName !== undefined
+    ? { sourceDocumentName: document.sourceDocumentName }
+    : {}),
 });
 
 export const readImportedWordDocument = async (
   buffer: ArrayBuffer,
+  fileName = 'the imported document',
 ): Promise<ImportedDocument> => {
   const source = await readImportedWordSource(buffer);
-  return addTiffWarning(
-    parseWordDocument(source.documentXml, source.options),
-    source.hasTiff,
-  );
+  return {
+    ...addTiffWarning(
+      parseWordDocument(source.documentXml, source.options),
+      source.hasTiff,
+    ),
+    ...sourceStyleFields(source.stylesXml, fileName),
+  };
 };
 
 const fileExtension = (name: string): string =>
@@ -314,7 +337,7 @@ export const readImportedDocumentFile = async (
     };
   }
   if (extension === 'docx') {
-    return readImportedWordDocument(await file.arrayBuffer());
+    return readImportedWordDocument(await file.arrayBuffer(), file.name);
   }
   if (extension === 'pdf') {
     // Best-effort: PDFs carry no headings, so this usually yields one section.
@@ -338,12 +361,13 @@ export const readImportedDocumentSource = async (
       source.documentXml,
       source.options,
     );
-    const sourceInfo = sourceInfoFromDocument(
-      addTiffWarning(
+    const sourceInfo = sourceInfoFromDocument({
+      ...addTiffWarning(
         parseWordDocumentFromBlocks(source.documentXml, wordBlocks),
         source.hasTiff,
       ),
-    );
+      ...sourceStyleFields(source.stylesXml, file.name),
+    });
     return {
       kind: 'blocks',
       blocks: deriveImportBlocks(wordBlocks),

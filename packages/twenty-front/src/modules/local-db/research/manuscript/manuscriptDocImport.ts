@@ -54,6 +54,12 @@ export type ImportedDocument = {
   // Exact body lines that the import map deliberately demoted from captions.
   // Asset extraction must preserve them as prose instead of reclassifying them.
   suppressedAssetLineSignatures?: string[];
+  // `word/styles.xml` from the source .docx, and the file it came from. A paper
+  // arrives looking like itself — its own fonts, headings and spacing — and the
+  // DOCX exporter can use those styles as its base so the export it produces is
+  // a drop-in replacement for the document the author already has.
+  sourceStylesXml?: string;
+  sourceDocumentName?: string;
   portablePackage?: PortableResearchPaperManifest;
 };
 
@@ -1420,14 +1426,19 @@ type TitlePageMetadata = {
   affiliations?: string;
   correspondingAuthor?: string;
   titlePageExtraLines?: string[];
-  // Title lines the source wrapped onto their own paragraphs, in order. A
-  // journal title block sets the title over two or three centred lines; only
-  // the first reached `title`, and the rest used to be filed as furniture.
-  titleContinuationLines?: string[];
+  // The rest of the title, split by how the source wrote it: lines the title's
+  // own paragraph wrapped onto, and the subtitle paragraphs that follow it.
+  wrappedTitleLines?: string[];
+  subtitleLines?: string[];
 };
 
 const extractTitlePageMetadata = (
   allSections: ImportedSectionDraft[],
+  // How many of the title-page lines are the *title's own* wrapped lines. A
+  // journal title block sets the title over two lines of one paragraph and its
+  // subtitle in the next paragraph: the wrapped lines rejoin with a space, the
+  // subtitle with the colon that separates a title from its subtitle.
+  wrappedTitleLineCount = 0,
 ): TitlePageMetadata => {
   const titlePageIndex = allSections.findIndex(
     (section) => section.sectionType === 'TITLE_PAGE',
@@ -1524,6 +1535,11 @@ const extractTitlePageMetadata = (
   const titleContinuationLines = lines.filter((_line, index) =>
     isTitleContinuation(index),
   );
+  const wrappedTitleLines = titleContinuationLines.slice(
+    0,
+    wrappedTitleLineCount,
+  );
+  const subtitleLines = titleContinuationLines.slice(wrappedTitleLineCount);
   const extraLines = lines.filter(
     (_line, index) =>
       index !== authorIndex &&
@@ -1540,8 +1556,24 @@ const extractTitlePageMetadata = (
       : {}),
     ...(correspondingAuthor !== undefined ? { correspondingAuthor } : {}),
     ...(extraLines.length > 0 ? { titlePageExtraLines: extraLines } : {}),
-    ...(titleContinuationLines.length > 0 ? { titleContinuationLines } : {}),
+    ...(wrappedTitleLines.length > 0 ? { wrappedTitleLines } : {}),
+    ...(subtitleLines.length > 0 ? { subtitleLines } : {}),
   };
+};
+
+// The title's own paragraph may wrap onto further lines; every line after it
+// belongs to a later paragraph, which is what makes it a subtitle rather than
+// more of the title. Count the breaks in the source paragraph itself: by the
+// time the text is blocks, a line break and a paragraph break look alike.
+const wrappedTitleLineCount = (documentXml: string): number => {
+  const body =
+    /<w:body\b[\s\S]*?<\/w:body>/.exec(documentXml)?.[0] ?? documentXml;
+  for (const token of tokenizeWordBody(body)) {
+    if (token.startsWith('<w:tbl')) return 0;
+    if (!/<w:t\b[^>]*>[^<]*\S/.test(token)) continue;
+    return (token.match(/<w:br\b[^>]*\/?>/g) ?? []).length;
+  }
+  return 0;
 };
 
 export const parseWordDocumentFromBlocks = (
@@ -1568,12 +1600,18 @@ export const parseWordDocumentFromBlocks = (
     );
   }
 
-  const { sections, titleContinuationLines, ...titlePageMetadata } =
-    extractTitlePageMetadata(document.sections);
+  const { sections, wrappedTitleLines, subtitleLines, ...titlePageMetadata } =
+    extractTitlePageMetadata(
+      document.sections,
+      wrappedTitleLineCount(documentXml),
+    );
   const title =
-    titleContinuationLines === undefined || document.title === undefined
-      ? document.title
-      : [document.title, ...titleContinuationLines].join(' ');
+    document.title === undefined
+      ? undefined
+      : [
+          [document.title, ...(wrappedTitleLines ?? [])].join(' '),
+          ...(subtitleLines ?? []),
+        ].join(': ');
 
   return {
     ...document,

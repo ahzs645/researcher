@@ -57,10 +57,12 @@ describe('AMT manuscript import (real Copernicus paper)', () => {
   it('reads the title block as metadata, not as sections', () => {
     const { document } = importAmtPaper();
 
-    // The title runs over two centred lines and a subtitle line; all three are
-    // the title, and none of them is the author list.
+    // The title wraps over two lines of one paragraph and takes a subtitle in
+    // the next: the wrapped lines rejoin with a space, the subtitle with a
+    // colon. The result is exactly the title the author's other draft of this
+    // paper states outright in a single heading.
     expect(document.title).toBe(
-      'Quantifying temporal aggregation and representativeness bias when integrating aethalometer and filter-based carbonaceous aerosol measurements The AETH Modular measurement-integration framework',
+      'Quantifying temporal aggregation and representativeness bias when integrating aethalometer and filter-based carbonaceous aerosol measurements: The AETH Modular measurement-integration framework',
     );
     expect(document.authorLine).toBe('Ahmad Jalil and Hossein Kazemian');
     expect(document.affiliations).toContain(

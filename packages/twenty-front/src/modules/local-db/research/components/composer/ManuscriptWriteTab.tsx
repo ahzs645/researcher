@@ -30,6 +30,7 @@ type ManuscriptWriteTabProps = {
   selectedSection?: SectionLike;
   style: JournalStyle;
   exportTableStyle: ManuscriptTableStyle;
+  exportStyleOverrides?: string | null;
   targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
   submissionExtras?: string | null;
   competingInterests?: string | null;
@@ -113,6 +114,7 @@ export const ManuscriptWriteTab = ({
   selectedSection,
   style,
   exportTableStyle,
+  exportStyleOverrides,
   targetJournal,
   submissionExtras,
   competingInterests,
@@ -184,6 +186,7 @@ export const ManuscriptWriteTab = ({
                   typeof refKey === 'string' && refKey.length > 0,
               )}
             exportTableStyle={exportTableStyle}
+            exportStyleOverrides={exportStyleOverrides}
             targetJournal={targetJournal}
             submissionExtras={submissionExtras}
             competingInterests={competingInterests}

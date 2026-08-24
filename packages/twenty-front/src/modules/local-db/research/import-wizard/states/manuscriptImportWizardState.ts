@@ -16,6 +16,9 @@ export type ManuscriptImportWizardOptions = {
   // created a throwaway manuscript to import into can clean it up.
   onClosed?: () => void;
   exportTableStyle?: ManuscriptTableStyle;
+  // The manuscript's stored export-style overrides, so an imported document's
+  // own Word styles never overwrite a template the author chose.
+  exportStyleOverrides?: string | null;
   targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
   submissionExtras?: string | null;
   competingInterests?: string | null;

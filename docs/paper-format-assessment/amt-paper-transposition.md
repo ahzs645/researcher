@@ -194,7 +194,59 @@ in it is something a working scientist's document actually does.
 
 ---
 
-## 6. Still open
+## 6. Checked against the author's editing kit
+
+The manuscript editing kit (a bookmarked master `.docx`, a YAML edit language,
+a block index and the source material) supplied ground truth for three things
+that had been inferred:
+
+**The reference parser is exact.** The kit's `references.bib` holds the
+authoritative metadata for all 13 sources. Parsing the paper's *prose*
+reference list and comparing field by field against that BibTeX — authors,
+journal, year, volume, pages, title — gives **13/13 exact matches** (once
+BibTeX's own notation is normalised: `--` for an en-dash, `\&` for an
+ampersand). Nothing in the printed bibliography is a guess.
+
+**Bookmarks are invisible to the importer.** The editable master carries 334
+invisible Word bookmarks, one per addressable paragraph and table cell.
+Imported, it produces a byte-identical outline to the un-bookmarked draft —
+same 36 sections, 23 assets, 13 references, 16 linked citations. Covered by a
+regression test.
+
+**The title block really does have a subtitle.** The kit's block index names
+`front.title`, `front.subtitle`, `front.authors`, `front.affiliation`,
+`front.correspondence` — so the third centred line is a subtitle, not more
+title. Wrapped lines (a `<w:br/>` inside the title's own paragraph) now rejoin
+with a space and a following paragraph joins with a colon, which reproduces
+the author's canonical title exactly:
+
+> Quantifying temporal aggregation and representativeness bias when integrating
+> aethalometer and filter-based carbonaceous aerosol measurements: **The AETH
+> Modular measurement-integration framework**
+
+All three shapes of this paper — the AMT draft, the bookmarked master and the
+numbered Word draft, which states that title outright in one heading — now
+import to the identical string.
+
+The kit's `style_and_layout_notes.md` also confirmed the layout conventions the
+importer had been inferring: "equations: one-row, two-column borderless tables
+with equation number right aligned", "figures … with caption paragraphs
+underneath", "main data tables: grid layout with shaded header rows".
+
+### An imported paper now keeps its own look
+
+The notes describe a document with its own typography (Liberation Serif 10.5 pt
+body, Liberation Sans headings, A4). The app could already borrow a Word
+template's styles for export — but only if you uploaded the same `.docx` a
+second time in the export panel, because the importer read `word/styles.xml`
+for heading levels and then threw it away. An imported `.docx` now carries its
+style table through to the manuscript's export settings, so the file it exports
+is a drop-in replacement for the file it came from. An explicit template choice
+always wins over the inferred one.
+
+---
+
+## 7. Still open
 
 1. **"et al." cannot be forced back on.** CSL-JSON has no flag for "the source
    truncated this list", so a style whose et-al threshold sits above the number
@@ -203,9 +255,10 @@ in it is something a working scientist's document actually does.
 2. **Reference parsing has no publisher/edition/chapter support.** Journal
    articles read well; books, chapters and reports fall back to title + year,
    with the verbatim entry in `notes`.
-3. **Multi-line titles lose their punctuation.** A title split across Word
-   lines is rejoined with a space, so the AMT draft's title comes back without
-   the colon its numbered sibling has.
-4. **Equation structure beyond the characters.** `wij` stays `wij`: recovering
-   `w_{ij}` would need either the original OMML or an author decision. Imported
-   equations are editable as LaTeX, which is where that decision belongs.
+3. **Equation structure beyond the characters.** `wij` stays `wij`: recovering
+   `w_{ij}` would need either the original OMML or an author decision.
+   Imported equations are editable as LaTeX, which is where that decision
+   belongs.
+4. **Page geometry is not imported.** The style table travels; the section
+   properties that set A4 and the master's narrow margins do not, so the export
+   uses the app's own page setup.

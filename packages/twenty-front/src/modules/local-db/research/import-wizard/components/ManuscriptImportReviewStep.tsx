@@ -143,7 +143,11 @@ export const ManuscriptImportReviewStep = ({
     <StyledContainer>
       <StyledHeader>
         <StyledTitle>
-          {isPortable ? 'Here’s what was imported' : 'Review & commit'}
+          {isPortable
+            ? isCommitting
+              ? 'Restoring your research package…'
+              : 'Here’s what was restored'
+            : 'Review & commit'}
         </StyledTitle>
         <StyledHint>
           {sourceName}
@@ -229,33 +233,46 @@ export const ManuscriptImportReviewStep = ({
           </div>
         ) : (
           <StyledSummary>
-            Nothing is written until you confirm this import.
+            {isPortable
+              ? isCommitting
+                ? 'Restoring sections, assets, references and journal…'
+                : 'Restored into this manuscript.'
+              : 'Nothing is written until you confirm this import.'}
           </StyledSummary>
         )}
         <div>
-          <Button
-            title="Back"
-            variant="secondary"
-            size="small"
-            disabled={isCommitting || failed}
-            onClick={onBack}
-          />
-          <Button
-            title={
-              isCommitting
-                ? 'Importing…'
-                : isPortable
-                  ? 'Import'
-                  : 'Confirm import'
-            }
-            variant="primary"
-            accent="blue"
-            size="small"
-            disabled={
-              isCommitting || failed || preparedImport.sections.length === 0
-            }
-            onClick={() => void confirmImport()}
-          />
+          {isPortable ? null : (
+            <Button
+              title="Back"
+              variant="secondary"
+              size="small"
+              disabled={isCommitting || failed}
+              onClick={onBack}
+            />
+          )}
+          {/* A first-party package restores itself; the only button it needs
+              is the one that gets you out if the restore fails. */}
+          {isPortable && !failed ? (
+            <Button
+              title={isCommitting ? 'Restoring…' : 'Done'}
+              variant="primary"
+              accent="blue"
+              size="small"
+              disabled={isCommitting}
+              onClick={onClose}
+            />
+          ) : (
+            <Button
+              title={isCommitting ? 'Importing…' : 'Confirm import'}
+              variant="primary"
+              accent="blue"
+              size="small"
+              disabled={
+                isCommitting || failed || preparedImport.sections.length === 0
+              }
+              onClick={() => void confirmImport()}
+            />
+          )}
         </div>
       </StyledFooter>
     </StyledContainer>

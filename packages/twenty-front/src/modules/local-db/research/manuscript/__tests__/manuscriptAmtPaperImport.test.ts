@@ -146,6 +146,15 @@ describe('AMT manuscript import (real Copernicus paper)', () => {
       equationLatex: '\\bar{x}j,time = \\sum_{i} wij xi / \\sum_{i} wij',
       imageSource: 'NONE',
     });
+    // An asset list of "Equation (1) … Equation (14)" says nothing about what
+    // any of them is, so each is named after the quantity it defines.
+    expect(equations.map((equation) => equation.name).slice(0, 3)).toEqual([
+      'ATNλ(t) — equation (1)',
+      'bATN,λ,i — equation (2)',
+      'babs,λ,i — equation (3)',
+    ]);
+    expect(equations[6].name).toBe('x̄j,time — equation (7)');
+    expect(equations[10].name).toBe('Δj — equation (11a)');
     // Each equation stays where the author put it.
     const overlap = prepared.sections.find((section) =>
       section.name.startsWith('Exact overlap'),

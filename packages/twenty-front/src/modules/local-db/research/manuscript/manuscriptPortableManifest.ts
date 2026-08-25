@@ -11,7 +11,11 @@ import {
 } from './manuscriptTypes';
 
 export const PORTABLE_MANUSCRIPT_FORMAT = 'researcher-manuscript' as const;
-export const PORTABLE_MANUSCRIPT_VERSION = 1 as const;
+// v2 adds the journal template the manuscript was written against, so a
+// restore brings its format back with it instead of falling back to whatever
+// profile the workspace happens to default to. v1 packages still import.
+export const PORTABLE_MANUSCRIPT_VERSION = 2 as const;
+export const PORTABLE_MANUSCRIPT_READABLE_VERSIONS = [1, 2];
 export const PORTABLE_MANUSCRIPT_FILENAME = 'research-paper.json';
 
 export type PortableManuscriptMetadata = {
@@ -29,11 +33,20 @@ export type PortableManuscriptMetadata = {
   supplementAffiliations?: string;
 };
 
+// The journal template the manuscript targets, carried whole so a restore can
+// re-link it when the workspace already has it and re-create it when it does
+// not. `profileKey` is the stable identity of a seeded template; `name` is the
+// fallback for one the author wrote themselves.
+export type PortableJournalTemplate = JournalStyle & {
+  name: string;
+};
+
 export type PortableManuscriptSource = {
   manuscript: PortableManuscriptMetadata;
   sections: SectionLike[];
   figures: FigureLike[];
   references: ReferenceLike[];
+  journal?: PortableJournalTemplate;
 };
 
 export type PortableResearchPaperManifest = {
@@ -101,6 +114,9 @@ export type PortableResearchPaperManifest = {
     notes?: string;
   }>;
   exportStyle: JournalStyle;
+  // The manuscript's target journal record (v2+). `exportStyle` is the
+  // resolved style used for this export; this is the template itself.
+  journal?: PortableJournalTemplate;
   submissionMaterials: SubmissionMaterials;
 };
 
@@ -264,6 +280,7 @@ export const buildPortableResearchPaperManifest = (
         : {}),
     })),
     exportStyle,
+    ...(source.journal !== undefined ? { journal: source.journal } : {}),
     submissionMaterials,
   };
 };
@@ -278,7 +295,9 @@ export const parsePortableResearchPaperManifest = (
   if (
     !isRecord(parsed) ||
     parsed.format !== PORTABLE_MANUSCRIPT_FORMAT ||
-    parsed.schemaVersion !== PORTABLE_MANUSCRIPT_VERSION ||
+    !PORTABLE_MANUSCRIPT_READABLE_VERSIONS.includes(
+      parsed.schemaVersion as number,
+    ) ||
     !isRecord(parsed.metadata) ||
     typeof parsed.metadata.title !== 'string' ||
     !isRecord(parsed.contributors) ||

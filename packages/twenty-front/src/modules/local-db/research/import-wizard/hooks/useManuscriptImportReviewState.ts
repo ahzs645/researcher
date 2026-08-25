@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useManuscriptImportCommit } from '@/local-db/research/import-wizard/hooks/useManuscriptImportCommit';
 import { type ManuscriptImportWizardOptions } from '@/local-db/research/import-wizard/states/manuscriptImportWizardState';
@@ -83,12 +83,36 @@ export const useManuscriptImportReviewState = ({
       existingSectionCount: options.existingSectionCount,
       existingReferences: options.existingReferences,
       existingExportStyleOverrides: options.exportStyleOverrides,
+      existingJournals: options.existingJournals,
     });
 
   useEffect(() => {
     registerCommitState(isCommitting);
     return () => registerCommitState(false);
   }, [isCommitting, registerCommitState]);
+
+  // A portable package came out of this app: its sections, assets, references
+  // and journal are records we wrote, not a reading of someone's Word file.
+  // There is nothing to review, so restore it instead of asking.
+  // A latch, not state: it must flip before React can publish a render, or a
+  // double-invoked effect restores the package twice.
+  // oxlint-disable-next-line twenty/no-state-useref
+  const hasStartedRestore = useRef(false);
+  useEffect(() => {
+    if (
+      !preparedImport.portable ||
+      hasStartedRestore.current ||
+      isCommitting ||
+      failed
+    ) {
+      return;
+    }
+    hasStartedRestore.current = true;
+    void confirmImport();
+    // `confirmImport` closes over the prepared import; re-running on its
+    // identity would restore twice.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [preparedImport.portable]);
 
   const updateSection = (
     sectionIndex: number,
@@ -129,7 +153,11 @@ export const useManuscriptImportReviewState = ({
       submissionTransposeUpdate,
     );
     options.onChanged();
-    if (succeeded) onClose();
+    // A restore closes on the user's own "Done": shutting the wizard the
+    // instant the records land leaves them with no statement of what came
+    // back. Every other import is confirmed by hand, so closing *is* the
+    // acknowledgement.
+    if (succeeded && !preparedImport.portable) onClose();
   };
 
   return {

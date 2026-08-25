@@ -41,6 +41,7 @@ const ManuscriptRecordHeaderActionsContent = ({
         existingFigureRefKeys={importTarget.existingFigureRefKeys}
         exportTableStyle={importTarget.exportTableStyle}
         exportStyleOverrides={importTarget.exportStyleOverrides}
+        existingJournals={importTarget.existingJournals}
         targetJournal={importTarget.targetJournal}
         submissionExtras={importTarget.submissionExtras}
         competingInterests={importTarget.competingInterests}

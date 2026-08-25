@@ -6,7 +6,10 @@ import {
   type ExistingImportReference,
   type PreparedManuscriptImport,
 } from '@/local-db/research/manuscript/manuscriptImportPrepare';
-import { portableManuscriptRecordUpdate } from '@/local-db/research/manuscript/manuscriptPortableImport';
+import {
+  matchPortableJournalTemplate,
+  portableManuscriptRecordUpdate,
+} from '@/local-db/research/manuscript/manuscriptPortableImport';
 import { type SubmissionTransposeUpdate } from '@/local-db/research/manuscript/manuscriptSubmissionTranspose';
 import { withImportedSourceStyles } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { serializeManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';
@@ -24,6 +27,15 @@ type UseManuscriptImportCommitOptions = {
   // What the manuscript already carries, so an imported document's own Word
   // styles are adopted without overwriting a template the author picked.
   existingExportStyleOverrides?: string | null;
+  // The workspace's journal templates, so a package that carries its own can
+  // be linked to the one already here instead of duplicating it.
+  existingJournals?: ExistingJournalTemplate[];
+};
+
+export type ExistingJournalTemplate = {
+  id: string;
+  name?: string | null;
+  profileKey?: string | null;
 };
 
 export type ManuscriptImportCreatedCounts = {
@@ -59,6 +71,7 @@ type ManuscriptMetadataUpdate = {
   manuscriptType?: string;
   status?: string;
   targetVenue?: string;
+  targetJournalId?: string;
   doi?: string;
   supplementTitle?: string;
   supplementAuthorLine?: string;
@@ -79,6 +92,7 @@ export const useManuscriptImportCommit = ({
   existingSectionCount,
   existingReferences,
   existingExportStyleOverrides,
+  existingJournals,
 }: UseManuscriptImportCommitOptions) => {
   const { createOneRecord: createSection } = useCreateOneRecord({
     objectNameSingular: 'manuscriptSection',
@@ -88,6 +102,9 @@ export const useManuscriptImportCommit = ({
   });
   const { createOneRecord: createFigure } = useCreateOneRecord({
     objectNameSingular: 'figure',
+  });
+  const { createOneRecord: createJournalTemplate } = useCreateOneRecord({
+    objectNameSingular: 'journalTemplate',
   });
   const { deleteOneRecord: deleteSection } = useDeleteOneRecord({
     objectNameSingular: 'manuscriptSection',
@@ -254,6 +271,27 @@ export const useManuscriptImportCommit = ({
             manuscriptUpdate,
             portableManuscriptRecordUpdate(document.portablePackage),
           );
+          // A first-party package names the template the paper is written
+          // against. Link the one this workspace already has, or create it —
+          // otherwise the restored paper is formatted by whichever profile
+          // happens to be listed first.
+          const portableJournal = document.portablePackage.journal;
+          if (portableJournal !== undefined) {
+            const matched = matchPortableJournalTemplate(
+              portableJournal,
+              existingJournals ?? [],
+            );
+            if (matched !== undefined) {
+              manuscriptUpdate.targetJournalId = matched.id;
+            } else {
+              const created = await createJournalTemplate(
+                portableJournal as unknown as Record<string, unknown>,
+              );
+              if (isDefined(created?.id)) {
+                manuscriptUpdate.targetJournalId = created.id;
+              }
+            }
+          }
         }
         if (Object.keys(manuscriptUpdate).length > 0) {
           await updateOneRecord({
@@ -287,8 +325,10 @@ export const useManuscriptImportCommit = ({
       createReference,
       createSection,
       enqueueErrorSnackBar,
+      createJournalTemplate,
       enqueueSuccessSnackBar,
       existingExportStyleOverrides,
+      existingJournals,
       existingSectionCount,
       existingReferences,
       failed,

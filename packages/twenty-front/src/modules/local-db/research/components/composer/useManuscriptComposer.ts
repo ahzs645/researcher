@@ -33,7 +33,10 @@ import {
   type ManuscriptExportStyleOverrides,
 } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { type ReferenceRecordUpdate } from '@/local-db/research/manuscript/manuscriptReferenceForm';
-import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
+import {
+  type PortableJournalTemplate,
+  type PortableManuscriptSource,
+} from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import {
   parseManuscriptTitlePageExtraLines,
   serializeManuscriptTitlePageExtraLines,
@@ -279,6 +282,15 @@ export const useManuscriptComposer = () => {
     });
   }, [manuscript, sections, figures, references, effectiveStyle]);
 
+  const portableJournal = useMemo<PortableJournalTemplate | undefined>(() => {
+    const journal = journals.find(
+      (candidate) => candidate.id === manuscript?.targetJournal?.id,
+    );
+    if (!isDefined(journal)) return undefined;
+    const { id: _id, ...fields } = journal;
+    return { ...fields, name: journal.name ?? 'Journal template' };
+  }, [journals, manuscript?.targetJournal?.id]);
+
   const portableSource = useMemo<PortableManuscriptSource | undefined>(() => {
     if (!isDefined(manuscript)) return undefined;
     return {
@@ -322,8 +334,12 @@ export const useManuscriptComposer = () => {
       sections,
       figures,
       references,
+      // The template the paper is written against travels with it, so a
+      // restore brings the format back rather than defaulting to whichever
+      // profile the receiving workspace happens to list first.
+      ...(isDefined(portableJournal) ? { journal: portableJournal } : {}),
     };
-  }, [manuscript, sections, figures, references]);
+  }, [manuscript, sections, figures, references, portableJournal]);
 
   const persistSectionById = async (
     sectionIdToPersist: string,

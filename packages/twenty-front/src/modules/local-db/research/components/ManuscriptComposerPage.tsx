@@ -425,6 +425,11 @@ const ManuscriptComposerPageContent = () => {
               style={composer.effectiveStyle}
               exportTableStyle={exportTableStyle}
               exportStyleOverrides={manuscript.exportStyleOverrides}
+              existingJournals={composer.journals.map((journal) => ({
+                id: journal.id,
+                name: journal.name,
+                profileKey: journal.profileKey,
+              }))}
               targetJournal={linkedJournal}
               submissionExtras={manuscript.submissionExtras}
               competingInterests={manuscript.competingInterests}

@@ -246,7 +246,51 @@ always wins over the inferred one.
 
 ---
 
-## 7. Still open
+## 7. The package comes back whole
+
+Exporting the paper as a portable research ZIP and importing it again used to
+land on the same three-step wizard a Word file gets: classify every block,
+then confirm. That is the wrong question to ask about a file this app wrote —
+the sections, assets, references and their links are records it saved, not a
+reading of someone's document.
+
+Two changes make the round trip closed:
+
+**The package carries its journal template.** `research-paper.json` is now
+schema v2 and includes the template the paper is written against (v1 packages
+still import). On restore the wizard links the template this workspace already
+has — by profile key, so a locally renamed copy still matches — and creates it
+otherwise. The restored manuscript therefore reports the same submission
+readiness as the one it was exported from: 6 ready · 14 warnings · 3 required
+items missing, against AMT's 350-word abstract limit, rather than whatever
+profile happened to be listed first.
+
+**A first-party package restores itself.** The wizard commits it on arrival
+and states what came back — 36 sections · 23 figures/tables · 15 equations · 13
+references, with the two sections held out of the export named and explained —
+behind a single *Done*. The individual-section list is still one click away for
+anyone who wants it. A Word or PDF import is unchanged: nothing is written
+until you confirm it.
+
+### Equations say what they are
+
+An asset list reading `Equation (1) … Equation (14)` identifies nothing. Each
+imported equation is now named after the quantity it defines, taken from the
+left-hand side of its own relation:
+
+| Ref | Name | LaTeX |
+| --- | --- | --- |
+| `eq-1` | ATNλ(t) — equation (1) | `ATN\lambda(t) = 100 ln[I0,\lambda(t) / I\lambda(t)]` |
+| `eq-5` | AAE₁,₂ — equation (5) | `AAE_{1,2} = - ln[babs(\lambda_{1})/babs(\lambda_{2})] / ln(\lambda_{1}/\lambda_{2})` |
+| `eq-7` | x̄j,time — equation (7) | `\bar{x}j,time = \sum_{i} wij xi / \sum_{i} wij` |
+| `eq-11b` | δj (%) — equation (11b) | `\delta j (%) = 100 \Delta j / \bar{x}j,aligned` |
+
+An equation that states no relation keeps `Equation (n)`; the number stays the
+source's own, so cross-references are unaffected.
+
+---
+
+## 8. Still open
 
 1. **"et al." cannot be forced back on.** CSL-JSON has no flag for "the source
    truncated this list", so a style whose et-al threshold sits above the number

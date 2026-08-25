@@ -210,7 +210,13 @@ export const ManuscriptFigureListItem = ({
               {figure.label} · #{figure.refKey ?? figure.id}
             </StyledLabel>
             <StyledCaption>
-              {firstLine(figure.caption ?? figure.name)}
+              {/* An equation carries no caption by design — its name is what
+                  describes it, so fall through on an empty one. */}
+              {firstLine(
+                (figure.caption ?? '').trim().length > 0
+                  ? figure.caption
+                  : figure.name,
+              )}
             </StyledCaption>
             <StyledMeta>
               {linkedSection !== undefined ? (

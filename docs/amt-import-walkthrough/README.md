@@ -19,21 +19,29 @@ pure functions underneath.
 | `05-assets.png` | Figures, tables and equations as numbered assets, each anchored to its section. |
 | `06-references.png` | The reference records parsed out of the paper's own reference list. |
 | `07-export.png` | The Export panel, including submission readiness (the 361-word abstract exceeds AMT's limit — the paper's own known issue). |
+| `08-restore-portable-package.png` | The same paper coming back from its portable package: it restores itself, with a statement of what arrived and a **Done** button — no mapping and no confirm step. |
 
 ## The portable package
 
 `aeth-modular-portable-research.zip` is that import, exported back out as a
 portable research package: `research-paper.json` (36 sections, 23 assets, 13
-references, contributors and export settings) plus the three figure PNGs.
+references, contributors, export settings and the AMT journal template) plus
+the three figure PNGs.
 
-Import it with **Import as new manuscript… → drop the ZIP**. It restores the
-paper without going through Word again, which makes it a fixture for testing
-the composer against a real document:
+Import it with **Import as new manuscript… → drop the ZIP**. Because the app
+wrote it, there is nothing to classify and nothing to confirm: the wizard
+restores it on arrival and shows what came back.
 
 ```
 36 sections · 13 references · 15 equations · 3 figures · 5 tables
-eq-7 → label "7", latex "\bar{x}j,time = \sum_{i} wij xi / \sum_{i} wij"
+journal → Atmospheric Measurement Techniques (Copernicus)
+eq-7 → "x̄j,time — equation (7)", latex "\bar{x}j,time = \sum_{i} wij xi / \sum_{i} wij"
 ```
+
+The restored manuscript reports the same submission readiness as the one it
+was exported from (6 ready · 14 warnings · 3 required items missing, against
+AMT's 350-word abstract limit), which is what makes it a usable fixture: the
+paper comes back whole, not as a document to be re-read.
 
 ## Reproducing the run
 
@@ -43,4 +51,4 @@ REACT_APP_DATA_MODE=local npx nx start twenty-front   # http://localhost:3001
 
 Then `/compose` → **Import as new manuscript…** → choose the `.docx`. The
 wizard analyses the document in the browser; nothing is saved until *Confirm
-import*.
+import*. Drop the portable ZIP instead and it restores straight away.

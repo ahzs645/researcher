@@ -6,7 +6,10 @@ import {
 } from './manuscriptDocImport';
 import { extractCitationKeys } from './manuscriptCrossReference';
 import { serializeManuscriptExportStyleOverrides } from './manuscriptExportStyleOverrides';
-import { type PortableResearchPaperManifest } from './manuscriptPortableManifest';
+import {
+  type PortableJournalTemplate,
+  type PortableResearchPaperManifest,
+} from './manuscriptPortableManifest';
 import { type ReferenceDraft } from './manuscriptReferenceImport';
 import { serializeManuscriptTitlePageExtraLines } from './manuscriptTitlePage';
 
@@ -31,7 +34,37 @@ export type PreparedPortableResearchPaperImport = {
   linkedAssetCount: number;
   tableCount: number;
   imageCount: number;
+  // The journal template the package carries (v2+), so the restore can link
+  // or re-create it.
+  journal?: PortableJournalTemplate;
   portable: true;
+};
+
+// Which existing journal template a package's own template *is*. A seeded
+// template is identified by its profile key; one the author wrote is matched
+// by name. Anything else is a template this workspace does not have yet.
+export const matchPortableJournalTemplate = <
+  TJournal extends {
+    id: string;
+    name?: string | null;
+    profileKey?: string | null;
+  },
+>(
+  journal: PortableJournalTemplate | undefined,
+  existing: TJournal[],
+): TJournal | undefined => {
+  if (journal === undefined) return undefined;
+  const profileKey = journal.profileKey?.trim();
+  if (profileKey !== undefined && profileKey.length > 0) {
+    const byProfile = existing.find(
+      (candidate) => candidate.profileKey?.trim() === profileKey,
+    );
+    if (byProfile !== undefined) return byProfile;
+  }
+  const name = journal.name.trim().toLowerCase();
+  return existing.find(
+    (candidate) => (candidate.name ?? '').trim().toLowerCase() === name,
+  );
 };
 
 export const preparePortableResearchPaperImport = (
@@ -103,6 +136,7 @@ export const preparePortableResearchPaperImport = (
     linkedAssetCount: manifest.figures.filter(
       (figure) => figure.sectionKey !== undefined,
     ).length,
+    ...(manifest.journal !== undefined ? { journal: manifest.journal } : {}),
     tableCount: manifest.figures.filter(
       (figure) => figure.assetKind === 'TABLE',
     ).length,

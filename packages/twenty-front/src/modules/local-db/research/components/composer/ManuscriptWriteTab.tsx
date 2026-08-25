@@ -8,6 +8,7 @@ import { ManuscriptImportPanel } from '@/local-db/research/components/Manuscript
 import { ManuscriptDuplicateSectionReview } from '@/local-db/research/components/composer/ManuscriptDuplicateSectionReview';
 import { ManuscriptSectionOutline } from '@/local-db/research/components/composer/ManuscriptSectionOutline';
 import { ManuscriptWriteEditor } from '@/local-db/research/components/composer/ManuscriptWriteEditor';
+import { type ExistingJournalTemplate } from '@/local-db/research/import-wizard/hooks/useManuscriptImportCommit';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { extractCitationKeys } from '@/local-db/research/manuscript/manuscriptCrossReference';
 import { type ScaffoldSectionDraft } from '@/local-db/research/manuscript/manuscriptScaffold';
@@ -31,6 +32,7 @@ type ManuscriptWriteTabProps = {
   style: JournalStyle;
   exportTableStyle: ManuscriptTableStyle;
   exportStyleOverrides?: string | null;
+  existingJournals?: ExistingJournalTemplate[];
   targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
   submissionExtras?: string | null;
   competingInterests?: string | null;
@@ -115,6 +117,7 @@ export const ManuscriptWriteTab = ({
   style,
   exportTableStyle,
   exportStyleOverrides,
+  existingJournals,
   targetJournal,
   submissionExtras,
   competingInterests,
@@ -187,6 +190,7 @@ export const ManuscriptWriteTab = ({
               )}
             exportTableStyle={exportTableStyle}
             exportStyleOverrides={exportStyleOverrides}
+            existingJournals={existingJournals}
             targetJournal={targetJournal}
             submissionExtras={submissionExtras}
             competingInterests={competingInterests}

@@ -1749,6 +1749,15 @@ export const classifyLayoutTable = (
   };
 };
 
+// The quantity an equation defines — what a scientist would call it. "x̄j,time
+// = Σi wij xi / Σi wij" is *the duration-weighted mean*, so the asset list can
+// say that instead of numbering it and nothing more.
+const definedQuantity = (source: string): string | undefined => {
+  const relation = /^([^=<>≤≥≈]{1,40})=(?!=)/.exec(source);
+  const quantity = relation?.[1]?.trim().replace(/[,;:]$/, '');
+  return quantity !== undefined && quantity.length > 0 ? quantity : undefined;
+};
+
 // Rewrite layout tables in place: equations become `EQUATION` assets anchored
 // where they stood, callouts fall back to the prose they always were.
 export const extractLayoutTables = (
@@ -1790,8 +1799,12 @@ export const extractLayoutTables = (
         duplicateIndex += 1;
       }
       usedRefKeys.add(refKey);
+      const quantity = definedQuantity(rewrite.source);
       figures.push({
-        name: `Equation (${rewrite.label})`,
+        name:
+          quantity === undefined
+            ? `Equation (${rewrite.label})`
+            : `${quantity} — equation (${rewrite.label})`,
         assetKind: 'EQUATION',
         placement: section.placement === 'SUPPLEMENT' ? 'SUPPLEMENT' : 'MAIN',
         refKey,

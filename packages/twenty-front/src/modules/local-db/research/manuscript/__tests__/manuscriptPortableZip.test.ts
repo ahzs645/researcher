@@ -8,6 +8,7 @@ import {
   type PortableManuscriptSource,
 } from '@/local-db/research/manuscript/manuscriptPortableManifest';
 import {
+  matchPortableJournalTemplate,
   portableManuscriptRecordUpdate,
   preparePortableResearchPaperImport,
 } from '@/local-db/research/manuscript/manuscriptPortableImport';
@@ -101,6 +102,14 @@ const source: PortableManuscriptSource = {
       cslJson: '{"id":"smith2024","type":"article-journal"}',
     },
   ],
+  journal: {
+    name: 'Atmospheric Measurement Techniques (Copernicus)',
+    profileKey: 'copernicus-atmospheric-measurement-techniques',
+    citationMode: 'AUTHOR_DATE',
+    citationStyleId: 'copernicus-publications',
+    abstractWordLimit: 250,
+    keepSourceNumbers: true,
+  },
 };
 
 describe('portable research-paper ZIP', () => {
@@ -195,6 +204,14 @@ describe('portable research-paper ZIP', () => {
     expect(restored.submissionMaterials.coverLetter).toBe(
       'Please consider this manuscript.',
     );
+    // The journal template travels with the package, so a restore rebuilds the
+    // format the paper was written against rather than the workspace default.
+    expect(restored.journal).toMatchObject({
+      name: 'Atmospheric Measurement Techniques (Copernicus)',
+      profileKey: 'copernicus-atmospheric-measurement-techniques',
+      abstractWordLimit: 250,
+      keepSourceNumbers: true,
+    });
 
     const prepared = preparePortableResearchPaperImport(
       restored,
@@ -207,6 +224,9 @@ describe('portable research-paper ZIP', () => {
       imageSource: 'UPLOAD',
     });
     expect(prepared.references[0].citationKey).toBe('smith2024');
+    expect(prepared.journal?.profileKey).toBe(
+      'copernicus-atmospheric-measurement-techniques',
+    );
     expect(portableManuscriptRecordUpdate(restored)).toMatchObject({
       name: 'Portable aerosol paper',
       targetVenue: 'Example Journal',
@@ -269,6 +289,22 @@ describe('portable research-paper ZIP', () => {
     expect(styled.exportStyleOverrides).toBeDefined();
   });
 
+  it('reads a v1 package, which predates the journal template', () => {
+    const { journal: _journal, ...manifest } =
+      buildPortableResearchPaperManifest(source, {}, {});
+    const restored = parsePortableResearchPaperManifest(
+      JSON.stringify({ ...manifest, schemaVersion: 1 }),
+    );
+
+    expect(restored.metadata.title).toBe('Portable aerosol paper');
+    expect(restored.journal).toBeUndefined();
+    // With no template to restore, the import simply leaves the target
+    // manuscript's journal alone.
+    expect(
+      preparePortableResearchPaperImport(restored, []).journal,
+    ).toBeUndefined();
+  });
+
   it('defaults legacy section levels without changing explicit placements', () => {
     const manifest = buildPortableResearchPaperManifest(source, {}, {});
     const legacySections = manifest.sections.map(
@@ -286,5 +322,44 @@ describe('portable research-paper ZIP', () => {
       level: 1,
       placement: 'SUPPLEMENT',
     });
+  });
+});
+
+describe('matchPortableJournalTemplate', () => {
+  const existing = [
+    {
+      id: 'amt-id',
+      name: 'AMT (renamed locally)',
+      profileKey: 'copernicus-atmospheric-measurement-techniques',
+    },
+    { id: 'house-id', name: 'House style', profileKey: null },
+  ];
+
+  it('matches a seeded template by profile key, whatever it was renamed to', () => {
+    expect(
+      matchPortableJournalTemplate(
+        {
+          name: 'Atmospheric Measurement Techniques (Copernicus)',
+          profileKey: 'copernicus-atmospheric-measurement-techniques',
+        },
+        existing,
+      ),
+    ).toMatchObject({ id: 'amt-id' });
+  });
+
+  it('falls back to the name for a template the author wrote', () => {
+    expect(
+      matchPortableJournalTemplate({ name: '  house style  ' }, existing),
+    ).toMatchObject({ id: 'house-id' });
+  });
+
+  it('matches nothing when the workspace does not have the template', () => {
+    expect(
+      matchPortableJournalTemplate(
+        { name: 'Journal of Nothing', profileKey: 'nothing' },
+        existing,
+      ),
+    ).toBeUndefined();
+    expect(matchPortableJournalTemplate(undefined, existing)).toBeUndefined();
   });
 });

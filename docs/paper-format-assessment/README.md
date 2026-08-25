@@ -208,7 +208,10 @@ affiliation splitting, Unicode maths recovered as LaTeX, and a switch that
 keeps the source document's own asset numbering. A third closed the round
 trip: a portable package now carries its journal template and restores itself
 without a review step, and imported equations are named after the quantity
-they define instead of by number alone. See
+they define instead of by number alone. A fourth made the Word file a Word
+file: maths written in a sentence exports as a real equation object, and every
+number is a live `SEQ` field with `REF` cross-references pointing at it, so
+moving an equation renumbers the sentences that name it. See
 **`amt-paper-transposition.md`** in this folder for the run, the fixes, and
 what is still open; the end-to-end regression lives in
 `manuscriptAmtPaperImport.test.ts`, and a captured run through the real

@@ -11,6 +11,10 @@ import {
 // its own counter, the supplement runs a separate prefixed sequence (Figure S1),
 // and the label template comes from the journal style (Figure 1 / Fig. 1 /
 // FIGURE 1). Pure and deterministic so a re-render never renumbers differently.
+//
+// An asset with `numbered: false` is skipped entirely: unnumbered display
+// equations are ordinary in a paper, and they must not consume a number that
+// the equations after them would then be missing.
 
 const DEFAULT_LABEL_FORMAT: Record<AssetKind, string> = {
   FIGURE: 'Figure {n}',
@@ -104,6 +108,13 @@ export const numberAssets = (
   return ordered.map((figure) => {
     const kind = asKind(figure.assetKind);
     const supplement = isSupplement(figure.placement);
+    // An asset the author has taken out of the numbering takes nothing from
+    // the sequence either: switch off Eq. (5) and what was (6) becomes (5).
+    // It is set without a label, and a cross-reference to it has no number to
+    // print — buildManuscriptBundle reports that rather than printing a gap.
+    if (figure.numbered === false) {
+      return { ...figure, number: '', label: '', crossRefLabel: '' };
+    }
     // The source's own label wins when the journal keeps it — "(11a)" and
     // "Table B1" carry information a continuous sequence would throw away.
     const sourceNumber =

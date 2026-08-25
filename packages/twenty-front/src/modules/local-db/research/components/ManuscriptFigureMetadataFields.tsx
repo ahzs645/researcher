@@ -39,6 +39,22 @@ const StyledInput = styled.input`
   padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
 `;
 
+const StyledToggle = styled.label`
+  align-items: center;
+  color: ${themeCssVariables.font.color.secondary};
+  display: flex;
+  font-size: ${themeCssVariables.font.size.xs};
+  gap: ${themeCssVariables.spacing[2]};
+  min-height: 32px;
+  align-self: flex-end;
+`;
+
+const StyledToggleHint = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+  grid-column: 1 / -1;
+`;
+
 const StyledFileLabel = styled.label`
   align-items: center;
   align-self: flex-end;
@@ -118,10 +134,25 @@ export const ManuscriptFigureMetadataFields = ({
           onBlur={(event) => onPersist({ credit: event.target.value.trim() })}
         />
       </StyledField>
+      <StyledToggle>
+        <input
+          type="checkbox"
+          aria-label={`${figure.name ?? 'Figure'} is numbered`}
+          checked={figure.numbered !== false}
+          onChange={(event) => onPersist({ numbered: event.target.checked })}
+        />
+        Numbered
+      </StyledToggle>
       <StyledFileLabel>
         Replace uploaded image…
         <input type="file" accept="image/*" hidden onChange={replaceImage} />
       </StyledFileLabel>
+      {figure.numbered === false ? (
+        <StyledToggleHint>
+          Set without a number, and it takes none from the sequence — the asset
+          after it moves up. Nothing can cross-reference it while this is off.
+        </StyledToggleHint>
+      ) : null}
     </StyledGrid>
   );
 };

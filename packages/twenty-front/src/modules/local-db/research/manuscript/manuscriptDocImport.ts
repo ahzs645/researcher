@@ -79,6 +79,8 @@ export type ImportedFigureDraft = {
   altText?: string;
   credit?: string;
   widthPercent?: number;
+  // Off for an asset the source set without a number.
+  numbered?: boolean;
   orderIndex: number;
 };
 

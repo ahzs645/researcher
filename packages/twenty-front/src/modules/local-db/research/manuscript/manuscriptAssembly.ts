@@ -186,6 +186,10 @@ export type ManuscriptBundleOptions = {
   // exporter can link "[3]" to the reference it names. Off by default: the
   // markers are invisible control characters that only the HTML exporter reads.
   citationAnchors?: boolean;
+  // Keep each resolved [#key] paired with the asset it resolved to, so an
+  // exporter can turn "Eq. (7)" into a link to that equation's own number.
+  // The DOCX export asks for these without asking for citation anchors.
+  crossReferenceAnchors?: boolean;
 };
 
 // One unit of the neutral document model.
@@ -207,17 +211,23 @@ const renderSectionBody = (
   section: SectionLike,
   numbered: NumberedFigure[],
   warnings: string[],
-  withAnchors: boolean,
+  withCrossRefAnchors: boolean,
 ): { heading: string; resolved: string; citationKeys: string[] } => {
   const content = section.content ?? '';
-  const { text, unresolvedKeys } = resolveCrossReferences(
+  const { text, unresolvedKeys, unnumberedKeys } = resolveCrossReferences(
     content,
     numbered,
-    withAnchors,
+    withCrossRefAnchors,
   );
+  const sectionName = section.name ?? section.sectionType;
   for (const key of unresolvedKeys) {
     warnings.push(
-      `Section "${section.name ?? section.sectionType}" references unknown asset [#${key}]`,
+      `Section "${sectionName}" references unknown asset [#${key}]`,
+    );
+  }
+  for (const key of unnumberedKeys) {
+    warnings.push(
+      `Section "${sectionName}" references [#${key}], whose numbering is turned off — there is no number to print`,
     );
   }
   const citationKeys = extractCitationKeys(content);
@@ -235,6 +245,8 @@ export const buildManuscriptBundle = (
   const { manuscript, style } = input;
   const warnings: string[] = [];
   const withAnchors = options.citationAnchors === true;
+  const withCrossRefAnchors =
+    withAnchors || options.crossReferenceAnchors === true;
 
   // The metadata already renders title-page fields, and a generated
   // bibliography replaces an imported source References section.
@@ -250,14 +262,20 @@ export const buildManuscriptBundle = (
     for (const field of ['caption', 'tableData'] as const) {
       const value = figure[field];
       if (!isNonEmptyString(value)) continue;
-      const { text, unresolvedKeys } = resolveCrossReferences(
+      const { text, unresolvedKeys, unnumberedKeys } = resolveCrossReferences(
         value,
         numbered,
-        withAnchors,
+        withCrossRefAnchors,
       );
+      const where = field === 'caption' ? 'caption' : 'table';
+      const source =
+        figure.label.length > 0 ? figure.label : (figure.name ?? 'Asset');
       for (const key of unresolvedKeys) {
+        warnings.push(`${source} ${where} references unknown asset [#${key}]`);
+      }
+      for (const key of unnumberedKeys) {
         warnings.push(
-          `${figure.label} ${field === 'caption' ? 'caption' : 'table'} references unknown asset [#${key}]`,
+          `${source} ${where} references [#${key}], whose numbering is turned off — there is no number to print`,
         );
       }
       if (text !== value) resolvedFigure[field] = text;
@@ -293,7 +311,7 @@ export const buildManuscriptBundle = (
 
   // First pass: resolve cross-refs and collect citation keys in document order.
   const rendered = sections.map((section) =>
-    renderSectionBody(section, numbered, warnings, withAnchors),
+    renderSectionBody(section, numbered, warnings, withCrossRefAnchors),
   );
   const citedKeys: string[] = [];
   const seenKeys = new Set<string>();

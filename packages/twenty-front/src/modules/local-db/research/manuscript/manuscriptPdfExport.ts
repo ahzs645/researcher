@@ -22,6 +22,9 @@ import { fitManuscriptFigureImages } from './manuscriptFigureFit';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { isImageDataUrl } from './manuscriptImages';
 import { latexToScriptedText } from './manuscriptMathText';
+import { stripAssetNumberAnchors } from './manuscriptAssetAnchors';
+import { stripCrossReferenceAnchors } from './manuscriptCrossReference';
+import { hasInlineMath, linearizeInlineMath } from './manuscriptInlineMath';
 import {
   A4_HEIGHT_POINTS,
   PRINTABLE_WIDTH_POINTS,
@@ -93,7 +96,7 @@ export const exportManuscriptToPdfBlob = async (
     return {
       equation: latexToScriptedText(latex ?? ''),
       ...(label !== undefined && label.trim().length > 0
-        ? { label: label.trim() }
+        ? { label: stripAssetNumberAnchors(label).trim() }
         : {}),
     };
   };
@@ -265,14 +268,23 @@ export const exportManuscriptToPdfBlob = async (
   // react-pdf shift the pieces.
   const transformStyledText = exporter.transformStyledText.bind(exporter);
   exporter.transformStyledText = (styledText) => {
-    if (!hasManuscriptScripts(styledText.text)) {
-      return transformStyledText(styledText);
+    // `$C_j$` in a sentence is maths. react-pdf cannot typeset it, so it is
+    // linearized to the same scripted form a display equation gets rather
+    // than printed with its delimiters.
+    // The numbering anchors are the DOCX export's, marking which asset each
+    // printed number belongs to. react-pdf draws text: it prints the number.
+    const plain = stripAssetNumberAnchors(
+      stripCrossReferenceAnchors(styledText.text),
+    );
+    const text = hasInlineMath(plain) ? linearizeInlineMath(plain) : plain;
+    if (!hasManuscriptScripts(text)) {
+      return transformStyledText({ ...styledText, text });
     }
     const base = transformStyledText({ ...styledText, text: '' });
     return cloneElement(
       base,
       {},
-      ...scriptRuns(styledText.text, bundle.style.bodyFontSize ?? 12),
+      ...scriptRuns(text, bundle.style.bodyFontSize ?? 12),
     );
   };
   exporter.styles.page = {

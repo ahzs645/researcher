@@ -1947,6 +1947,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconRulerMeasure',
       },
       {
+        name: 'numbered',
+        label: 'Numbered',
+        type: 'BOOLEAN',
+        icon: 'IconListNumbers',
+        description:
+          'Off for a display equation set without a number; it takes none from the sequence and cannot be cross-referenced',
+      },
+      {
         name: 'orderIndex',
         label: 'Order',
         type: 'NUMBER',

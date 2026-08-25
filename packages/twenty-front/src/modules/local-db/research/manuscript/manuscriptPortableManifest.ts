@@ -86,6 +86,7 @@ export type PortableResearchPaperManifest = {
     assetKind: string;
     placement: string;
     imageSource: string;
+    numbered?: boolean;
     imageUrl?: string;
     imagePath?: string;
     altText?: string;
@@ -213,6 +214,8 @@ export const buildPortableResearchPaperManifest = (
         assetKind: figure.assetKind ?? 'FIGURE',
         placement: figure.placement ?? 'MAIN',
         imageSource: figure.imageSource ?? 'NONE',
+        // Only the off state travels: unset has always meant numbered.
+        ...(figure.numbered === false ? { numbered: false } : {}),
         ...(imagePath !== null
           ? { imagePath }
           : figure.imageUrl !== null && figure.imageUrl !== undefined

@@ -54,6 +54,11 @@ export type FigureLike = {
   tableData?: string | null;
   // For EQUATION assets: the body as LaTeX, without delimiters.
   equationLatex?: string | null;
+  // Whether this asset is numbered at all. Unset means yes, which is what
+  // every asset was before the flag existed. An unnumbered display equation
+  // is set without a number and takes none from the sequence — so turning off
+  // Eq. (5) makes what was (6) become (5), and nothing may cross-reference it.
+  numbered?: boolean | null;
   // For diagram figures: the Mermaid source, rendered to an image at export.
   diagramSource?: string | null;
 };

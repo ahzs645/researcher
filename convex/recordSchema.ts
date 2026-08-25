@@ -1234,6 +1234,7 @@ export const recordTables = {
     altText: v.optional(v.string()),
     credit: v.optional(v.string()),
     widthPercent: v.optional(v.number()),
+    numbered: v.optional(v.boolean()),
     orderIndex: v.optional(v.number()),
     notes: v.optional(v.string()),
     manuscriptId: v.optional(v.string()),

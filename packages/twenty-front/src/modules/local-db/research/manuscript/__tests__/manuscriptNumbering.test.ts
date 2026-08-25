@@ -292,3 +292,41 @@ describe('keepSourceNumbers', () => {
     expect(numbered.map((asset) => asset.label)).toEqual(['(1)', '(2)']);
   });
 });
+
+describe('assets taken out of the numbering', () => {
+  const equations = [
+    { id: 'e1', refKey: 'eq-1', assetKind: 'EQUATION', orderIndex: 0 },
+    { id: 'e2', refKey: 'eq-2', assetKind: 'EQUATION', orderIndex: 1 },
+    { id: 'e3', refKey: 'eq-3', assetKind: 'EQUATION', orderIndex: 2 },
+  ];
+
+  it('takes no number from the sequence, so the ones after it move up', () => {
+    const numbered = numberAssets(
+      equations.map((equation) =>
+        equation.id === 'e2' ? { ...equation, numbered: false } : equation,
+      ),
+    );
+
+    expect(numbered.map((equation) => equation.label)).toEqual([
+      '(1)',
+      '',
+      '(2)',
+    ]);
+    // What was equation 3 is now equation 2 — which is the whole point of the
+    // switch, and why a reference to it cannot be a number typed in by hand.
+    expect(numbered[2]).toMatchObject({ refKey: 'eq-3', number: '2' });
+  });
+
+  it('leaves an unset flag numbering exactly as before', () => {
+    expect(numberAssets(equations).map((equation) => equation.number)).toEqual([
+      '1',
+      '2',
+      '3',
+    ]);
+    expect(
+      numberAssets(
+        equations.map((equation) => ({ ...equation, numbered: true })),
+      ).map((equation) => equation.number),
+    ).toEqual(['1', '2', '3']);
+  });
+});

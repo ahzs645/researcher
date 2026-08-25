@@ -25,6 +25,9 @@ const CITATION_PATTERN = /(?:^|[^\w@])@([A-Za-z0-9_][\w:.-]*)/g;
 export type CrossReferenceResult = {
   text: string;
   unresolvedKeys: string[];
+  // Keys that named a real asset which carries no number — the author turned
+  // its numbering off, so there is nothing for the reference to print.
+  unnumberedKeys: string[];
 };
 
 // ── Cross-reference anchors ────────────────────────────────────────────────
@@ -44,6 +47,37 @@ export const stripCrossReferenceAnchors = (value: string): string =>
     String(label),
   );
 
+export type CrossReferenceSegment =
+  | { kind: 'text'; value: string }
+  | { kind: 'reference'; refKey: string; label: string };
+
+// Split anchored text into prose and the places that name an asset's number,
+// so an exporter can render those places as something other than characters.
+export const splitCrossReferenceAnchors = (
+  value: string,
+): CrossReferenceSegment[] => {
+  const segments: CrossReferenceSegment[] = [];
+  let cursor = 0;
+  CROSS_REF_ANCHOR_PATTERN.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = CROSS_REF_ANCHOR_PATTERN.exec(value)) !== null) {
+    if (match.index > cursor) {
+      segments.push({ kind: 'text', value: value.slice(cursor, match.index) });
+    }
+    segments.push({ kind: 'reference', refKey: match[1], label: match[2] });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < value.length) {
+    segments.push({ kind: 'text', value: value.slice(cursor) });
+  }
+  return segments;
+};
+
+export const hasCrossReferenceAnchors = (value: string): boolean => {
+  CROSS_REF_ANCHOR_PATTERN.lastIndex = 0;
+  return CROSS_REF_ANCHOR_PATTERN.test(value);
+};
+
 // Replace every [#key] token with the target asset's cross-ref label. Unknown
 // keys are left visible (so the gap is obvious) and reported.
 export const resolveCrossReferences = (
@@ -53,11 +87,19 @@ export const resolveCrossReferences = (
 ): CrossReferenceResult => {
   const lookup = buildAssetLookup(numbered);
   const unresolved = new Set<string>();
+  const unnumbered = new Set<string>();
 
   const text = markdown.replace(CROSS_REF_PATTERN, (_match, rawKey: string) => {
     const asset = resolveAssetKey(rawKey, lookup);
     if (asset === undefined) {
       unresolved.add(rawKey);
+      return `[#${rawKey}]`;
+    }
+    // The asset exists but is not numbered, so its cross-ref label is empty.
+    // Printing that would silently delete the reference from the sentence;
+    // leave the token visible and let the caller report it.
+    if (asset.crossRefLabel.length === 0) {
+      unnumbered.add(rawKey);
       return `[#${rawKey}]`;
     }
     if (!withAnchors) return asset.crossRefLabel;
@@ -67,7 +109,11 @@ export const resolveCrossReferences = (
     return `${CROSS_REF_ANCHOR_OPEN}${target}${CROSS_REF_ANCHOR_SPLIT}${asset.crossRefLabel}${CROSS_REF_ANCHOR_CLOSE}`;
   });
 
-  return { text, unresolvedKeys: [...unresolved] };
+  return {
+    text,
+    unresolvedKeys: [...unresolved],
+    unnumberedKeys: [...unnumbered],
+  };
 };
 
 // Pull every cited key from a body of Markdown, in first-appearance order

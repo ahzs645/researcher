@@ -33,6 +33,11 @@ const rebuildWithOptions = (
     options,
   );
 
+// Either kind of anchor is a reason to rebuild: without the rebuild the
+// exporter gets a bundle whose text was resolved without them.
+const anchorsRequested = (options: ManuscriptBundleOptions): boolean =>
+  options.citationAnchors === true || options.crossReferenceAnchors === true;
+
 export const prepareManuscriptBundleWithCsl = async (
   bundle: ManuscriptBundle,
   options: ManuscriptBundleOptions = {},
@@ -41,7 +46,7 @@ export const prepareManuscriptBundleWithCsl = async (
   if (!isVendoredCslStyleId(styleId)) {
     // No CSL engine for this style, but an exporter that asked for citation
     // anchors still needs them, so rebuild from the same source input.
-    return options.citationAnchors === true
+    return anchorsRequested(options)
       ? rebuildWithOptions(bundle, undefined, options)
       : bundle;
   }
@@ -72,7 +77,7 @@ export const prepareManuscriptBundleWithCsl = async (
       options,
     );
   } catch {
-    return options.citationAnchors === true
+    return anchorsRequested(options)
       ? rebuildWithOptions(bundle, undefined, options)
       : bundle;
   }

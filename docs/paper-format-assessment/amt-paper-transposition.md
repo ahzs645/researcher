@@ -290,7 +290,71 @@ source's own, so cross-references are unaffected.
 
 ---
 
-## 8. Still open
+## 8. The Word file is a Word file
+
+Everything above got the paper's *content* into Word. Opening the result beside
+the author's own document showed the difference was in what the file is made
+of.
+
+**Maths in a sentence was letters.** A display equation had always exported as
+a real Word equation object; `$C_j$` written in the prose beside it exported as
+the four characters `$C_j$`, subscript flat on the baseline. It is the same
+symbol — it should be the same object. Inline maths now becomes an OMath run in
+the DOCX and the linearized scripted form in the PDF, using the `$…$` grammar
+the HTML export already implemented, so a document reads the same in all three.
+
+Two things had to be true for that to work on real prose. A `$` is not always
+maths — `$40 per filter` and `$1.2M of funding` stay literal, as does anything
+inside a code span. And a Markdown parser claims the characters maths is
+written with: `$\bar{x}_j$ … $b_{abs,\lambda}$` reads as an italic run opened at
+the first underscore and closed at the second, and both underscores are eaten
+on the way through. Each span is now swapped for an invisible placeholder
+before the prose is parsed and put back afterwards.
+
+**Every number was typed in.** "Eq. (7)", "Table 2", "Figure 1" were the digits
+we happened to have printed, frozen into the text. Move an equation and Word
+knows nothing; the sentence still says (7).
+
+The numbers are now Word's own. Where a number is printed it is a `SEQ` field
+inside a bookmark, with the value we calculated cached in the field so the
+document reads correctly before anyone updates it. Where the prose names one it
+is a `REF` field pointing at that bookmark. Each kind counts on its own
+sequence, and a supplement runs a second one so "Figure S1" cannot disturb
+"Figure 1". Exported from the AMT master:
+
+```
+23 bookmarks · 23 SEQ fields · 5 REF fields
+SEQ Equation \* ARABIC   SEQ Figure \* ARABIC
+SEQ Table \* ARABIC      SEQ TableSupplement \* ARABIC
+REF _Refeq_7 \h          REF _Refimported_table_1 \h
+```
+
+Only the number is a field: "Eq." and "Fig." are the journal's wording and stay
+the author's text. A number a counter cannot reproduce — the source's own
+"(11a)", an appendix's "B1", a per-section "1.2" — stays literal inside its
+bookmark, so references to it are still links showing the right text; they
+simply do not renumber, which is what `keepSourceNumbers` is for. And a `REF`
+is only written when the bookmark exists: pointing at an asset that is never
+printed would read as "Error! Reference source not found".
+
+### Numbering is a choice, and references are checked against it
+
+Unnumbered display equations are ordinary in a paper, and until now every
+equation got a number whether it wanted one or not. An asset can now be taken
+out of the numbering. It takes nothing from the sequence either — switch off
+Eq. (5) and what was (6) becomes (5) — which is exactly why a reference to it
+cannot be a number typed in by hand.
+
+A cross-reference to an asset whose numbering is off has no number to print.
+Rather than silently deleting the reference from the sentence (leaving "defined
+in Eq. ."), the token stays visible and the export reports it:
+
+> Section "Method" references [#eq-1], whose numbering is turned off — there is
+> no number to print
+
+---
+
+## 9. Still open
 
 1. **"et al." cannot be forced back on.** CSL-JSON has no flag for "the source
    truncated this list", so a style whose et-al threshold sits above the number

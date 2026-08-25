@@ -93,6 +93,7 @@ export const preparePortableResearchPaperImport = (
       ...(figure.equationLatex !== undefined
         ? { equationLatex: figure.equationLatex }
         : {}),
+      ...(figure.numbered === false ? { numbered: false } : {}),
       ...(figure.diagramSource !== undefined
         ? { diagramSource: figure.diagramSource }
         : {}),

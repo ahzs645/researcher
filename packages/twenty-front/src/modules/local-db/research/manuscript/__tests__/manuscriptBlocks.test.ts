@@ -1,4 +1,5 @@
 import { buildManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
+import { stripAssetNumberAnchors } from '@/local-db/research/manuscript/manuscriptAssetAnchors';
 import { buildBlockNoteDocument } from '@/local-db/research/manuscript/manuscriptBlocks';
 import { wrapManuscriptScript } from '@/local-db/research/manuscript/manuscriptScripts';
 
@@ -134,7 +135,11 @@ describe('buildBlockNoteDocument', () => {
     );
 
     expect(captionIndex).toBe(imageIndex - 1);
-    expect(blocks[captionIndex].content).toBe('Figure 1. Seasonal composition');
+    // The caption's label carries an invisible marker naming the asset, so the
+    // DOCX export can set that number as a Word field.
+    expect(stripAssetNumberAnchors(String(blocks[captionIndex].content))).toBe(
+      'Figure 1. Seasonal composition',
+    );
     expect(blocks[imageIndex - 2].type).toBe('pageBreak');
     expect(blocks[imageIndex + 1].type).toBe('pageBreak');
   });

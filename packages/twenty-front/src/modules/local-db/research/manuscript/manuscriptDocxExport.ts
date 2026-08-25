@@ -5,6 +5,7 @@ import {
 import { BlockNoteEditor, type PartialBlock } from '@blocknote/core';
 import {
   AlignmentType,
+  Bookmark,
   ExternalHyperlink,
   Footer,
   HeadingLevel,
@@ -13,12 +14,14 @@ import {
   Math as DocxMath,
   PageNumber,
   Paragraph,
+  SimpleField,
   Tab,
   TabStopType,
   TextRun,
 } from 'docx';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
+import { type NumberedFigure } from './manuscriptTypes';
 import {
   buildBlockNoteDocument,
   EQUATION_LABEL_SEPARATOR,
@@ -29,6 +32,18 @@ import { fitManuscriptFigureImages } from './manuscriptFigureFit';
 import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
 import { manuscriptAuthorLineSegments } from './manuscriptContributors';
 import { latexToMathComponents } from './manuscriptDocxMath';
+import {
+  assetBookmarkId,
+  assetSequenceName,
+  readAssetNumberAnchor,
+  splitAssetNumber,
+  stripAssetNumberAnchors,
+} from './manuscriptAssetAnchors';
+import {
+  hasCrossReferenceAnchors,
+  splitCrossReferenceAnchors,
+} from './manuscriptCrossReference';
+import { hasInlineMath, splitInlineMath } from './manuscriptInlineMath';
 import {
   createManuscriptTableMapping,
   type ManuscriptTableStyle,
@@ -63,6 +78,7 @@ type ManuscriptDocxMappingOptions = {
   figureCaptionLineSpacing: number;
   figureCaptionGap: number;
   figureCaptionSpacingAfter: number;
+  findAsset: ManuscriptAssetLookup;
 };
 
 const inlineContentText = (value: unknown): string => {
@@ -117,25 +133,181 @@ const isLinkInlineContent = (
   Array.isArray(value.content) &&
   value.content.every(isTextInlineContent);
 
+type ManuscriptRunOptions = {
+  bold?: boolean;
+  italics?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  hyperlink?: boolean;
+  font?: string;
+  size?: number;
+};
+
+const scriptRuns = (text: string, options: ManuscriptRunOptions): TextRun[] =>
+  manuscriptScriptSegments(text).map(
+    (segment) =>
+      new TextRun({
+        text: segment.text,
+        bold: options.bold === true,
+        italics: options.italics === true,
+        underline: options.underline === true ? {} : undefined,
+        strike: options.strike === true,
+        style: options.hyperlink === true ? 'Hyperlink' : undefined,
+        ...(options.font !== undefined ? { font: options.font } : {}),
+        ...(options.size !== undefined ? { size: options.size } : {}),
+        superScript: segment.position === 'SUPERSCRIPT',
+        subScript: segment.position === 'SUBSCRIPT',
+      }),
+  );
+
+type ManuscriptParagraphChild = TextRun | DocxMath | Bookmark | SimpleField;
+
+// Prose runs, with `$C_j$` becoming a real Word equation rather than three
+// literal characters and a baseline letter. Word sets an inline OMath run on
+// the text line, so the symbol in the sentence matches the display equation
+// that defines it.
+const mathAndScriptRuns = (
+  text: string,
+  options: ManuscriptRunOptions,
+): ManuscriptParagraphChild[] =>
+  splitInlineMath(text).flatMap((segment) =>
+    segment.kind === 'math'
+      ? [new DocxMath({ children: latexToMathComponents(segment.latex) })]
+      : scriptRuns(segment.value, options),
+  );
+
+// Where an asset's number is printed: a Word SEQ field inside a bookmark. The
+// number Word calculates is cached in the field, so the document reads
+// correctly before anyone updates it, and every reference to it below can
+// point at the bookmark instead of repeating today's digits.
+const assetNumberRuns = (
+  printed: string,
+  asset: NumberedFigure,
+  options: ManuscriptRunOptions,
+): ManuscriptParagraphChild[] => {
+  const number = (asset.number ?? '').trim();
+  const at = number.length === 0 ? -1 : printed.indexOf(number);
+  if (at === -1) return mathAndScriptRuns(printed, options);
+  const { prefix, counted } = splitAssetNumber(number);
+  const sequence = assetSequenceName(asset.assetKind, asset.placement);
+  return [
+    ...mathAndScriptRuns(printed.slice(0, at), options),
+    new Bookmark({
+      id: assetBookmarkId(asset.refKey ?? asset.id),
+      children:
+        counted === undefined
+          ? scriptRuns(number, options)
+          : [
+              ...(prefix.length > 0 ? scriptRuns(prefix, options) : []),
+              new SimpleField(`SEQ ${sequence} \\* ARABIC`, counted),
+            ],
+    }),
+    ...mathAndScriptRuns(printed.slice(at + number.length), options),
+  ];
+};
+
+// Where the prose names an asset's number: a REF field pointing at that
+// bookmark, so moving an equation renumbers the sentence that refers to it.
+// Only the number is a field — the journal's own wording around it ("Eq.",
+// "Fig.") is the author's text and stays text.
+const crossReferenceRuns = (
+  label: string,
+  asset: NumberedFigure | undefined,
+  options: ManuscriptRunOptions,
+): ManuscriptParagraphChild[] => {
+  const number = (asset?.number ?? '').trim();
+  const at =
+    asset === undefined || number.length === 0 ? -1 : label.indexOf(number);
+  if (asset === undefined || at === -1)
+    return mathAndScriptRuns(label, options);
+  const bookmark = assetBookmarkId(asset.refKey ?? asset.id);
+  return [
+    ...mathAndScriptRuns(label.slice(0, at), options),
+    new SimpleField(`REF ${bookmark} \\h`, number),
+    ...mathAndScriptRuns(label.slice(at + number.length), options),
+  ];
+};
+
+type ManuscriptAssetLookup = (refKey: string) => NumberedFigure | undefined;
+
+// Every asset whose number is actually printed somewhere in the document, read
+// back off the built blocks — including an image block, whose caption is a
+// prop rather than content.
+const collectAnchoredRefKeys = (blocks: unknown[]): Set<string> => {
+  const keys = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      const { refKey } = readAssetNumberAnchor(value);
+      if (refKey !== undefined) keys.add(refKey.trim().toLowerCase());
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    const record = value as Record<string, unknown>;
+    visit(record.content);
+    visit(record.children);
+    if (typeof record.props === 'object' && record.props !== null) {
+      visit((record.props as Record<string, unknown>).caption);
+    }
+    if ('text' in record) visit(record.text);
+  };
+  visit(blocks);
+  return keys;
+};
+
+// Whether a run needs our own builder rather than BlockNote's: it carries a
+// script sentinel, inline maths, or one of the numbering anchors — none of
+// which may reach the page as characters.
+const needsManuscriptRuns = (text: string): boolean =>
+  hasManuscriptScripts(text) ||
+  hasInlineMath(text) ||
+  hasCrossReferenceAnchors(text) ||
+  stripAssetNumberAnchors(text) !== text;
+
+const manuscriptInlineRuns = (
+  text: string,
+  options: ManuscriptRunOptions,
+  findAsset?: ManuscriptAssetLookup,
+): ManuscriptParagraphChild[] => {
+  const { refKey, text: printed } = readAssetNumberAnchor(text);
+  const asset = refKey === undefined ? undefined : findAsset?.(refKey);
+  if (asset !== undefined) return assetNumberRuns(printed, asset, options);
+  return splitCrossReferenceAnchors(printed).flatMap((segment) =>
+    segment.kind === 'reference'
+      ? crossReferenceRuns(segment.label, findAsset?.(segment.refKey), options)
+      : mathAndScriptRuns(segment.value, options),
+  );
+};
+
 const manuscriptTextRuns = (
   text: string,
   styles: InlineTextStyles,
   forceItalics: boolean,
   hyperlink = false,
-): TextRun[] =>
-  manuscriptScriptSegments(text).map(
-    (segment) =>
-      new TextRun({
-        text: segment.text,
+  findAsset?: ManuscriptAssetLookup,
+): ManuscriptParagraphChild[] =>
+  // A link's label is text, never an equation, so its dollars stay literal.
+  hyperlink
+    ? scriptRuns(text, {
         bold: styles.bold === true,
         italics: forceItalics || styles.italic === true,
-        underline: styles.underline === true ? {} : undefined,
+        underline: styles.underline === true,
         strike: styles.strike === true,
-        style: hyperlink ? 'Hyperlink' : undefined,
-        superScript: segment.position === 'SUPERSCRIPT',
-        subScript: segment.position === 'SUBSCRIPT',
-      }),
-  );
+        hyperlink: true,
+      })
+    : manuscriptInlineRuns(
+        text,
+        {
+          bold: styles.bold === true,
+          italics: forceItalics || styles.italic === true,
+          underline: styles.underline === true,
+          strike: styles.strike === true,
+        },
+        findAsset,
+      );
 
 const createManuscriptDocxMappings = ({
   bodyLineSpacing,
@@ -152,6 +324,7 @@ const createManuscriptDocxMappings = ({
   figureCaptionLineSpacing,
   figureCaptionGap,
   figureCaptionSpacingAfter,
+  findAsset,
 }: ManuscriptDocxMappingOptions): typeof docxDefaultSchemaMappings => ({
   ...docxDefaultSchemaMappings,
   blockMapping: {
@@ -164,14 +337,17 @@ const createManuscriptDocxMappings = ({
       children,
     ) => {
       const caption = block.props.caption;
+      // BlockNote reads the caption as the image's description too, so it gets
+      // the plain text — the markers are only for the caption paragraph below.
+      const plainCaption =
+        typeof caption === 'string'
+          ? stripAssetNumberAnchors(stripManuscriptScriptMarkers(caption))
+          : caption;
       const mappedImage = await docxDefaultSchemaMappings.blockMapping.image(
-        typeof caption === 'string' && hasManuscriptScripts(caption)
+        typeof caption === 'string' && caption !== plainCaption
           ? {
               ...block,
-              props: {
-                ...block.props,
-                caption: stripManuscriptScriptMarkers(caption),
-              },
+              props: { ...block.props, caption: plainCaption },
             }
           : block,
         exporter,
@@ -197,16 +373,14 @@ const createManuscriptDocxMappings = ({
             line: Math.round(240 * figureCaptionLineSpacing),
             lineRule: LineRuleType.AUTO,
           },
-          children: manuscriptScriptSegments(caption).map(
-            (segment) =>
-              new TextRun({
-                text: segment.text,
-                font: fontFamily,
-                size: figureCaptionFontSize * 2,
-                italics: true,
-                superScript: segment.position === 'SUPERSCRIPT',
-                subScript: segment.position === 'SUBSCRIPT',
-              }),
+          children: manuscriptInlineRuns(
+            caption,
+            {
+              font: fontFamily,
+              size: figureCaptionFontSize * 2,
+              italics: true,
+            },
+            findAsset,
           ),
         }),
       ];
@@ -239,15 +413,8 @@ const createManuscriptDocxMappings = ({
             : block.props.textAlignment === 'right'
               ? AlignmentType.RIGHT
               : AlignmentType.LEFT,
-        children: hasManuscriptScripts(text)
-          ? manuscriptScriptSegments(text).map(
-              (segment) =>
-                new TextRun({
-                  text: segment.text,
-                  superScript: segment.position === 'SUPERSCRIPT',
-                  subScript: segment.position === 'SUBSCRIPT',
-                }),
-            )
+        children: needsManuscriptRuns(text)
+          ? manuscriptInlineRuns(text, {}, findAsset)
           : exporter.transformInlineContent(block.content),
       });
     },
@@ -278,7 +445,11 @@ const createManuscriptDocxMappings = ({
             ? [
                 new TextRun({ children: [new Tab()] }),
                 new DocxMath({ children: latexToMathComponents(latex) }),
-                new TextRun({ children: [new Tab()], text: label.trim() }),
+                new TextRun({ children: [new Tab()] }),
+                // The number is the definition Word counts from, so it is a
+                // field in a bookmark rather than the digits we happen to
+                // have printed today.
+                ...manuscriptInlineRuns(label.trim(), {}, findAsset),
               ]
             : [new DocxMath({ children: latexToMathComponents(latex) })],
         });
@@ -323,21 +494,19 @@ const createManuscriptDocxMappings = ({
                 ? 1
                 : bodyLineSpacing;
       const children = isFigureCaption
-        ? manuscriptScriptSegments(equation).map(
-            (segment) =>
-              new TextRun({
-                text: segment.text,
-                font: fontFamily,
-                size: figureCaptionFontSize * 2,
-                italics: true,
-                superScript: segment.position === 'SUPERSCRIPT',
-                subScript: segment.position === 'SUBSCRIPT',
-              }),
+        ? manuscriptInlineRuns(
+            equation,
+            {
+              font: fontFamily,
+              size: figureCaptionFontSize * 2,
+              italics: true,
+            },
+            findAsset,
           )
-        : hasManuscriptScripts(equation)
+        : needsManuscriptRuns(equation)
           ? block.content.flatMap((content) => {
               const text = inlineContentText(content);
-              if (!hasManuscriptScripts(text)) {
+              if (!needsManuscriptRuns(text)) {
                 return exporter.transformInlineContent([content]);
               }
               if (isLinkInlineContent(content)) {
@@ -360,6 +529,8 @@ const createManuscriptDocxMappings = ({
                     content.text,
                     content.styles,
                     isAffiliation,
+                    false,
+                    findAsset,
                   )
                 : exporter.transformInlineContent([content]);
             })
@@ -406,12 +577,31 @@ const createManuscriptDocxMappings = ({
 export const exportManuscriptToDocxBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
-  const formattedBundle = await prepareManuscriptBundleWithCsl(bundle);
+  const formattedBundle = await prepareManuscriptBundleWithCsl(bundle, {
+    // Word can keep its own numbering, but only if it is told which asset each
+    // printed number and each in-text reference belongs to.
+    crossReferenceAnchors: true,
+  });
   // Diagrams are Mermaid source until export; Word embeds the raster.
   bundle = await fitManuscriptFigureImages(
     await prepareManuscriptDiagramImages(formattedBundle),
   );
+  const assetsByRefKey = new Map(
+    bundle.numberedFigures.map((figure) => [
+      (figure.refKey ?? figure.id).trim().toLowerCase(),
+      figure,
+    ]),
+  );
   const { editor, blocks } = buildBlockNoteDocument(bundle);
+  // A REF field pointing at a bookmark that was never written reads as
+  // "Error! Reference source not found" in Word. Only the assets whose number
+  // actually appears in the document can be pointed at — an equation with no
+  // body, say, is never printed and so is never a target.
+  const bookmarkedRefKeys = collectAnchoredRefKeys(blocks);
+  const findAsset: ManuscriptAssetLookup = (refKey) => {
+    const key = refKey.trim().toLowerCase();
+    return bookmarkedRefKeys.has(key) ? assetsByRefKey.get(key) : undefined;
+  };
   const fontFamily = bundle.style.fontFamily?.trim() || 'Times New Roman';
   const bodyFontSize = bundle.style.bodyFontSize ?? 12;
   const titleFontSize = bundle.style.titleFontSize ?? 16;
@@ -484,6 +674,7 @@ export const exportManuscriptToDocxBlob = async (
       figureCaptionLineSpacing,
       figureCaptionGap,
       figureCaptionSpacingAfter,
+      findAsset,
     }),
   );
   const resolveExternalFile = exporter.options.resolveFileUrl;

@@ -140,6 +140,7 @@ export const FIGURE_GQL = {
   altText: true,
   credit: true,
   widthPercent: true,
+  numbered: true,
   orderIndex: true,
   tableData: true,
   equationLatex: true,

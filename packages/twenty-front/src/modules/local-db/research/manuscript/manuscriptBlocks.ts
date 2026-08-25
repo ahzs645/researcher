@@ -14,6 +14,9 @@ import { wrapManuscriptScript } from './manuscriptScripts';
 import { parseManuscriptTableGrid } from './manuscriptTableGrid';
 import { titlePageSpacerLineCount } from './manuscriptTitlePage';
 import { PRINTABLE_WIDTH_PX } from './manuscriptPageMetrics';
+import { wrapAssetNumberAnchor } from './manuscriptAssetAnchors';
+import { stripCrossReferenceAnchors } from './manuscriptCrossReference';
+import { protectInlineMath, restoreInlineMath } from './manuscriptInlineMath';
 import { type NumberedFigure } from './manuscriptTypes';
 
 // Build a BlockNote document from the neutral document-node model. Shared by the
@@ -48,10 +51,23 @@ const captionText = (figure: NumberedFigure): string =>
     .filter((part) => part.length > 0)
     .join(' ');
 
+// A printed label carries its asset's key behind an invisible marker, so the
+// DOCX export can set that number as a Word field the rest of the document
+// points at. Every other exporter strips the marker before it reaches a page.
+const anchoredLabel = (figure: NumberedFigure): string => {
+  const refKey = (figure.refKey ?? '').trim();
+  return refKey.length === 0 || (figure.number ?? '').length === 0
+    ? figure.label
+    : `${wrapAssetNumberAnchor(refKey)}${figure.label}`;
+};
+
+const anchoredCaptionText = (figure: NumberedFigure): string =>
+  captionText(figure).replace(figure.label, anchoredLabel(figure));
+
 const figureCaptionBlock = (figure: NumberedFigure): ExportPartialBlock => ({
   type: 'paragraph',
   props: { textColor: 'figure-caption' },
-  content: captionText(figure),
+  content: anchoredCaptionText(figure),
 });
 
 const figureToBlocks = (
@@ -69,7 +85,7 @@ const figureToBlocks = (
       props: {
         url: image.src,
         name: figure.altText ?? figure.name ?? '',
-        caption: captionPosition === 'ABOVE' ? '' : captionText(figure),
+        caption: captionPosition === 'ABOVE' ? '' : anchoredCaptionText(figure),
         // BlockNote otherwise exports at the image's raw pixel width. Keep
         // figures within the 624 px printable column of a Letter page.
         previewWidth: Math.round(600 * (widthPercent / 100)),
@@ -85,7 +101,7 @@ const figureToBlocks = (
 const tableCaptionBlock = (figure: NumberedFigure): ExportPartialBlock => ({
   type: 'paragraph',
   props: { textColor: 'table-caption' },
-  content: captionText(figure),
+  content: anchoredCaptionText(figure),
 });
 
 // A numbered equation travels to the DOCX mapper as a single 'equation'
@@ -101,7 +117,7 @@ const equationToBlocks = (figure: NumberedFigure): ExportPartialBlock[] => {
     {
       type: 'paragraph',
       props: { textColor: 'equation' },
-      content: `${latex}${EQUATION_LABEL_SEPARATOR}${figure.label}`,
+      content: `${latex}${EQUATION_LABEL_SEPARATOR}${anchoredLabel(figure)}`,
     },
   ];
   if (isNonEmptyString(figure.caption)) {
@@ -143,7 +159,15 @@ const tableToBlocks = (
           cells: cells.map((cell) => ({
             type: 'tableCell' as const,
             props: { colspan: cell.colSpan, rowspan: cell.rowSpan },
-            content: [{ type: 'text' as const, text: cell.text, styles: {} }],
+            content: [
+              {
+                type: 'text' as const,
+                // A cell prints the resolved label; Word's field machinery
+                // does not run inside the grid.
+                text: stripCrossReferenceAnchors(cell.text),
+                styles: {},
+              },
+            ],
           })),
         })),
       },
@@ -151,6 +175,41 @@ const tableToBlocks = (
   }
   if (captionPosition === 'BELOW') blocks.push(tableCaptionBlock(figure));
   return blocks;
+};
+
+// Put the maths back into whatever the Markdown parser produced, wherever it
+// ended up — inside emphasis, a list item, a link label.
+const restoreBlockMath = (
+  block: ExportPartialBlock,
+  math: readonly string[],
+): ExportPartialBlock => {
+  if (math.length === 0) return block;
+  const restore = (value: unknown): unknown => {
+    if (typeof value === 'string') return restoreInlineMath(value, math);
+    if (Array.isArray(value)) return value.map(restore);
+    if (typeof value !== 'object' || value === null) return value;
+    const record = value as Record<string, unknown>;
+    const next: Record<string, unknown> = { ...record };
+    if ('text' in record) next.text = restore(record.text);
+    if ('content' in record) next.content = restore(record.content);
+    if ('children' in record) next.children = restore(record.children);
+    return next;
+  };
+  return restore(block) as ExportPartialBlock;
+};
+
+const parseProse = (
+  editor: ExportEditor,
+  markdown: string,
+  paragraphProps: Record<string, unknown>,
+): ExportPartialBlock[] => {
+  const { text, math } = protectInlineMath(markdown);
+  return editor.tryParseMarkdownToBlocks(text).map((block) => {
+    const restored = restoreBlockMath(block, math);
+    return restored.type === 'paragraph'
+      ? { ...restored, props: { ...restored.props, ...paragraphProps } }
+      : restored;
+  });
 };
 
 const proseToBlocks = (
@@ -171,16 +230,7 @@ const proseToBlocks = (
     const index = match.index ?? 0;
     const preceding = markdown.slice(cursor, index).trim();
     if (preceding.length > 0) {
-      blocks.push(
-        ...editor.tryParseMarkdownToBlocks(preceding).map((block) =>
-          block.type === 'paragraph'
-            ? {
-                ...block,
-                props: { ...block.props, ...paragraphProps },
-              }
-            : block,
-        ),
-      );
+      blocks.push(...parseProse(editor, preceding, paragraphProps));
     }
     const equation = match[1].trim();
     if (equation.length > 0) {
@@ -195,16 +245,7 @@ const proseToBlocks = (
 
   const remaining = markdown.slice(cursor).trim();
   if (remaining.length > 0) {
-    blocks.push(
-      ...editor.tryParseMarkdownToBlocks(remaining).map((block) =>
-        block.type === 'paragraph'
-          ? {
-              ...block,
-              props: { ...block.props, ...paragraphProps },
-            }
-          : block,
-      ),
-    );
+    blocks.push(...parseProse(editor, remaining, paragraphProps));
   }
   return blocks;
 };

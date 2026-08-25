@@ -23,14 +23,17 @@ pure functions underneath.
 
 ## The portable package
 
-`aeth-modular-portable-research.zip` is that import, exported back out as a
-portable research package: `research-paper.json` (36 sections, 23 assets, 13
-references, contributors, export settings and the AMT journal template) plus
-the three figure PNGs.
+The last step of that run was **Export → Portable research ZIP**, which writes
+the whole manuscript back out as one file: `research-paper.json` (36 sections,
+23 assets, 13 references, contributors, export settings and the AMT journal
+template) plus the three figure PNGs. It is a build output, not source, so it
+is not committed here — produce it by repeating the run below, or by exporting
+any manuscript you already have.
 
-Import it with **Import as new manuscript… → drop the ZIP**. Because the app
-wrote it, there is nothing to classify and nothing to confirm: the wizard
-restores it on arrival and shows what came back.
+Importing one with **Import as new manuscript… → drop the ZIP** is the other
+half of the round trip. Because the app wrote it, there is nothing to classify
+and nothing to confirm: the wizard restores it on arrival and shows what came
+back.
 
 ```
 36 sections · 13 references · 15 equations · 3 figures · 5 tables
@@ -40,8 +43,9 @@ eq-7 → "x̄j,time — equation (7)", latex "\bar{x}j,time = \sum_{i} wij xi / 
 
 The restored manuscript reports the same submission readiness as the one it
 was exported from (6 ready · 14 warnings · 3 required items missing, against
-AMT's 350-word abstract limit), which is what makes it a usable fixture: the
-paper comes back whole, not as a document to be re-read.
+AMT's 350-word abstract limit): the paper comes back whole, not as a document
+to be re-read. The same round trip is asserted without a browser in
+`manuscriptPortableZip.test.ts`.
 
 ## Reproducing the run
 
@@ -51,4 +55,6 @@ REACT_APP_DATA_MODE=local npx nx start twenty-front   # http://localhost:3001
 
 Then `/compose` → **Import as new manuscript…** → choose the `.docx`. The
 wizard analyses the document in the browser; nothing is saved until *Confirm
-import*. Drop the portable ZIP instead and it restores straight away.
+import*. Pick the journal profile under **Export → Journal format**, then
+**Portable research ZIP** to write the package. Drop that ZIP back into the
+same importer and it restores straight away.

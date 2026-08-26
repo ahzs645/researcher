@@ -11,6 +11,7 @@ import {
   parseWordDocument,
   parseWordDocumentFromBlocks,
   type ImportedDocument,
+  type TrackedChangeResolution,
   type WordImportOptions,
 } from './manuscriptDocImport';
 import {
@@ -206,11 +207,16 @@ type ImportedWordSource = {
 
 const readImportedWordSource = async (
   buffer: ArrayBuffer,
+  trackedChanges: TrackedChangeResolution = 'ACCEPT',
 ): Promise<ImportedWordSource> => {
   const documentXml = await extractDocxDocumentXml(buffer);
-  const [stylesXml, relationshipsXml] = await Promise.all([
+  const [stylesXml, relationshipsXml, commentsXml] = await Promise.all([
     readOptionalXmlEntry(buffer, 'word/styles.xml'),
     readOptionalXmlEntry(buffer, 'word/_rels/document.xml.rels'),
+    // A reviewer's comments live in their own package entry: the body carries
+    // only the anchors. Reading it here — rather than only in the wizard's own
+    // reader — is what stops this path counting comments it cannot quote.
+    readOptionalXmlEntry(buffer, 'word/comments.xml'),
   ]);
   const imageByRelationshipId = await loadDocxImages(
     buffer,
@@ -223,6 +229,8 @@ const readImportedWordSource = async (
     options: {
       styles: parseWordStyleDefinitions(stylesXml),
       imageByRelationshipId,
+      trackedChanges,
+      ...(commentsXml.length > 0 ? { commentsXml } : {}),
     },
     hasTiff: Object.values(imageByRelationshipId).some((image) =>
       image.dataUrl.startsWith('data:image/tiff'),
@@ -283,8 +291,11 @@ const sourceInfoFromDocument = (
 export const readImportedWordDocument = async (
   buffer: ArrayBuffer,
   fileName = 'the imported document',
+  // ACCEPT is what every caller of this reader got before the choice existed,
+  // and the only answer a document with no revisions can have.
+  trackedChanges: TrackedChangeResolution = 'ACCEPT',
 ): Promise<ImportedDocument> => {
-  const source = await readImportedWordSource(buffer);
+  const source = await readImportedWordSource(buffer, trackedChanges);
   return {
     ...addTiffWarning(
       parseWordDocument(source.documentXml, source.options),
@@ -353,6 +364,7 @@ const readJatsManifest = async (
 
 export const readImportedDocumentFile = async (
   file: File,
+  trackedChanges: TrackedChangeResolution = 'ACCEPT',
 ): Promise<ImportedDocument> => {
   const extension = fileExtension(file.name);
   if (extension === 'xml' || extension === 'jats') {
@@ -366,7 +378,11 @@ export const readImportedDocumentFile = async (
     );
   }
   if (extension === 'docx') {
-    return readImportedWordDocument(await file.arrayBuffer(), file.name);
+    return readImportedWordDocument(
+      await file.arrayBuffer(),
+      file.name,
+      trackedChanges,
+    );
   }
   if (extension === 'pdf') {
     // Best-effort: PDFs carry no headings, so this usually yields one section.
@@ -391,8 +407,14 @@ export const readImportedDocumentSource = async (
       source.options,
     );
     const sourceInfo = sourceInfoFromDocument({
+      // The same options the blocks were read with, so the counts this step
+      // shows are the counts the other entry point reports for the same file.
       ...addTiffWarning(
-        parseWordDocumentFromBlocks(source.documentXml, wordBlocks),
+        parseWordDocumentFromBlocks(
+          source.documentXml,
+          wordBlocks,
+          source.options,
+        ),
         source.hasTiff,
       ),
       ...sourceStyleFields(source.stylesXml, file.name),

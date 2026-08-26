@@ -5,25 +5,28 @@ import {
   buildManuscriptBibtex,
   manuscriptBibtexCitationKey,
 } from './manuscriptBibtexWrite';
-import {
-  citationAnchorKeys,
-  citationItemKey,
-  CITATION_ANCHOR_PATTERN,
-} from './manuscriptCitations';
+import { citationItemKey } from './manuscriptCitations';
 import { resolveCslStyleXml } from './manuscriptCiteproc';
-import {
-  parseManuscriptAffiliations,
-  parseManuscriptAuthors,
-} from './manuscriptContributors';
-import { CROSS_REF_ANCHOR_PATTERN } from './manuscriptCrossReference';
-import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
-import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { sanitizeUrl } from './manuscriptHtmlMarkdown';
-import { resolveFigureImage } from './manuscriptImages';
 import { COMMAND_TEXT } from './manuscriptMathGlyphs';
 import { PAGE_MARGIN_POINTS } from './manuscriptPageMetrics';
-import { manuscriptScriptSegments } from './manuscriptScripts';
+import {
+  collectManuscriptSourceImages,
+  manuscriptSourceByline,
+  manuscriptSourceCaption,
+  manuscriptSourceFigureImage,
+  manuscriptSourceLabel,
+  manuscriptSourceLabelPrefix,
+  prepareManuscriptSourceBundle,
+  renderManuscriptSourceBlocks,
+  renderManuscriptSourceInline,
+  renderManuscriptSourceNodes,
+  UNNUMBERED_HEADING,
+  type ManuscriptSourceBlockWriter,
+  type ManuscriptSourceInlineWriter,
+  type ManuscriptSourceNodeWriter,
+} from './manuscriptSourceExport';
 import { parseManuscriptTableGrid } from './manuscriptTableGrid';
 import { type NumberedFigure } from './manuscriptTypes';
 
@@ -35,6 +38,10 @@ import { type NumberedFigure } from './manuscriptTypes';
 // Typst does its own numbering and referencing, so it gets `<label>` + `@label`
 // rather than the "Figure 3" the bundle already resolved — the author edits the
 // source afterwards and the numbers have to follow.
+//
+// The traversals this shares with the LaTeX exporter — the Markdown scanner,
+// the node walk, the sidecar images — live in `manuscriptSourceExport`; what
+// is left here is only how Typst spells things.
 
 const TYPST_ESCAPES = /[\\#$[\]*_`<>@~]/g;
 
@@ -50,12 +57,6 @@ const escapeTypstLineStart = (value: string): string =>
       (_match, space: string, token: string) => `${space}\\${token}`,
     )
     .replace(/^(\s*\d+)\./, '$1\\.');
-
-const typstLabel = (value: string): string =>
-  value
-    .trim()
-    .replace(/[^A-Za-z0-9:._-]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'label';
 
 // A string that reaches Typst inside quotes: a path, a font name, a URL. None
 // of them may close the literal.
@@ -190,9 +191,8 @@ type TypstContext = {
   figuresByKey: Map<string, NumberedFigure>;
   addImage: (dataUrl: string, hint: string) => string | null;
   sectionNumbering: boolean;
+  inline: ManuscriptSourceInlineWriter;
 };
-
-const PLACEHOLDER = '\u0000';
 
 const citationToTypst = (keys: string[], label: string): string => {
   const cited = [
@@ -202,17 +202,17 @@ const citationToTypst = (keys: string[], label: string): string => {
   ].filter((key) => key.length > 0);
   return cited.length === 0
     ? escapeTypst(label)
-    : cited.map((key) => `#cite(<${typstLabel(key)}>)`).join('');
+    : cited.map((key) => `#cite(<${manuscriptSourceLabel(key)}>)`).join('');
 };
 
 const crossReferenceToTypst = (
   refKey: string,
-  context: TypstContext,
+  figuresByKey: Map<string, NumberedFigure>,
 ): string => {
-  const label = typstLabel(refKey);
+  const label = manuscriptSourceLabel(refKey);
   // Typst's own supplement would make an equation reference read "Equation
   // (3)"; the journals this composer targets print just "(3)".
-  return context.figuresByKey.get(refKey)?.assetKind === 'EQUATION'
+  return figuresByKey.get(refKey)?.assetKind === 'EQUATION'
     ? `#ref(<${label}>, supplement: none)`
     : `@${label}`;
 };
@@ -220,95 +220,43 @@ const crossReferenceToTypst = (
 const inlineImageToTypst = (
   source: string,
   alt: string,
-  context: TypstContext,
+  addImage: (dataUrl: string, hint: string) => string | null,
 ): string => {
   const filename = /^data:image\//i.test(source)
-    ? context.addImage(source, 'inline-image')
+    ? addImage(source, 'inline-image')
     : null;
   return filename === null
     ? `#emph[${escapeTypst(alt.length > 0 ? alt : source)}]`
     : `#image(${typstString(filename)})`;
 };
 
-// Inline Markdown → Typst markup. Anything already in Typst syntax is parked
-// before the escaping pass; wrappers park only their delimiters so the content
-// still gets escaped and can nest.
-const inlineToTypst = (value: string, context: TypstContext): string => {
-  const parked: string[] = [];
-  const park = (typst: string): string =>
-    `${PLACEHOLDER}${parked.push(typst) - 1}${PLACEHOLDER}`;
+// How Typst spells every inline construct. Maths goes through the translator:
+// the bundle stores it as LaTeX and Typst is not TeX.
+const typstInlineWriter = (
+  figuresByKey: Map<string, NumberedFigure>,
+  addImage: (dataUrl: string, hint: string) => string | null,
+): ManuscriptSourceInlineWriter => ({
+  escape: escapeTypst,
+  citation: citationToTypst,
+  crossReference: (refKey) => crossReferenceToTypst(refKey, figuresByKey),
+  displayMath: (math) => `$ ${latexToTypstMath(math)} $`,
+  inlineMath: (math) => `$${latexToTypstMath(math)}$`,
+  code: (code) => `\`${code.replace(/`/g, '')}\``,
+  image: (source, alt) => inlineImageToTypst(source, alt, addImage),
+  link: (href) => ({
+    open: `#link(${typstString(sanitizeUrl(href))})[`,
+    close: ']',
+  }),
+  lineBreak: '#linebreak()',
+  superscript: { open: '#super[', close: ']' },
+  subscript: { open: '#sub[', close: ']' },
+  bold: { open: '*', close: '*' },
+  emphasis: { open: '_', close: '_' },
+  strikethrough: { open: '#strike[', close: ']' },
+});
 
-  const working = value
-    .replace(CITATION_ANCHOR_PATTERN, (_match, keys: string, label: string) =>
-      park(citationToTypst(citationAnchorKeys(keys), label)),
-    )
-    .replace(CROSS_REF_ANCHOR_PATTERN, (_match, key: string) =>
-      park(crossReferenceToTypst(key, context)),
-    )
-    .replace(/\$\$([^$]+)\$\$/g, (_match, math: string) =>
-      park(`$ ${latexToTypstMath(math)} $`),
-    )
-    .replace(/\$([^$\n]+)\$/g, (_match, math: string) =>
-      park(`$${latexToTypstMath(math)}$`),
-    )
-    .replace(/`([^`]+)`/g, (_match, code: string) =>
-      park(`\`${code.replace(/`/g, '')}\``),
-    )
-    .replace(
-      /!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g,
-      (_match, alt: string, source: string) =>
-        park(inlineImageToTypst(source, alt, context)),
-    )
-    .replace(
-      /<sup>([\s\S]*?)<\/sup>/gi,
-      (_match, inner: string) => `${park('#super[')}${inner}${park(']')}`,
-    )
-    .replace(
-      /<sub>([\s\S]*?)<\/sub>/gi,
-      (_match, inner: string) => `${park('#sub[')}${inner}${park(']')}`,
-    )
-    .replace(/<br\s*\/?>/gi, () => park('#linebreak()'))
-    .replace(/<\/?[A-Za-z][^<>]*>/g, '')
-    .replace(
-      /\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g,
-      (_match, label: string, href: string) =>
-        `${park(`#link(${typstString(sanitizeUrl(href))})[`)}${label}${park(']')}`,
-    )
-    .replace(
-      /\*\*([^*]+)\*\*/g,
-      (_match, inner: string) => `${park('*')}${inner}${park('*')}`,
-    )
-    .replace(
-      /(?<![*\w])\*([^*\n]+)\*(?!\w)/g,
-      (_match, inner: string) => `${park('_')}${inner}${park('_')}`,
-    )
-    .replace(
-      /(?<![_\w])_([^_\n]+)_(?!\w)/g,
-      (_match, inner: string) => `${park('_')}${inner}${park('_')}`,
-    )
-    .replace(
-      /~~([^~]+)~~/g,
-      (_match, inner: string) => `${park('#strike[')}${inner}${park(']')}`,
-    );
-
-  const escaped = manuscriptScriptSegments(escapeTypst(working))
-    .map((segment) =>
-      segment.position === 'SUPERSCRIPT'
-        ? `#super[${segment.text}]`
-        : segment.position === 'SUBSCRIPT'
-          ? `#sub[${segment.text}]`
-          : segment.text,
-    )
-    .join('');
-
-  return escaped.replace(
-    new RegExp(`${PLACEHOLDER}(\\d+)${PLACEHOLDER}`, 'g'),
-    (_match, index: string) => parked[Number(index)] ?? '',
-  );
-};
-
-const UNNUMBERED_HEADING =
-  /^(abstract|keywords|acknowledge?ments?|author contributions?|funding|competing interests?|conflicts? of interest|data availability|references|supplementary material|appendix(?:\s+[A-Z0-9]+)?(?:[.:]\s*.*)?)$/i;
+const inlineToTypst = (value: string, context: TypstContext): string =>
+  renderManuscriptSourceInline(value, context.inline);
 
 // The manuscript title is the document title, so the bundle's top-level
 // section is Typst's first heading level.
@@ -370,170 +318,40 @@ const tableToTypst = (tableData: string, context: TypstContext): string => {
   ].join('\n');
 };
 
-const proseToTypst = (markdown: string, context: TypstContext): string[] => {
-  const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
-  const blocks: string[] = [];
-  let paragraph: string[] = [];
-
-  const flushParagraph = () => {
-    if (paragraph.length === 0) return;
-    const text = paragraph.join(' ').trim();
-    paragraph = [];
-    if (text.length > 0) {
-      blocks.push(escapeTypstLineStart(inlineToTypst(text, context)));
-    }
-  };
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (line.trim().length === 0) {
-      flushParagraph();
-      continue;
-    }
-
-    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
-    if (heading !== null) {
-      flushParagraph();
-      blocks.push(
-        headingToTypst(heading[1].length, heading[2].trim(), context),
-      );
-      continue;
-    }
-
-    if (/^\s*```/.test(line)) {
-      flushParagraph();
-      const body: string[] = [];
-      index += 1;
-      while (index < lines.length && !/^\s*```\s*$/.test(lines[index])) {
-        body.push(lines[index]);
-        index += 1;
-      }
-      blocks.push(['```', ...body, '```'].join('\n'));
-      continue;
-    }
-
-    if (/^\s*\$\$/.test(line)) {
-      flushParagraph();
-      const body: string[] = [];
-      const singleLine = /^\s*\$\$([\s\S]*)\$\$\s*$/.exec(line);
-      if (singleLine !== null) {
-        body.push(singleLine[1]);
-      } else {
-        body.push(line.replace(/^\s*\$\$/, ''));
-        index += 1;
-        while (index < lines.length && !/\$\$\s*$/.test(lines[index])) {
-          body.push(lines[index]);
-          index += 1;
-        }
-        if (index < lines.length) {
-          body.push(lines[index].replace(/\$\$\s*$/, ''));
-        }
-      }
-      // Display maths inside prose carries no label, so it takes no number.
-      blocks.push(
-        [
-          '#[',
-          '  #set math.equation(numbering: none)',
-          `  $ ${latexToTypstMath(body.join(' '))} $`,
-          ']',
-        ].join('\n'),
-      );
-      continue;
-    }
-
-    if (line.trim().startsWith('|')) {
-      flushParagraph();
-      const block: string[] = [];
-      while (index < lines.length && lines[index].trim().startsWith('|')) {
-        block.push(lines[index]);
-        index += 1;
-      }
-      index -= 1;
-      blocks.push(`#figure(\n${tableToTypst(block.join('\n'), context)}\n)`);
-      continue;
-    }
-
-    if (/^\s*(?:\*{3,}|-{3,}|_{3,})\s*$/.test(line)) {
-      flushParagraph();
-      blocks.push('#line(length: 100%)');
-      continue;
-    }
-
-    const ordered = /^\s*\d+[.)]\s+/.test(line);
-    if (ordered || /^\s*[-*+]\s+/.test(line)) {
-      flushParagraph();
-      const isItem = (candidate: string): boolean =>
-        ordered
-          ? /^\s*\d+[.)]\s+/.test(candidate)
-          : /^\s*[-*+]\s+/.test(candidate);
-      const items: string[] = [];
-      while (index < lines.length && isItem(lines[index])) {
-        items.push(lines[index].replace(/^\s*(?:[-*+]|\d+[.)])\s+/, ''));
-        index += 1;
-      }
-      index -= 1;
-      blocks.push(
-        items
-          .map(
-            (item) => `${ordered ? '+' : '-'} ${inlineToTypst(item, context)}`,
-          )
-          .join('\n'),
-      );
-      continue;
-    }
-
-    if (/^\s*>\s?/.test(line)) {
-      flushParagraph();
-      const block: string[] = [];
-      while (index < lines.length && /^\s*>\s?/.test(lines[index])) {
-        block.push(lines[index].replace(/^\s*>\s?/, ''));
-        index += 1;
-      }
-      index -= 1;
-      blocks.push(
-        `#quote(block: true)[${inlineToTypst(block.join(' '), context)}]`,
-      );
-      continue;
-    }
-
-    paragraph.push(line.trim());
-  }
-
-  flushParagraph();
-  return blocks;
-};
-
-const captionToTypst = (
-  figure: NumberedFigure,
+// How Typst spells every block the Markdown scanner hands back.
+const typstBlockWriter = (
   context: TypstContext,
-): string =>
-  inlineToTypst(
+): ManuscriptSourceBlockWriter => ({
+  paragraph: (text) => escapeTypstLineStart(inlineToTypst(text, context)),
+  heading: (level, text) => headingToTypst(level, text, context),
+  code: (lines) => ['```', ...lines, '```'].join('\n'),
+  displayMath: (lines) =>
     [
-      isNonEmptyString(figure.caption) ? figure.caption : (figure.name ?? ''),
-      isNonEmptyString(figure.credit) ? `Credit: ${figure.credit}` : '',
-    ]
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0)
-      .join(' '),
-    context,
-  );
+      '#[',
+      '  #set math.equation(numbering: none)',
+      `  $ ${latexToTypstMath(lines.join(' '))} $`,
+      ']',
+    ].join('\n'),
+  table: (markdown) => `#figure(\n${tableToTypst(markdown, context)}\n)`,
+  thematicBreak: '#line(length: 100%)',
+  list: (items, ordered) =>
+    items
+      .map((item) => `${ordered ? '+' : '-'} ${inlineToTypst(item, context)}`)
+      .join('\n'),
+  quote: (text) => `#quote(block: true)[${inlineToTypst(text, context)}]`,
+});
 
-const supplementName = (
-  format: string | null | undefined,
-  fallback: string,
-): string => {
-  const prefix = (format ?? '').split('{n}')[0].trim().replace(/[:.]$/, '');
-  return prefix.length > 0 ? prefix : fallback;
-};
+const proseToTypst = (markdown: string, context: TypstContext): string[] =>
+  renderManuscriptSourceBlocks(markdown, typstBlockWriter(context));
 
 const figureArguments = (
   figure: NumberedFigure,
   bundle: ManuscriptBundle,
   context: TypstContext,
 ): string[] => [
-  `  caption: [${captionToTypst(figure, context)}],`,
+  `  caption: [${inlineToTypst(manuscriptSourceCaption(figure), context)}],`,
   `  supplement: [${escapeTypst(
-    supplementName(
+    manuscriptSourceLabelPrefix(
       figure.assetKind === 'TABLE'
         ? bundle.style.tableLabelFormat
         : bundle.style.figureLabelFormat,
@@ -547,20 +365,13 @@ const figureBodyToTypst = (
   figure: NumberedFigure,
   context: TypstContext,
 ): string => {
-  const name =
-    figure.label.length > 0 ? figure.label : (figure.name ?? 'Figure');
-  const width = Math.min(100, Math.max(10, figure.widthPercent ?? 100));
-  const image = resolveFigureImage(figure);
-  if (image.kind === 'dataurl') {
-    const filename = context.addImage(image.src, figure.refKey ?? figure.id);
-    if (filename !== null) {
-      return `  image(${typstString(filename)}, width: ${width}%),`;
-    }
+  const placement = manuscriptSourceFigureImage(figure, context.addImage);
+  if (placement.kind === 'file') {
+    return `  image(${typstString(placement.filename)}, width: ${placement.widthPercent}%),`;
   }
-  // A Typst compile has no network, so a linked image cannot be pulled in.
-  return image.kind === 'url'
-    ? `  emph[${escapeTypst(`[${name}: linked image ${image.src}]`)}],`
-    : `  emph[${escapeTypst(`[${name}: image to be added]`)}],`;
+  return placement.kind === 'linked'
+    ? `  emph[${escapeTypst(`[${placement.name}: linked image ${placement.source}]`)}],`
+    : `  emph[${escapeTypst(`[${placement.name}: image to be added]`)}],`;
 };
 
 const figureToTypst = (
@@ -572,7 +383,7 @@ const figureToTypst = (
     '#figure(',
     figureBodyToTypst(figure, context),
     ...figureArguments(figure, bundle, context),
-    `) <${typstLabel(figure.refKey ?? figure.id)}>`,
+    `) <${manuscriptSourceLabel(figure.refKey ?? figure.id)}>`,
   ].join('\n');
 
 const tableFigureToTypst = (
@@ -584,7 +395,7 @@ const tableFigureToTypst = (
     '#figure(',
     `${tableToTypst(figure.tableData ?? '', context)},`,
     ...figureArguments(figure, bundle, context),
-    `) <${typstLabel(figure.refKey ?? figure.id)}>`,
+    `) <${manuscriptSourceLabel(figure.refKey ?? figure.id)}>`,
   ].join('\n');
 
 const equationToTypst = (figure: NumberedFigure): string => {
@@ -595,7 +406,7 @@ const equationToTypst = (figure: NumberedFigure): string => {
     ? ['#[', '  #set math.equation(numbering: none)', `  ${math}`, ']'].join(
         '\n',
       )
-    : `${math} <${typstLabel(figure.refKey ?? figure.id)}>`;
+    : `${math} <${manuscriptSourceLabel(figure.refKey ?? figure.id)}>`;
 };
 
 const supplementCounterResets = (prefix: string): string[] => {
@@ -609,68 +420,32 @@ const supplementCounterResets = (prefix: string): string[] => {
   ];
 };
 
-const nodesToTypst = (
+// How Typst spells every node of the bundle's document model. Typst has no
+// abstract environment: the heading is written as a heading like any other.
+const typstNodeWriter = (
   bundle: ManuscriptBundle,
   context: TypstContext,
   bibliographyStyle: string | null,
-): string[] => {
-  const body: string[] = [];
-  let inKeywords = false;
-
-  bundle.nodes.forEach((node, index) => {
-    switch (node.kind) {
-      case 'heading': {
-        // `#bibliography` prints its own "References" heading.
-        if (bundle.nodes[index + 1]?.kind === 'bibliography') return;
-        const heading = node.text.trim();
-        inKeywords = /^keywords?$/i.test(heading);
-        if (inKeywords) return;
-        if (node.level === 1) {
-          body.push(
-            '#pagebreak()',
-            ...supplementCounterResets(bundle.style.supplementPrefix ?? 'S'),
-          );
-        }
-        body.push(headingToTypst(node.level, heading, context));
-        return;
-      }
-      case 'prose': {
-        if (inKeywords) {
-          inKeywords = false;
-          const keywords = node.markdown
-            .replace(/^\s*keywords?\s*:\s*/i, '')
-            .trim();
-          body.push(`*Keywords:* ${inlineToTypst(keywords, context)}`);
-          return;
-        }
-        body.push(...proseToTypst(node.markdown, context));
-        return;
-      }
-      case 'figure':
-        body.push(figureToTypst(node.figure, bundle, context));
-        return;
-      case 'table':
-        body.push(tableFigureToTypst(node.figure, bundle, context));
-        return;
-      case 'equation': {
-        const equation = equationToTypst(node.figure);
-        if (equation.length > 0) body.push(equation);
-        return;
-      }
-      case 'bibliography':
-        body.push(
-          `#bibliography("references.bib"${
-            bibliographyStyle === null
-              ? ''
-              : `, style: ${typstString(bibliographyStyle)}`
-          })`,
-        );
-        return;
-    }
-  });
-
-  return body;
-};
+): ManuscriptSourceNodeWriter => ({
+  heading: (level, text) => headingToTypst(level, text, context),
+  supplementBreak: (prefix) => [
+    '#pagebreak()',
+    ...supplementCounterResets(prefix),
+  ],
+  keywords: (keywords) => `*Keywords:* ${inlineToTypst(keywords, context)}`,
+  prose: (markdown) => proseToTypst(markdown, context),
+  figure: (figure) => figureToTypst(figure, bundle, context),
+  table: (figure) => tableFigureToTypst(figure, bundle, context),
+  equation: (figure) => equationToTypst(figure),
+  bibliography: () => [
+    `#bibliography("references.bib"${
+      bibliographyStyle === null
+        ? ''
+        : `, style: ${typstString(bibliographyStyle)}`
+    })`,
+  ],
+  abstractEnvironment: null,
+});
 
 // A font family reaches this module from stored JSON. Typst falls back on its
 // own when a name is not installed, so the only job here is to make sure the
@@ -685,10 +460,9 @@ const preambleToTypst = (bundle: ManuscriptBundle): string[] => {
   const { style } = bundle;
   const bodyFontSize = Number(style.bodyFontSize) || 12;
   const lineSpacing = Math.max(1, Number(style.lineSpacing) || 1.5);
-  const authors = parseManuscriptAuthors(
-    bundle.metadata.authors,
-    parseManuscriptAffiliations(bundle.metadata.affiliations),
-  ).map((author) => typstString(author.name));
+  const authors = manuscriptSourceByline(bundle.metadata).authors.map((author) =>
+    typstString(author.name),
+  );
   return [
     `#set document(title: ${typstString(bundle.metadata.title)}${
       authors.length === 0 ? '' : `, author: (${authors.join(', ')})`
@@ -713,30 +487,15 @@ const titleBlockToTypst = (
   bundle: ManuscriptBundle,
   context: TypstContext,
 ): string[] => {
-  const affiliations = parseManuscriptAffiliations(
-    bundle.metadata.affiliations,
-  );
-  const numberById = new Map(
-    affiliations.map((affiliation, index) => [affiliation.id, index + 1]),
-  );
-  const authorLine = parseManuscriptAuthors(
-    bundle.metadata.authors,
-    affiliations,
-  )
-    .map((author) => {
-      const markers = author.affiliationIds
-        .flatMap((id) => {
-          const number = numberById.get(id);
-          return number === undefined ? [] : [number];
-        })
-        .sort((left, right) => left - right)
-        .join(',');
-      return [
+  const { affiliations, authors } = manuscriptSourceByline(bundle.metadata);
+  const authorLine = authors
+    .map((author) =>
+      [
         escapeTypst(author.name),
-        markers.length > 0 ? `#super[${markers}]` : '',
+        author.markers.length > 0 ? `#super[${author.markers}]` : '',
         author.isCorresponding ? '#super[\\*]' : '',
-      ].join('');
-    })
+      ].join(''),
+    )
     .join(', ');
 
   const titleFontSize = Number(bundle.style.titleFontSize) || 16;
@@ -762,53 +521,15 @@ const titleBlockToTypst = (
 export const buildManuscriptTypstFiles = (
   bundle: ManuscriptBundle,
 ): ExportFile[] => {
-  const files: ExportFile[] = [];
-  const nameByDataUrl = new Map<string, string>();
-  const usedNames = new Set<string>();
-
-  const addImage = (dataUrl: string, hint: string): string | null => {
-    const existing = nameByDataUrl.get(dataUrl);
-    if (existing !== undefined) return existing;
-    const match = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl);
-    if (match === null) return null;
-    const extension = match[1]
-      .replace(/^image\//i, '')
-      .toLowerCase()
-      .replace('svg+xml', 'svg')
-      .replace('jpeg', 'jpg');
-    const base = slugifyTitle(hint);
-    let filename = `figures/${base}.${extension}`;
-    let suffix = 2;
-    while (usedNames.has(filename)) {
-      filename = `figures/${base}-${suffix}.${extension}`;
-      suffix += 1;
-    }
-    usedNames.add(filename);
-    nameByDataUrl.set(dataUrl, filename);
-    files.push({
-      filename,
-      mimeType: match[1],
-      content: new Blob(
-        [
-          Uint8Array.from(atob(match[2]), (character) =>
-            character.charCodeAt(0),
-          ),
-        ],
-        { type: match[1] },
-      ),
-    });
-    return filename;
-  };
-
+  const images = collectManuscriptSourceImages();
+  const figuresByKey = new Map(
+    bundle.numberedFigures.map((figure) => [figure.refKey ?? figure.id, figure]),
+  );
   const context: TypstContext = {
-    figuresByKey: new Map(
-      bundle.numberedFigures.map((figure) => [
-        figure.refKey ?? figure.id,
-        figure,
-      ]),
-    ),
-    addImage,
+    figuresByKey,
+    addImage: images.addImage,
     sectionNumbering: bundle.style.sectionNumbering === true,
+    inline: typstInlineWriter(figuresByKey, images.addImage),
   };
 
   // Typst reads a CSL file directly, so the vendored style travels with the
@@ -818,10 +539,13 @@ export const buildManuscriptTypstFiles = (
   const document = [
     preambleToTypst(bundle).join('\n'),
     titleBlockToTypst(bundle, context).join('\n'),
-    ...nodesToTypst(
+    ...renderManuscriptSourceNodes(
       bundle,
-      context,
-      styleXml === null ? null : `${styleId}.csl`,
+      typstNodeWriter(
+        bundle,
+        context,
+        styleXml === null ? null : `${styleId}.csl`,
+      ),
     ),
     '',
   ].join('\n\n');
@@ -846,7 +570,7 @@ export const buildManuscriptTypstFiles = (
             content: styleXml,
           },
         ]),
-    ...files,
+    ...images.imageFiles(),
   ];
 };
 
@@ -855,13 +579,6 @@ export const manuscriptTypstExporter: ManuscriptExporter = {
   label: 'Typst source',
   formats: ['TYPST', 'BIBTEX'],
   offline: true,
-  export: async (bundle): Promise<ExportFile[]> => {
-    const prepared = await prepareManuscriptDiagramImages(
-      await prepareManuscriptBundleWithCsl(bundle, {
-        citationAnchors: true,
-        crossReferenceAnchors: true,
-      }),
-    );
-    return buildManuscriptTypstFiles(prepared);
-  },
+  export: async (bundle): Promise<ExportFile[]> =>
+    buildManuscriptTypstFiles(await prepareManuscriptSourceBundle(bundle)),
 };

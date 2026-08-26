@@ -4,6 +4,7 @@ import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptCitationStylePicker } from '@/local-db/research/components/composer/ManuscriptCitationStylePicker';
+import { ManuscriptTemplateRegistryPicker } from '@/local-db/research/components/composer/export/ManuscriptTemplateRegistryPicker';
 import {
   StyledExportCard,
   StyledExportCardDescription,
@@ -16,6 +17,7 @@ import {
   journalProfileRecordInput,
   parseJournalProfile,
   serializeJournalProfile,
+  type PortableJournalProfile,
 } from '@/local-db/research/manuscript/manuscriptJournalProfile';
 import { downloadExportFile } from '@/local-db/research/manuscript/manuscriptExport';
 import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
@@ -131,13 +133,10 @@ export const ManuscriptJournalFormatCard = ({
     });
   };
 
-  const importProfile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (file === undefined) return;
+  // Adding a profile is the same work whichever direction it came from.
+  const addProfile = async (profile: PortableJournalProfile) => {
     setIsImporting(true);
     try {
-      const profile = parseJournalProfile(await file.text());
       const created = await createJournalTemplate(
         journalProfileRecordInput(profile),
       );
@@ -149,10 +148,24 @@ export const ManuscriptJournalFormatCard = ({
     } catch (error) {
       enqueueErrorSnackBar({
         message:
-          error instanceof Error ? error.message : 'Could not read that file',
+          error instanceof Error ? error.message : 'Could not add that profile',
       });
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const importProfile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file === undefined) return;
+    try {
+      await addProfile(parseJournalProfile(await file.text()));
+    } catch (error) {
+      enqueueErrorSnackBar({
+        message:
+          error instanceof Error ? error.message : 'Could not read that file',
+      });
     }
   };
 
@@ -211,6 +224,10 @@ export const ManuscriptJournalFormatCard = ({
           </StyledImportLabel>
         </StyledProfileActions>
       </StyledProfileExchange>
+      <ManuscriptTemplateRegistryPicker
+        disabled={isSavingSettings || isImporting}
+        onAdd={addProfile}
+      />
       {hasStyleOverrides ? (
         <StyledCustomization>
           <StyledCustomizationLabel>

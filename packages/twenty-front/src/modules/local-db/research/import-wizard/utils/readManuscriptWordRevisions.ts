@@ -1,16 +1,12 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import {
-  hasWordRevisions,
   isWordRevisionWarning,
-  parseWordCommentAnchors,
-  parseWordMlToMarkdownBlocks,
+  readWordRevisions,
   resolveWordTrackedChanges,
-  summarizeWordRevisions,
   wordRevisionWarnings,
-  type ImportedCommentAnchor,
   type TrackedChangeResolution,
-  type WordRevisionSummary,
+  type WordRevisions,
 } from '@/local-db/research/manuscript/manuscriptDocImport';
 import { type ImportedDocumentSource } from '@/local-db/research/manuscript/manuscriptDocxFile';
 import {
@@ -20,11 +16,10 @@ import {
 
 type BlocksDocumentSource = Extract<ImportedDocumentSource, { kind: 'blocks' }>;
 
-export type ManuscriptRevisions = {
-  summary: WordRevisionSummary;
-  resolution: TrackedChangeResolution;
-  comments: ImportedCommentAnchor[];
-};
+// The wizard's name for what the reader gives back. The shape and the parse
+// belong to the importer, which is where the non-wizard entry point reads its
+// comments and tracked changes from too.
+export type ManuscriptRevisions = WordRevisions;
 
 // What step 2 maps. A .docx that came back from a co-author keeps its file
 // alongside the blocks: the author can still change how its tracked changes are
@@ -65,20 +60,7 @@ export const wordRevisionsFromBytes = (
     return null;
   }
 
-  const summary = summarizeWordRevisions(documentXml, commentsXml);
-  if (!hasWordRevisions(summary)) return null;
-
-  return {
-    summary,
-    resolution,
-    comments: parseWordCommentAnchors(
-      // Quote the anchors from the resolved text, so a comment reads against
-      // the words the author is actually importing.
-      resolveWordTrackedChanges(documentXml, resolution),
-      commentsXml,
-      parseWordMlToMarkdownBlocks(documentXml, { trackedChanges: resolution }),
-    ),
-  };
+  return readWordRevisions(documentXml, commentsXml, resolution);
 };
 
 export const mappingSourceWithRevisions = (

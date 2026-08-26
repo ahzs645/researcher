@@ -117,6 +117,10 @@ export type JournalStyle = {
   keywordMaximum?: number | null;
   requiredArtifacts?: string[] | null;
   submissionRequirements?: string | null;
+  // Free text about the profile itself — where it came from, what it does and
+  // does not carry. A column on the record since the seeds were written; the
+  // type simply never declared it.
+  notes?: string | null;
   lineNumbering?: boolean | null;
   pageNumbering?: boolean | null;
   sectionNumbering?: boolean | null;

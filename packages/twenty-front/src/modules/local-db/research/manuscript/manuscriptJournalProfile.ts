@@ -43,6 +43,7 @@ const JOURNAL_PROFILE_KEYS = [
   'abstractWordMinimum',
   'keywordMinimum',
   'keywordMaximum',
+  'notes',
 ] as const satisfies ReadonlyArray<keyof JournalStyle>;
 
 export type JournalProfileKey = (typeof JOURNAL_PROFILE_KEYS)[number];
@@ -75,6 +76,7 @@ const PROFILE_STRING_KEYS = new Set<JournalProfileKey>([
   'profileKey',
   'sectionSkeleton',
   'submissionRequirements',
+  'notes',
 ]);
 
 const isStringArray = (value: unknown): value is string[] =>

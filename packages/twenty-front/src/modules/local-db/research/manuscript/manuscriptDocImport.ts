@@ -1830,6 +1830,44 @@ export const parseWordMlToMarkdown = (
     parseWordMlToMarkdownBlocks(documentXml, options),
   );
 
+export type WordRevisions = {
+  summary: WordRevisionSummary;
+  resolution: TrackedChangeResolution;
+  comments: ImportedCommentAnchor[];
+};
+
+// What a .docx has to answer for: the counts as its source wrote them, and its
+// comments quoted against the text the chosen resolution keeps. Null when the
+// document answers for nothing — never edited with track changes on and never
+// commented — which is every clean manuscript. Every reader of a .docx package
+// goes through here, so the two import entry points cannot drift apart.
+export const readWordRevisions = (
+  documentXml: string,
+  commentsXml: string,
+  resolution: TrackedChangeResolution,
+  // The blocks the caller already parsed, when it has them. A caller that has
+  // none — reading the two revision entries out of a package without inflating
+  // its media — has them parsed here, but only once the summary says there is
+  // something to anchor.
+  parsedBlocks?: WordMarkdownBlock[],
+): WordRevisions | null => {
+  const summary = summarizeWordRevisions(documentXml, commentsXml);
+  if (!hasWordRevisions(summary)) return null;
+
+  return {
+    summary,
+    resolution,
+    comments: parseWordCommentAnchors(
+      resolveWordTrackedChanges(documentXml, resolution),
+      commentsXml,
+      parsedBlocks ??
+        parseWordMlToMarkdownBlocks(documentXml, {
+          trackedChanges: resolution,
+        }),
+    ),
+  };
+};
+
 // ── Title-page metadata ────────────────────────────────────────────────────
 // A thesis title page is a stack of one-line fragments ("by", the student
 // number, the degree statement, the date). Word styles each of them like a
@@ -2024,9 +2062,11 @@ export const parseWordDocumentFromBlocks = (
   // Counted on the source as it arrived; every count below it is counted on the
   // document the author actually gets, so a deleted table stops being "Table 3"
   // the moment its deletion is accepted.
-  const revisionSummary = summarizeWordRevisions(
+  const revisions = readWordRevisions(
     documentXml,
     options.commentsXml ?? '',
+    resolution,
+    blocks,
   );
   const resolvedXml = resolveWordTrackedChanges(documentXml, resolution);
   const markdown = serializeWordMarkdownBlocks(blocks);
@@ -2036,7 +2076,10 @@ export const parseWordDocumentFromBlocks = (
     markdown.match(/!\[[^\]]*\]\(data:image\//g) ?? []
   ).length;
   const tableCount = (resolvedXml.match(/<w:tbl\b/g) ?? []).length;
-  const warnings: string[] = wordRevisionWarnings(revisionSummary, resolution);
+  const warnings: string[] =
+    revisions === null
+      ? []
+      : wordRevisionWarnings(revisions.summary, resolution);
 
   if (document.sections.length <= 1) {
     warnings.push(
@@ -2067,14 +2110,11 @@ export const parseWordDocumentFromBlocks = (
     ...(title !== undefined ? { title } : {}),
     // Comments are attached last: the title-page pass folds sections away, and
     // a comment must land in a section that still exists.
-    sections: attachImportedComments(
-      sections,
-      parseWordCommentAnchors(resolvedXml, options.commentsXml ?? '', blocks),
-    ),
+    sections: attachImportedComments(sections, revisions?.comments ?? []),
     ...titlePageMetadata,
     warnings,
     stats: { equationCount, embeddedImageCount, tableCount },
-    ...(hasWordRevisions(revisionSummary) ? { revisionSummary } : {}),
+    ...(revisions === null ? {} : { revisionSummary: revisions.summary }),
   };
 };
 

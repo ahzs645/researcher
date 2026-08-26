@@ -10,6 +10,7 @@ import {
   type PortableJournalTemplate,
   type PortableResearchPaperManifest,
 } from './manuscriptPortableManifest';
+import { parseSectionVariantRules } from './manuscriptSectionVariants';
 import { type ReferenceDraft } from './manuscriptReferenceImport';
 import { serializeManuscriptTitlePageExtraLines } from './manuscriptTitlePage';
 
@@ -34,6 +35,7 @@ export type PortableSectionVariantLink = {
   orderIndex: number;
   baseOrderIndex: number;
   variantProfileKey?: string;
+  variantRules?: string;
 };
 
 // A version attached to its base, once both are real records.
@@ -41,6 +43,7 @@ export type PortableSectionVariantUpdate = {
   sectionId: string;
   variantOfId: string;
   variantProfileKey?: string;
+  variantRules?: string;
 };
 
 export type PreparedPortableResearchPaperImport = {
@@ -96,6 +99,18 @@ export const matchPortableJournalTemplate = <
   );
 };
 
+// How to refer to one version in a message to the author.
+const portableSectionVariantDescription = (section: {
+  variantProfileKey?: string;
+  variantRules?: string;
+}): string => {
+  if (section.variantProfileKey !== undefined) {
+    return ` (written for ${section.variantProfileKey})`;
+  }
+  const maxWords = parseSectionVariantRules(section.variantRules).maxWords;
+  return maxWords === undefined ? '' : ` (written to ${maxWords} words)`;
+};
+
 type PortableSectionVariantResolution = {
   links: PortableSectionVariantLink[];
   // Order indices of the versions that cannot be attached to anything.
@@ -121,10 +136,10 @@ const resolvePortableSectionVariants = (
     const baseOrderIndex = sectionOrderByKey.get(variantOfKey);
     if (baseOrderIndex === undefined) {
       droppedOrderIndexes.add(section.orderIndex);
-      const writtenFor =
-        section.variantProfileKey === undefined
-          ? ''
-          : ` (written for ${section.variantProfileKey})`;
+      // Name the version by whatever it was written for — the journal it
+      // names, or the rule it declares — so the author reads which of their
+      // three abstracts this was and not just that one of them went.
+      const writtenFor = portableSectionVariantDescription(section);
       warnings.push(
         `"${section.name}"${writtenFor} is an alternative version of a section this package does not contain, so it was not imported.`,
       );
@@ -135,6 +150,12 @@ const resolvePortableSectionVariants = (
       baseOrderIndex,
       ...(section.variantProfileKey !== undefined
         ? { variantProfileKey: section.variantProfileKey }
+        : {}),
+      // Carried across untouched, malformed or not: the reader that acts on it
+      // validates it, and a package written by a build that knows more rules
+      // than this one should not have them stripped in passing.
+      ...(section.variantRules !== undefined
+        ? { variantRules: section.variantRules }
         : {}),
     });
   }
@@ -161,6 +182,9 @@ export const portableSectionVariantUpdates = (
         variantOfId,
         ...(link.variantProfileKey !== undefined
           ? { variantProfileKey: link.variantProfileKey }
+          : {}),
+        ...(link.variantRules !== undefined
+          ? { variantRules: link.variantRules }
           : {}),
       },
     ];

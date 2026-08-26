@@ -625,3 +625,130 @@ describe('per-journal section versions', () => {
     expect(houseStyle.metadata.abstract).toBe('Four words only here');
   });
 });
+
+// The same paper offered to journals that have no version of their own. What
+// makes the short abstract usable at all is the rule it declares.
+const ruleInput: BuildBundleInput = {
+  manuscript: { id: 'm-rule', name: 'Boundary-layer nitrate' },
+  style: { name: 'Toxics (MDPI)', abstractWordLimit: 8 },
+  sections: [
+    {
+      id: 's-abs',
+      name: 'Abstract',
+      sectionType: 'ABSTRACT',
+      placement: 'FRONT_MATTER',
+      orderIndex: 0,
+      content: 'One two three four five six seven eight nine ten eleven twelve',
+    },
+    {
+      id: 's-res',
+      name: 'Results',
+      sectionType: 'RESULTS',
+      placement: 'MAIN',
+      orderIndex: 1,
+      content: 'Nitrate peaked in March.',
+    },
+    {
+      id: 's-abs-short',
+      name: 'Abstract (short)',
+      sectionType: 'ABSTRACT',
+      placement: 'FRONT_MATTER',
+      orderIndex: 0,
+      content: 'Six words only right here now',
+      variantOfId: 's-abs',
+      // Written to an eight-word cap and pinned to nobody, so any journal that
+      // asks for no more than eight words may use it.
+      variantRules: '{"maxWords":8}',
+    },
+  ],
+  figures: [],
+  references: [],
+};
+
+const withAbstractLimit = (abstractWordLimit: number): BuildBundleInput => ({
+  ...ruleInput,
+  style: { ...ruleInput.style, abstractWordLimit },
+});
+
+describe('section versions chosen by the rule they declare', () => {
+  it('stands a rule-declaring version in for a base the journal will not take', () => {
+    const bundle = buildManuscriptBundle(ruleInput);
+
+    expect(bundle.metadata.abstract).toBe('Six words only right here now');
+    // Still one abstract, in the base's place: the version never becomes a
+    // section of its own.
+    expect(
+      bundle.nodes.flatMap((node) =>
+        node.kind === 'heading' ? [node.text] : [],
+      ),
+    ).toEqual(['Abstract (short)', 'Results']);
+    expect(bundle.stats.sectionCount).toBe(2);
+    expect(bundle.warnings).toEqual([]);
+  });
+
+  it('serves several journals from the one version, each capping differently', () => {
+    for (const limit of [8, 9, 11]) {
+      expect(
+        buildManuscriptBundle(withAbstractLimit(limit)).metadata.abstract,
+      ).toBe('Six words only right here now');
+    }
+  });
+
+  it('sends the base whenever the base fits, version or no version', () => {
+    const roomy = buildManuscriptBundle(withAbstractLimit(20));
+
+    expect(roomy.metadata.abstract).toBe(
+      'One two three four five six seven eight nine ten eleven twelve',
+    );
+    expect(roomy.warnings).toEqual([]);
+  });
+
+  it('sends the base and reports it as over when nothing fits', () => {
+    // The version busts a four-word cap too, and sending it anyway would hide
+    // the problem instead of surfacing it.
+    const tight = buildManuscriptBundle(withAbstractLimit(4));
+
+    expect(tight.metadata.abstract).toBe(
+      'One two three four five six seven eight nine ten eleven twelve',
+    );
+    expect(tight.warnings).toContain('Abstract is 12 words (limit 4)');
+  });
+
+  it('measures a version by its words, not by the count stored on it', () => {
+    // Declares eight words and has since grown to nine; the journal caps at
+    // eight, and the text is what the journal receives.
+    const overrun = buildManuscriptBundle({
+      ...ruleInput,
+      sections: ruleInput.sections.map((section) =>
+        section.id === 's-abs-short'
+          ? {
+              ...section,
+              content: 'Nine words in here now despite what it says',
+              wordCount: 8,
+            }
+          : section,
+      ),
+    });
+
+    expect(overrun.metadata.abstract).toBe(
+      'One two three four five six seven eight nine ten eleven twelve',
+    );
+    expect(overrun.warnings).toContain('Abstract is 12 words (limit 8)');
+  });
+
+  it('survives a version whose rules are not readable', () => {
+    const malformed = buildManuscriptBundle({
+      ...ruleInput,
+      sections: ruleInput.sections.map((section) =>
+        section.id === 's-abs-short'
+          ? { ...section, variantRules: '{"maxWords":' }
+          : section,
+      ),
+    });
+
+    expect(malformed.metadata.abstract).toBe(
+      'One two three four five six seven eight nine ten eleven twelve',
+    );
+    expect(malformed.stats.sectionCount).toBe(2);
+  });
+});

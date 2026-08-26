@@ -117,6 +117,7 @@ export const SECTION_GQL = {
   status: true,
   variantOfId: true,
   variantProfileKey: true,
+  variantRules: true,
   manuscript: { id: true },
 };
 
@@ -135,6 +136,7 @@ export const SECTION_SUMMARY_GQL = {
   status: true,
   variantOfId: true,
   variantProfileKey: true,
+  variantRules: true,
   manuscript: { id: true },
 };
 

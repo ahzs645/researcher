@@ -46,6 +46,7 @@ const sourceWithVersions = (): PortableManuscriptSource => ({
       wordCount: 3,
       variantOfId: 'abstract-id',
       variantProfileKey: MDPI_PROFILE,
+      variantRules: '{"maxWords":200}',
     },
     {
       id: 'abstract-arxiv-id',
@@ -128,6 +129,7 @@ describe('portable import of section versions', () => {
         sectionId: records[2].id,
         variantOfId: abstractId,
         variantProfileKey: MDPI_PROFILE,
+        variantRules: '{"maxWords":200}',
       },
       {
         sectionId: records[3].id,
@@ -157,6 +159,42 @@ describe('portable import of section versions', () => {
 
     expect(profiles).toEqual([MDPI_PROFILE, ARXIV_PROFILE]);
     expect(new Set(profiles).size).toBe(2);
+  });
+
+  it('brings a rule-only version home with the rule that makes it usable', () => {
+    // No journal named, so the rule is the only thing that will ever select
+    // this version again. Losing it in transit would leave the author with a
+    // 200-word abstract that no journal is ever offered.
+    const source = sourceWithVersions();
+    source.sections[2].variantProfileKey = undefined;
+    const manifest = readBack(source);
+    const prepared = preparePortableResearchPaperImport(
+      manifest,
+      sectionDrafts(manifest),
+    );
+    const { idsByOrderIndex } = createSections(prepared.sections);
+    const [mdpi] = portableSectionVariantUpdates(
+      prepared.sectionVariants ?? [],
+      idsByOrderIndex,
+    );
+
+    expect(mdpi.variantRules).toBe('{"maxWords":200}');
+    expect(mdpi).not.toHaveProperty('variantProfileKey');
+  });
+
+  it('says what a dropped version was written to when it names no journal', () => {
+    const source = sourceWithVersions();
+    source.sections[2].variantProfileKey = undefined;
+    source.sections = source.sections.filter(
+      (section) => section.id !== 'abstract-id',
+    );
+    const manifest = readBack(source);
+    const prepared = preparePortableResearchPaperImport(
+      manifest,
+      sectionDrafts(manifest),
+    );
+
+    expect(prepared.warnings?.[0]).toContain('written to 200 words');
   });
 
   it('drops a version whose base is missing, and warns instead of going quiet', () => {

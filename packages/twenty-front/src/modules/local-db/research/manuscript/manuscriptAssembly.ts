@@ -1,3 +1,4 @@
+import { countWords } from './manuscriptWordCount';
 import { isNonEmptyString } from '@sniptt/guards';
 import { isDefined } from 'twenty-shared/utils';
 
@@ -14,20 +15,14 @@ import {
   extractCitationKeys,
   resolveCrossReferences,
 } from './manuscriptCrossReference';
-import {
-  splitAssetPlacementMarkers,
-  stripAssetPlacementMarkers,
-} from './manuscriptAssetPlacement';
+import { splitAssetPlacementMarkers } from './manuscriptAssetPlacement';
 import { figureHasImage, figureToMarkdown } from './manuscriptImages';
 import {
   buildAssetLookup,
   numberAssets,
   resolveAssetKey,
 } from './manuscriptNumbering';
-import {
-  resolveSectionVariants,
-  sectionVariantKey,
-} from './manuscriptSectionVariants';
+import { resolveSectionVariants } from './manuscriptSectionVariants';
 import {
   type FigureLike,
   type JournalStyle,
@@ -56,15 +51,8 @@ export const slugifyTitle = (value: string): string =>
     .replace(/(^-|-$)/g, '')
     .slice(0, 60) || 'manuscript';
 
-export const countWords = (markdown: string): number => {
-  const text = stripAssetPlacementMarkers(markdown)
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ') // images
-    .replace(/\[-?[#@][^\]]*\]/g, ' ') // cross-refs / citations
-    .replace(/\$\$[\s\S]*?\$\$|\$[^$\n]*\$/g, ' ') // math
-    .replace(/[#*_>`~-]/g, ' ')
-    .trim();
-  return text.length === 0 ? 0 : text.split(/\s+/).length;
-};
+// Re-exported because callers have always imported it from here.
+export { countWords };
 
 const keyOf = (reference: ReferenceLike): string =>
   isNonEmptyString(reference.citationKey?.trim())
@@ -81,8 +69,8 @@ const compareSections = (a: SectionLike, b: SectionLike): number => {
   return (a.name ?? '').localeCompare(b.name ?? '');
 };
 
-// The one choke point every exporter goes through, so per-journal section
-// versions are resolved here and nowhere else.
+// The one choke point every exporter goes through, so which version of a
+// section a journal receives is decided here and nowhere else.
 //
 // Resolution runs last, on the sections that are actually going out. Filtering
 // first is what gives a version's own `includeInExport` its only possible
@@ -108,7 +96,10 @@ export const manuscriptSectionsForExport = (
           ),
       )
       .sort(compareSections),
-    sectionVariantKey(input.style),
+    // The whole style, not just its key: a version pinned to this journal is
+    // only one of the ways a version can be the right one, and the other needs
+    // the number the journal caps an abstract at.
+    input.style,
   );
 
 const sectionHeadingLevel = (

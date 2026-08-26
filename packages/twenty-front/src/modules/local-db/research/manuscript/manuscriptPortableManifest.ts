@@ -15,10 +15,11 @@ export const PORTABLE_MANUSCRIPT_FORMAT = 'researcher-manuscript' as const;
 // restore brings its format back with it instead of falling back to whatever
 // profile the workspace happens to default to. v1 packages still import.
 //
-// Per-journal section versions arrived after v2 and deliberately did not move
-// it. `variantOfKey`/`variantProfileKey` are optional fields on a section
-// entry: a package written before they existed imports exactly as it did, and
-// a reader written before they existed ignores fields it does not know. A bump
+// Section versions arrived after v2 — and their rules after that — and
+// deliberately did not move it. `variantOfKey`/`variantProfileKey`/
+// `variantRules` are optional fields on a section entry: a package written
+// before they existed imports exactly as it did, and a reader written before
+// they existed ignores fields it does not know. A bump
 // to 3 would buy nothing and cost the case that matters — an older copy of
 // this app checks `PORTABLE_MANUSCRIPT_READABLE_VERSIONS` and would refuse the
 // package outright, so an author carrying a paper to a machine that has not
@@ -86,12 +87,14 @@ export type PortableResearchPaperManifest = {
     wordLimit?: number;
     wordCount: number;
     includeInExport: boolean;
-    // Set only on a section that is an alternative version of another one:
-    // the key of the section it rewords, and the journal profile it is written
-    // for. Both are absent on an ordinary section — writing empty strings here
-    // would make every section look like a version of nothing.
+    // Set only on a section that is an alternative version of another one: the
+    // key of the section it rewords, the journal profile it is pinned to, and
+    // the rule it declares it satisfies. All three are absent on an ordinary
+    // section — writing empty strings here would make every section look like a
+    // version of nothing.
     variantOfKey?: string;
     variantProfileKey?: string;
+    variantRules?: string;
   }>;
   figures: Array<{
     key: string;
@@ -172,14 +175,27 @@ export const portableFigureImagePath = (
 const portableSectionVariantFields = (
   section: SectionLike,
   sectionKeyById: ReadonlyMap<string, string>,
-): { variantOfKey?: string; variantProfileKey?: string } => {
+): {
+  variantOfKey?: string;
+  variantProfileKey?: string;
+  variantRules?: string;
+} => {
   const variantOfId = section.variantOfId?.trim();
   if (variantOfId === undefined || variantOfId.length === 0) return {};
   const variantProfileKey = section.variantProfileKey?.trim();
+  // The rule travels beside the pin because it is the half that outlives this
+  // workspace: a version described as "≤200 words" is usable by whatever
+  // journals the receiving machine has, while a pin only means something there
+  // if the same profile exists. Dropping it would land the paper with a version
+  // that no journal ever picks.
+  const variantRules = section.variantRules?.trim();
   return {
     variantOfKey: sectionKeyById.get(variantOfId) ?? variantOfId,
     ...(variantProfileKey !== undefined && variantProfileKey.length > 0
       ? { variantProfileKey }
+      : {}),
+    ...(variantRules !== undefined && variantRules.length > 0
+      ? { variantRules }
       : {}),
   };
 };

@@ -1855,6 +1855,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         description:
           'Journal profile key this version is written for, e.g. myst:tex/myst/mdpi:atmosphere',
       },
+      {
+        name: 'variantRules',
+        label: 'Version rules',
+        type: 'TEXT',
+        icon: 'IconRuler2',
+        description:
+          'The requirement this version satisfies, as JSON, e.g. {"maxWords":200}. Any journal asking for no more than that can use it, so one 200-word abstract serves every journal capping at 200.',
+      },
       { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
     ],
     defaultColumns: [

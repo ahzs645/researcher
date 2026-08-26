@@ -42,6 +42,7 @@ const sourceWithVersions = (): PortableManuscriptSource => ({
       wordCount: 3,
       variantOfId: 'abstract-id',
       variantProfileKey: MDPI_PROFILE,
+      variantRules: '{"maxWords":200}',
     },
     {
       id: 'abstract-arxiv-id',
@@ -95,6 +96,8 @@ describe('portable manifest section versions', () => {
     expect(abstract).not.toHaveProperty('variantProfileKey');
     expect(introduction).not.toHaveProperty('variantOfKey');
     expect(introduction).not.toHaveProperty('variantProfileKey');
+    expect(abstract).not.toHaveProperty('variantRules');
+    expect(introduction).not.toHaveProperty('variantRules');
   });
 
   it('keeps a version whose journal profile is blank pointing at its base', () => {
@@ -134,6 +137,55 @@ describe('portable manifest section versions', () => {
     expect(restored.sections[2]).toMatchObject({
       variantOfKey: 'section-1',
       variantProfileKey: MDPI_PROFILE,
+    });
+  });
+
+  it('carries the rule a version declares, beside the journal it is pinned to', () => {
+    const manifest = buildPortableResearchPaperManifest(
+      sourceWithVersions(),
+      {},
+      {},
+    );
+
+    // The rule is the half that outlives this workspace: on another machine a
+    // version described as ≤200 words is usable by whatever journals are
+    // there, while a pin only means something if that profile exists too.
+    expect(manifest.sections[2].variantRules).toBe('{"maxWords":200}');
+    expect(manifest.sections[3]).not.toHaveProperty('variantRules');
+  });
+
+  it('carries a rule-only version, which names no journal at all', () => {
+    const source = sourceWithVersions();
+    source.sections[2].variantProfileKey = undefined;
+    const manifest = buildPortableResearchPaperManifest(source, {}, {});
+
+    expect(manifest.sections[2]).toMatchObject({
+      variantOfKey: manifest.sections[0].key,
+      variantRules: '{"maxWords":200}',
+    });
+    expect(manifest.sections[2]).not.toHaveProperty('variantProfileKey');
+  });
+
+  it('leaves an empty rule off rather than writing a rule of nothing', () => {
+    const source = sourceWithVersions();
+    source.sections[2].variantRules = '   ';
+    const manifest = buildPortableResearchPaperManifest(source, {}, {});
+
+    expect(manifest.sections[2].variantOfKey).toBe(manifest.sections[0].key);
+    expect(manifest.sections[2]).not.toHaveProperty('variantRules');
+  });
+
+  it('brings the rule back through the JSON the package is written as', () => {
+    const restored = parsePortableResearchPaperManifest(
+      JSON.stringify(
+        buildPortableResearchPaperManifest(sourceWithVersions(), {}, {}),
+      ),
+    );
+
+    expect(restored.sections[2]).toMatchObject({
+      variantOfKey: 'section-1',
+      variantProfileKey: MDPI_PROFILE,
+      variantRules: '{"maxWords":200}',
     });
   });
 

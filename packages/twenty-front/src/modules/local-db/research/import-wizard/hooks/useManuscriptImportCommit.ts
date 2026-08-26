@@ -233,6 +233,9 @@ export const useManuscriptImportCommit = ({
             idToUpdate: update.sectionId,
             updateOneRecordInput: {
               variantOfId: update.variantOfId,
+              ...(update.variantRules !== undefined
+                ? { variantRules: update.variantRules }
+                : {}),
               ...(update.variantProfileKey !== undefined
                 ? { variantProfileKey: update.variantProfileKey }
                 : {}),

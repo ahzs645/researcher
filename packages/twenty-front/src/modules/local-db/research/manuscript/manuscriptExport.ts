@@ -4,7 +4,9 @@ import { resolveCslStyleXml } from './manuscriptCiteproc';
 import { blocknoteDocxExporter } from './manuscriptDocxExport';
 import { manuscriptHtmlExporter } from './manuscriptHtmlExport';
 import { jatsXmlExporter } from './manuscriptJatsExport';
+import { manuscriptLatexExporter } from './manuscriptLatexExport';
 import { blocknotePdfExporter } from './manuscriptPdfExport';
+import { manuscriptTypstExporter } from './manuscriptTypstExport';
 
 // Pluggable export. Every exporter consumes the one `ManuscriptBundle` and
 // returns downloadable files, so the engine is a registry entry, not a rewrite.
@@ -12,8 +14,10 @@ import { blocknotePdfExporter } from './manuscriptPdfExport';
 // DOCX/PDF/JATS backends register against the same interface:
 //   - blocknoteDocxExporter / blocknotePdfExporter  → @blocknote/xl-*-exporter
 //   - jatsXmlExporter                               → ANSI/NISO Z39.96 JATS
+//   - manuscriptLatexExporter / manuscriptTypstExporter → typesetting *source*
+//     (.tex / .typ + images + .bib), the stage MyST reaches before it shells
+//     out to a toolchain; compiling it here would mean fetching a wasm engine
 //   - pandocExporter (--reference-doc + --citeproc)  → in-browser pandoc-wasm
-//   - typstExporter                                  → typst.ts (in-browser PDF)
 
 export type ExportFile = {
   filename: string;
@@ -110,6 +114,8 @@ export const getManuscriptExporters = (): ManuscriptExporter[] => [
   blocknotePdfExporter,
   manuscriptHtmlExporter,
   jatsXmlExporter,
+  manuscriptLatexExporter,
+  manuscriptTypstExporter,
   markdownBundleExporter,
 ];
 

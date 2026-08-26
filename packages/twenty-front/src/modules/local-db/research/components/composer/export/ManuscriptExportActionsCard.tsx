@@ -52,6 +52,16 @@ const EXPORTER_PRESENTATION: Record<
     description:
       'One file that opens offline: typeset equations, linked citations, and switchable table designs.',
   },
+  'latex-source': {
+    label: 'LaTeX source',
+    description:
+      'Compilable .tex source with references.bib and the figure files — source to typeset, not a finished PDF.',
+  },
+  'typst-source': {
+    label: 'Typst source',
+    description:
+      'Compilable .typ source with its bibliography, CSL style, and figure files — source to typeset, not a finished PDF.',
+  },
   'markdown-bundle': {
     label: 'Markdown bundle',
     description: 'Pandoc-ready manuscript with its structured bibliography.',

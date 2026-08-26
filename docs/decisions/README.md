@@ -9,6 +9,10 @@ The format is deliberate: a decision is only worth recording with the
 alternative beside it. Anything here that reads as obvious in hindsight was not
 obvious at the time.
 
+What the eight surveyed projects still do that this app does not is a separate
+question, kept in [`../prior-art/README.md`](../prior-art/README.md) beside the
+survey that raised it.
+
 ---
 
 ## 0. The position everything else follows from
@@ -237,7 +241,108 @@ reads, refreshed by a script.
 
 ---
 
-## 8. How things were decided to be true
+## 8. One paper, one version per journal's rules
+
+MDPI caps an abstract at 200 words, arXiv at 320, Copernicus not at all. A
+manuscript with a single abstract means submitting to the next journal is a
+destructive rewrite of the one you have.
+
+**A section can have alternative versions, and the export substitutes the right
+one.** Nothing else changes — same order, same placement, same section type,
+only the words.
+
+*Instead of:* a word-limit warning that leaves the author to keep the short
+version in another document. That is what every tool in this space does, and it
+is why the short version drifts out of date the first time the paper is edited.
+
+**A version is an ordinary section record, keyed to its base by `variantOfId`.**
+*Instead of:* a field on the section holding alternates as JSON. A version needs
+the editor, the word count, the save status and the record list that a section
+already has; a blob would have needed all of it rebuilt.
+
+**Not abstract-specific.** Keying on section *type* would have made this an
+abstract feature for no gain. A lay summary, a significance statement, a data
+availability statement worded to one funder's policy all work the same way.
+
+**A version declares the rule it satisfies, not the journal it is for.**
+`{"maxWords": 200}`, and any journal whose requirement it meets uses it. One
+short abstract serves all 355 MDPI journals rather than 355 copies of the same
+text.
+
+*Instead of:* keying every version to a journal profile, which was the first
+implementation. It made the common case — a family of journals with one shared
+limit — into duplicated writing, and it bound a version to a record whose rename
+would orphan it.
+
+Journal pinning survives as an override, because a journal sometimes wants
+particular wording regardless of length, and explicit must beat inferred.
+
+**Selection, in order.** A pinned version wins. With no cap the base ships,
+because the base is the fullest text. If the base fits, the base ships — a short
+version exists for when the full text will not fit, not to replace it whenever
+it exists. Otherwise the longest version that fits, so a 200-word version is not
+sent where 320 words were allowed. If nothing fits, the base ships and readiness
+reports it as over.
+
+*Instead of:* shipping the closest version when nothing fits. That would hide a
+problem the author has to solve rather than surface it.
+
+**`maxWords` is the author's target and the label, never the measurement.**
+Eligibility and ranking use the version's actual word count, so a version
+declaring 200 that has drifted to 210 is refused by a journal capping at 200 and
+accepted by one capping at 250. A version that declares neither a rule nor a pin
+is never substituted: it has not offered to stand in anywhere.
+
+**Only `maxWords` ships.** The field takes JSON so a structured-abstract flag or
+a no-citations rule can follow. *Instead of:* shipping a richer rule vocabulary
+now — rules nothing checks would be a promise the app cannot keep, the same
+reason a MyST profile carries a checklist and not a page layout (§7).
+
+**A version never exports on its own.** This is the obvious way to get the
+feature wrong: every alternative appearing as an extra section in every journal.
+It is rule 1 of the resolver and it is tested directly.
+
+**A resolved section keeps the base's id.** Cross-references and figure anchors
+point at the base, and they must keep resolving after the substitution.
+
+**Resolution happens in `manuscriptSectionsForExport`** — the one function every
+exporter goes through — so Word, PDF, LaTeX, Typst, JATS, HTML, Markdown, the
+submission package and the portable package all honour it without any of them
+knowing the feature exists. *Instead of:* resolving in each exporter, which is
+nine chances to forget.
+
+**Filtering runs before resolution.** That is what gives a version's own
+`includeInExport` its only possible meaning — switch the alternative off and its
+base speaks for itself again — because a resolved section keeps the base's flag,
+never the version's.
+
+**Screening drops version rows itself.** It reads the records rather than the
+assembled bundle, so it is the one reader outside that choke point. Without it a
+paper with two abstract versions would be screened as though it had two
+abstracts, and every statement written twice would count twice.
+
+**The editor says which version you are typing into**, and the base chip reads
+"Paper" rather than "Base" because that names the thing that ships if you do
+nothing. Someone who edits the MDPI abstract believing it is the real one has
+been actively harmed by this feature.
+
+**The cap is written onto the version record** so the editor's existing footer
+counts against the journal's limit while typing. *Instead of:* a second display
+path computing it, which could disagree with the first.
+
+**`countWords` moved to its own module.** The resolver needs it and the
+assembler calls the resolver, so importing it from the assembler made a cycle.
+*Instead of:* a second counter — a word count that disagrees with itself is how
+an author trusts "182 / 200" in the editor and is rejected by the journal.
+
+**Versions travel in the portable package**, and the manifest schema stays at 2.
+Adding optional fields is compatible both ways, and the readable-versions list
+is a whitelist: a bump would make an older build refuse the whole paper rather
+than ignore fields it does not know.
+
+---
+
+## 9. How things were decided to be true
 
 **The running app is the test of record.** Unit tests are necessary and were
 not sufficient — every one of these was green in tests and wrong in the app:
@@ -261,7 +366,7 @@ over.
 
 ---
 
-## 9. What is left
+## 10. What is left
 
 Ordered by what it would change about using the app.
 

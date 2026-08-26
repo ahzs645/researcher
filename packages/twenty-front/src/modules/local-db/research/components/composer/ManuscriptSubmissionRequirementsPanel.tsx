@@ -4,8 +4,15 @@ import { useDebouncedCallback } from 'use-debounce';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { ManuscriptSubmissionRequirementRow } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementRow';
+import {
+  ManuscriptScreeningFindingRow,
+  ManuscriptSubmissionRequirementRow,
+} from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementRow';
 import { ManuscriptSubmissionRequirementPicker } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementPicker';
+import {
+  screenManuscript,
+  summarizeScreeningFindings,
+} from '@/local-db/research/manuscript/manuscriptScreening';
 import {
   collectSubmissionConflicts,
   collectSubmissionNotices,
@@ -73,6 +80,20 @@ const StyledWarning = styled.div`
   font-size: ${themeCssVariables.font.size.xs};
 `;
 
+const StyledScreening = styled.section`
+  border-top: 1px solid ${themeCssVariables.border.color.light};
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
+  padding-top: ${themeCssVariables.spacing[3]};
+`;
+
+const StyledScreeningNote = styled.p`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+  margin: 0;
+`;
+
 export const ManuscriptSubmissionRequirementsPanel = ({
   manuscript,
   template,
@@ -85,6 +106,33 @@ export const ManuscriptSubmissionRequirementsPanel = ({
 }: ManuscriptSubmissionRequirementsPanelProps) => {
   const { enqueueDialog } = useDialogManager();
   const { enqueueErrorSnackBar } = useSnackBar();
+  // Screening reads the manuscript itself, so it does not depend on a target
+  // journal and is rendered whether or not one is picked.
+  const screeningFindings = useMemo(
+    () => screenManuscript(manuscript),
+    [manuscript],
+  );
+  const screeningSummary = summarizeScreeningFindings(screeningFindings);
+  const screeningPanel = (
+    <StyledScreening aria-label="Automated screening">
+      <StyledHeader>
+        <StyledTitle>Automated screening</StyledTitle>
+        <StyledMeta>
+          {screeningSummary.present} found · {screeningSummary.weak} weak ·{' '}
+          {screeningSummary.absent} not found
+        </StyledMeta>
+      </StyledHeader>
+      <StyledScreeningNote>
+        What the BIH Charité screening tools look for in a finished paper, run
+        over the manuscript text. These are screening findings, not journal
+        requirements, and none of them blocks an export — a journal that does
+        not ask for a data statement is not a reason to submit without one.
+      </StyledScreeningNote>
+      {screeningFindings.map((finding) => (
+        <ManuscriptScreeningFindingRow key={finding.key} finding={finding} />
+      ))}
+    </StyledScreening>
+  );
   const [requirements, setRequirements] = useState(() =>
     parseJournalSubmissionRequirements(template?.submissionRequirements),
   );
@@ -163,6 +211,7 @@ export const ManuscriptSubmissionRequirementsPanel = ({
             />
           </div>
         </StyledEmpty>
+        {screeningPanel}
       </StyledPanel>
     );
   }
@@ -311,6 +360,7 @@ export const ManuscriptSubmissionRequirementsPanel = ({
           void saveRequirements([...requirements, requirement])
         }
       />
+      {screeningPanel}
     </StyledPanel>
   );
 };

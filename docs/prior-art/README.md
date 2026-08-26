@@ -142,7 +142,8 @@ identifier in fields this app is aimed at. ISBN and plain URL matter less.
 ## 5. Journal profiles should be data, not seed records
 
 [MyST templates](https://github.com/myst-templates) is a GitHub organisation
-with a template per journal — 422 of them — listed through a JSON API and
+with a template per journal family — 25 of them, reaching 471 journals —
+listed through a JSON API and
 contributable by anyone. Ours are 16 hardcoded `makeRecord('journalTemplate')`
 calls, so adding a journal means editing the app.
 
@@ -183,6 +184,17 @@ model; skip those.
   here, and making it the document model would give up the Word round trip.
 - **Typst as a third typeset path** (MyST). Real, but the DOCX and PDF paths
   both work; this buys nothing a journal asks for.
+
+## What happened next
+
+All six were built, plus JATS import and the template registry itself. The
+decisions behind them — and what they left open — are recorded in
+[`../decisions/README.md`](../decisions/README.md).
+
+One correction to this page: MyST's registry is **25 templates reaching 471
+journals**, not 422 templates. The number quoted everywhere is the journals
+those templates reach through their own required journal choice — MDPI alone
+offers 355.
 
 ## Recommended order
 

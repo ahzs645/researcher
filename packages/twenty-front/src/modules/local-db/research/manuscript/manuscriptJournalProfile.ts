@@ -2,8 +2,9 @@
 //
 // The profiles this app ships are seed records, so adding a journal means
 // editing the app — which is the wrong shape for the thing that changes most
-// often. MyST's answer is a template registry: one repository per journal, 422
-// of them, listed through an API and contributable by anyone.
+// often. MyST's answer is a template registry: 25 templates, each reaching a
+// family of journals through its own required journal choice — 471 in all —
+// listed through an API and contributable by anyone.
 //
 // This is the first half of that: a profile leaves as a JSON file and comes
 // back as a record, so a lab can keep its own and send it to a collaborator

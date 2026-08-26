@@ -356,6 +356,10 @@ in Eq. ."), the token stays visible and the export reports it:
 
 ## 9. Still open
 
+The full list, with every decision that produced it, now lives in
+[`../decisions/README.md`](../decisions/README.md). What follows is what this
+document's own work left open.
+
 1. **"et al." cannot be forced back on.** CSL-JSON has no flag for "the source
    truncated this list", so a style whose et-al threshold sits above the number
    of names the entry printed will list them all. The fact is recorded

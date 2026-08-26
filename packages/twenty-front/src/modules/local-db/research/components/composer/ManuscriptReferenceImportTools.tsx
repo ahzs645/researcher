@@ -329,7 +329,10 @@ export const ManuscriptReferenceImportTools = ({
         />
       </StyledActions>
       <StyledTitle>Check references</StyledTitle>
-      <ManuscriptRetractedReferenceWarnings references={references} />
+      <ManuscriptRetractedReferenceWarnings
+        manuscriptId={manuscriptId}
+        references={references}
+      />
     </StyledCard>
   );
 };

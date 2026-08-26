@@ -3,7 +3,7 @@
 // its own module so a screener can depend on the vocabulary without depending
 // on the orchestrator that calls it.
 
-import { type SectionLike } from '../manuscriptTypes';
+import { type SectionLike } from '@/local-db/research/manuscript/manuscriptTypes';
 
 export type ScreeningVerdict = 'PRESENT' | 'WEAK' | 'ABSENT';
 

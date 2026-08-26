@@ -29,20 +29,56 @@ export type ApplicationSectionDraft = {
 
 // Heading → canonical grant-application content type (CANONICAL_CONTENT_OPTIONS).
 const APPLICATION_RULES: { sectionType: string; pattern: RegExp }[] = [
-  { sectionType: 'LAY_SUMMARY', pattern: /lay summary|plain[- ]language|public summary/ },
+  {
+    sectionType: 'LAY_SUMMARY',
+    pattern: /lay summary|plain[- ]language|public summary/,
+  },
   { sectionType: 'ABSTRACT', pattern: /^(abstract|summary|project summary)\b/ },
-  { sectionType: 'OBJECTIVES', pattern: /objectives?|aims?|goals?|research questions?|hypothes[ei]s/ },
+  {
+    sectionType: 'OBJECTIVES',
+    pattern: /objectives?|aims?|goals?|research questions?|hypothes[ei]s/,
+  },
   // TIMELINE before METHODOLOGY so "workplan/timeline" headings land on the
   // schedule, not the methods (METHODOLOGY deliberately omits generic "workplan").
-  { sectionType: 'TIMELINE', pattern: /timeline|work\s*plan|milestones?|schedule|gantt/ },
-  { sectionType: 'METHODOLOGY', pattern: /methodolog|^methods?\b|approach|research plan|study design/ },
-  { sectionType: 'IMPACT', pattern: /impact|significance|benefits?|knowledge (translation|mobilization)|outcomes?|importance/ },
-  { sectionType: 'BUDGET_JUSTIFICATION', pattern: /budget|justification of (funds|costs)|costs?\b/ },
-  { sectionType: 'TEAM', pattern: /team|personnel|expertise|qualifications|investigators?|collaborators?/ },
-  { sectionType: 'BIO', pattern: /biograph|biosketch|\bcv\b|curriculum vitae|track record/ },
-  { sectionType: 'EDI', pattern: /\bedi\b|equity|diversity|inclusion|sex and gender/ },
-  { sectionType: 'BACKGROUND', pattern: /background|rationale|literature|state of the art|context|introduction/ },
-  { sectionType: 'BIBLIOGRAPHY', pattern: /references|bibliography|works cited|literature cited/ },
+  {
+    sectionType: 'TIMELINE',
+    pattern: /timeline|work\s*plan|milestones?|schedule|gantt/,
+  },
+  {
+    sectionType: 'METHODOLOGY',
+    pattern: /methodolog|^methods?\b|approach|research plan|study design/,
+  },
+  {
+    sectionType: 'IMPACT',
+    pattern:
+      /impact|significance|benefits?|knowledge (translation|mobilization)|outcomes?|importance/,
+  },
+  {
+    sectionType: 'BUDGET_JUSTIFICATION',
+    pattern: /budget|justification of (funds|costs)|costs?\b/,
+  },
+  {
+    sectionType: 'TEAM',
+    pattern:
+      /team|personnel|expertise|qualifications|investigators?|collaborators?/,
+  },
+  {
+    sectionType: 'BIO',
+    pattern: /biograph|biosketch|\bcv\b|curriculum vitae|track record/,
+  },
+  {
+    sectionType: 'EDI',
+    pattern: /\bedi\b|equity|diversity|inclusion|sex and gender/,
+  },
+  {
+    sectionType: 'BACKGROUND',
+    pattern:
+      /background|rationale|literature|state of the art|context|introduction/,
+  },
+  {
+    sectionType: 'BIBLIOGRAPHY',
+    pattern: /references|bibliography|works cited|literature cited/,
+  },
 ];
 
 export const classifyApplicationHeading = (heading: string): string => {

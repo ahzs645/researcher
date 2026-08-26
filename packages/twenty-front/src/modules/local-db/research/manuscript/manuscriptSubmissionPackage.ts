@@ -15,8 +15,14 @@ import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { buildJatsArticle } from './manuscriptJatsExport';
 import { type PortableManuscriptSource } from './manuscriptPortableManifest';
 import { addPortableResearchPaperFiles } from './manuscriptPortableZip';
+import { screenManuscript, type ScreeningFinding } from './manuscriptScreening';
+import {
+  buildScreeningReport,
+  screeningSubmissionChecks,
+} from './manuscriptScreeningChecks';
 import {
   buildSubmissionManifest,
+  type SubmissionCheck,
   type SubmissionMaterials,
   type SubmissionReadiness,
   validateSubmission,
@@ -120,6 +126,7 @@ const MECA_TYPE_BY_FILENAME = (filename: string, base: string): string => {
   if (filename === 'references.json') return 'metadata';
   if (filename === 'research-paper.json') return 'metadata';
   if (filename === 'submission-readiness.txt') return 'metadata';
+  if (filename === 'screening-report.txt') return 'metadata';
   return 'supporting-information';
 };
 
@@ -280,9 +287,26 @@ export const createSubmissionPackage = async (
   bundle: ManuscriptBundle,
   materials: SubmissionMaterials,
   portableSource?: PortableManuscriptSource,
+  // What the panel added to the readiness list on screen — the retraction scan
+  // it alone can see. Passed through so the manifest in the ZIP says the same
+  // thing the author was shown before they pressed the button.
+  extraChecks: SubmissionCheck[] = [],
 ): Promise<SubmissionPackage> => {
   const files: Zippable = {};
-  const readiness = validateSubmission(bundle, materials);
+  // Screening needs the manuscript's sections, which only the portable source
+  // carries; without it the package simply ships no screening, rather than a
+  // report built from nothing that would read as an all-clear.
+  const screeningFindings: ScreeningFinding[] =
+    portableSource === undefined
+      ? []
+      : screenManuscript({
+          sections: portableSource.sections,
+          competingInterests: materials.competingInterests,
+        });
+  const readiness = validateSubmission(bundle, materials, [
+    ...extraChecks,
+    ...screeningSubmissionChecks(screeningFindings),
+  ]);
   const base = slugifyTitle(bundle.metadata.title);
   // Draw every Mermaid diagram once, so the manuscript, the JATS article, and
   // the figure files all carry the same picture instead of dropping it.
@@ -301,6 +325,15 @@ export const createSubmissionPackage = async (
     'submission-readiness.txt',
     buildSubmissionManifest(bundle, readiness, submissionExtraFiles),
   );
+  // The screening in a form a coauthor or an editor can be handed: until now it
+  // existed only as rows on a tab that nobody outside the app ever sees.
+  if (screeningFindings.length > 0) {
+    addText(
+      files,
+      'screening-report.txt',
+      buildScreeningReport(screeningFindings, bundle.metadata.title),
+    );
+  }
   addText(
     files,
     'metadata.json',

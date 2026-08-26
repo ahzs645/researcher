@@ -49,6 +49,7 @@ export const ManuscriptExportTab = ({
   <StyledTab>
     <ManuscriptExportPanel
       key={`manuscript-export-${manuscript.id}`}
+      manuscriptId={manuscript.id}
       bundle={bundle}
       journals={journals.map((journal) => ({
         id: journal.id,

@@ -222,3 +222,106 @@ describe('figures in a submission package', () => {
     expect(Object.keys(files)).toEqual(['figures/Figure-1.png']);
   });
 });
+// Screening produced rows on a tab and nothing else; the package is where it
+// becomes something a coauthor or an editor can be handed.
+describe('screening in a submission package', () => {
+  const SECTIONS = [
+    {
+      id: 'abstract',
+      name: 'Abstract',
+      sectionType: 'ABSTRACT',
+      placement: 'FRONT_MATTER',
+      content: 'A concise abstract for screening verification.',
+      includeInExport: true,
+    },
+    {
+      id: 'availability',
+      name: 'Data availability',
+      sectionType: 'DATA_AVAILABILITY',
+      placement: 'BACK_MATTER',
+      content:
+        'All data are deposited in Zenodo at https://doi.org/10.5281/zenodo.1234567.',
+      includeInExport: true,
+    },
+  ];
+
+  const screenedBundle = () =>
+    buildManuscriptBundle({
+      manuscript: {
+        id: 'paper-2',
+        name: 'A screened manuscript',
+        authorLine: 'A. Researcher',
+      },
+      sections: SECTIONS,
+      figures: [],
+      references: [],
+      style: { name: 'Test journal' },
+    });
+
+  const unzipPackageBlob = async (blob: Blob) => {
+    const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.readAsArrayBuffer(blob);
+    });
+    return unzipSync(new Uint8Array(buffer));
+  };
+
+  it('ships a screening report and says the same thing the panel said', async () => {
+    const result = await createSubmissionPackage(
+      screenedBundle(),
+      { competingInterests: 'The authors declare no competing interests.' },
+      {
+        manuscript: { title: 'A screened manuscript' },
+        sections: SECTIONS,
+        figures: [],
+        references: [],
+      },
+      [
+        {
+          id: 'retraction-scan-not-run',
+          label: 'Retraction check',
+          detail:
+            '3 reference(s) with a DOI have not been checked against Crossref',
+          severity: 'WARNING',
+          target: 'references',
+        },
+      ],
+    );
+    const packageFiles = await unzipPackageBlob(result.blob);
+    const report = strFromU8(packageFiles['screening-report.txt']);
+    const manifest = strFromU8(packageFiles['submission-readiness.txt']);
+
+    expect(result.includedFiles).toContain('screening-report.txt');
+    expect(report).toContain('A screened manuscript');
+    expect(report).toContain('[PRESENT] Open data statement');
+    expect(report).toContain('[ABSENT] Open code statement');
+    expect(report).toContain('Does the paper say where the analysis code is?');
+    expect(report).toContain('zenodo.1234567');
+
+    // The manifest carries both the screening line and the check the caller
+    // computed for the panel, so the ZIP and the screen agree.
+    expect(manifest).toContain('Automated screening');
+    expect(manifest).toContain('Open code statement');
+    expect(manifest).toContain('[WARNING] Retraction check');
+    expect(
+      result.readiness.checks.find(
+        (check) => check.id === 'automated-screening',
+      )?.severity,
+    ).toBe('WARNING');
+    // Screening reports; it never blocks.
+    expect(result.readiness.errorCount).toBe(0);
+  });
+
+  it('screens nothing when there is no manuscript source to screen', async () => {
+    const result = await createSubmissionPackage(screenedBundle(), {});
+
+    expect(result.includedFiles).not.toContain('screening-report.txt');
+    expect(
+      result.readiness.checks.some(
+        (check) => check.id === 'automated-screening',
+      ),
+    ).toBe(false);
+  });
+});

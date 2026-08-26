@@ -1,10 +1,14 @@
 import { styled } from '@linaria/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptExportActionsCard } from '@/local-db/research/components/composer/export/ManuscriptExportActionsCard';
 import { ManuscriptExportStyleCard } from '@/local-db/research/components/composer/export/ManuscriptExportStyleCard';
 import { ManuscriptJournalFormatCard } from '@/local-db/research/components/composer/export/ManuscriptJournalFormatCard';
+import {
+  manuscriptRetractionScanState,
+  retractionReadinessChecks,
+} from '@/local-db/research/components/composer/references/manuscriptRetractionScanState';
 import { type ManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
 import {
   citationStyleKeyFromStyle,
@@ -19,6 +23,8 @@ import {
   getManuscriptExporters,
 } from '@/local-db/research/manuscript/manuscriptExport';
 import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
+import { screenManuscript } from '@/local-db/research/manuscript/manuscriptScreening';
+import { screeningSubmissionChecks } from '@/local-db/research/manuscript/manuscriptScreeningChecks';
 import {
   type SubmissionCheckTarget,
   type SubmissionMaterials,
@@ -29,11 +35,16 @@ import {
   createSubmissionPackage,
 } from '@/local-db/research/manuscript/manuscriptSubmissionPackage';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { useManuscriptSaveStatus } from '@/local-db/research/components/composer/ManuscriptSaveStatusContext';
 
 type JournalOption = { id: string; name: string };
 
 type ManuscriptExportPanelProps = {
+  // The portable source carries the manuscript's metadata but not its id, and
+  // the retraction scan is stored per manuscript, so the id comes down as its
+  // own prop rather than being dug out of something that does not hold it.
+  manuscriptId: string;
   bundle: ManuscriptBundle;
   journals: JournalOption[];
   selectedJournalId: string | null;
@@ -54,6 +65,7 @@ const StyledPanel = styled.div`
 `;
 
 export const ManuscriptExportPanel = ({
+  manuscriptId,
   bundle,
   journals,
   selectedJournalId,
@@ -74,7 +86,34 @@ export const ManuscriptExportPanel = ({
   const exportBundle = { ...bundle, style: effectiveStyle };
   const citationStyleKey = citationStyleKeyFromStyle(effectiveStyle);
   const exporters = getManuscriptExporters();
-  const readiness = validateSubmission(exportBundle, materials);
+  const manuscriptRetractionScan = useAtomStateValue(
+    manuscriptRetractionScanState,
+  );
+  // Both of these are things `validateSubmission` cannot work out for itself:
+  // the retraction verdicts came from a Crossref scan the References tab ran,
+  // and screening reads the manuscript's sections, which the bundle flattens
+  // away. Neither can gate the export on its own — the screening checks never
+  // raise an ERROR, and an unrun scan is a warning — but a reference Crossref
+  // says is retracted is an error like any unresolved citation.
+  const retractionChecks = retractionReadinessChecks({
+    scan: manuscriptRetractionScan,
+    manuscriptId,
+    references: portableSource.references,
+  });
+  const screeningChecks = useMemo(
+    () =>
+      screeningSubmissionChecks(
+        screenManuscript({
+          sections: portableSource.sections,
+          competingInterests: materials.competingInterests,
+        }),
+      ),
+    [portableSource.sections, materials.competingInterests],
+  );
+  const readiness = validateSubmission(exportBundle, materials, [
+    ...retractionChecks,
+    ...screeningChecks,
+  ]);
 
   const updateStyleOverrides = (updates: ManuscriptExportStyleOverrides) => {
     markUnsaved();
@@ -191,6 +230,10 @@ export const ManuscriptExportPanel = ({
         exportBundle,
         materials,
         portableSource,
+        // Only the retraction checks: the package screens the manuscript
+        // itself, so handing them over too would list every screening finding
+        // twice in the manifest.
+        retractionChecks,
       );
       downloadExportFile({
         filename: submissionPackage.filename,

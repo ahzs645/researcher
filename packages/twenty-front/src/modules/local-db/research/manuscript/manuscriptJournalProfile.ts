@@ -23,10 +23,18 @@ export const JOURNAL_PROFILE_FORMAT = 'researcher-journal-profile' as const;
 export const JOURNAL_PROFILE_VERSION = 1 as const;
 export const JOURNAL_PROFILE_READABLE_VERSIONS = [1];
 
+// One document's Word style table is not a journal's format. `referenceDocStyles`
+// is the styles.xml an imported .docx carried, which makes that manuscript
+// export as itself — it is the author's file, not the journal's profile, and
+// it is 370 kB of someone else's document.
+const DOCUMENT_SPECIFIC_KEYS = ['referenceDocStyles', 'referenceDocUrl'];
+
 // The style keys, plus the fields that describe the journal rather than the
 // typography: what it asks for at submission, and how its sections are shaped.
 const JOURNAL_PROFILE_KEYS = [
-  ...MANUSCRIPT_EXPORT_STYLE_OVERRIDE_KEYS,
+  ...MANUSCRIPT_EXPORT_STYLE_OVERRIDE_KEYS.filter(
+    (key) => !DOCUMENT_SPECIFIC_KEYS.includes(key),
+  ),
   'profileKey',
   'sectionSkeleton',
   'submissionRequirements',

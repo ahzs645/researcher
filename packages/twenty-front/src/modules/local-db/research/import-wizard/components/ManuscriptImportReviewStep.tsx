@@ -193,7 +193,10 @@ export const ManuscriptImportReviewStep = ({
         ) : null}
         {isPortable ? (
           <>
-            <ManuscriptImportSummaryPanel summary={summary} />
+            <ManuscriptImportSummaryPanel
+              summary={summary}
+              sourceLabel={isRestoring ? 'package' : 'article'}
+            />
             <StyledDisclosureButton
               type="button"
               aria-expanded={areSectionsExpanded}

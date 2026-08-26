@@ -44,6 +44,20 @@ describe('buildJournalProfile', () => {
     expect(profile).not.toHaveProperty('id');
   });
 
+  it('leaves one document\u2019s Word styles out of a shared profile', () => {
+    // referenceDocStyles is the styles.xml an imported .docx carried: it makes
+    // that manuscript export as itself, and it is 370 kB of the author's own
+    // document rather than anything about the journal.
+    const profile = buildJournalProfile({
+      ...journal,
+      referenceDocStyles: '<w:styles>…370 kB…</w:styles>',
+      referenceDocUrl: 'https://example.org/template.docx',
+    });
+
+    expect(profile).not.toHaveProperty('referenceDocStyles');
+    expect(profile).not.toHaveProperty('referenceDocUrl');
+  });
+
   it('names an unnamed journal rather than exporting a blank', () => {
     expect(buildJournalProfile({ name: '   ' }).name).toBe('Journal profile');
   });

@@ -34,6 +34,10 @@ export type ImportedSectionDraft = {
   includeInExport: boolean;
   status?: string;
   wordLimit?: number;
+  // Reviewer comments the source document anchored inside this section. The
+  // composer has no in-line comment layer, so they ride along as a draft field
+  // and land in the section's notes at commit time instead of being dropped.
+  comments?: ImportedComment[];
 };
 
 export type ImportedDocument = {
@@ -51,6 +55,9 @@ export type ImportedDocument = {
     embeddedImageCount: number;
     tableCount: number;
   };
+  // Present only when the source carried revisions or comments, so a clean
+  // document imports exactly as it did before this existed.
+  revisionSummary?: WordRevisionSummary;
   // Exact body lines that the import map deliberately demoted from captions.
   // Asset extraction must preserve them as prose instead of reclassifying them.
   suppressedAssetLineSignatures?: string[];
@@ -496,6 +503,272 @@ const wordRunsText = (xml: string): string => {
   return text;
 };
 
+// ── Tracked changes and comments ───────────────────────────────────────────
+// A manuscript coming back from a co-author is the commonest input this app
+// has, and it arrives full of `w:ins`/`w:del` runs. Reading only `<w:t>` kept
+// every insertion and swallowed every deletion — deleted text lives in
+// `<w:delText>` — which is "accept all changes" chosen by accident and stated
+// nowhere. The resolution is an explicit option now, and the counts below are
+// what the wizard shows the author before anything is committed.
+
+export type TrackedChangeResolution = 'ACCEPT' | 'REJECT';
+
+export type WordRevisionSummary = {
+  insertionCount: number;
+  deletionCount: number;
+  commentCount: number;
+};
+
+export type ImportedComment = {
+  commentId: string;
+  author: string;
+  initials?: string;
+  date?: string;
+  text: string;
+  // The document text the comment was anchored to. Without it a reviewer's
+  // "why this one?" reads as a note about nothing in particular.
+  anchoredText?: string;
+};
+
+// A comment carries the heading it sat under so it can be re-attached after the
+// blocks have been through Markdown and back, which is what the import wizard
+// does between mapping and commit.
+export type ImportedCommentAnchor = ImportedComment & {
+  headingText?: string;
+};
+
+// `w:ins`/`w:del` also mark inserted or deleted *paragraph marks and table
+// rows*, which carry no text of their own and live inside the properties
+// elements. Drop those first: an author told "3 insertions" means three pieces
+// of inserted text. Innermost properties first, so the outer non-greedy match
+// still ends on its own closing tag.
+const REVISION_PROPERTY_ELEMENTS = [
+  /<w:rPr\b[\s\S]*?<\/w:rPr>/g,
+  /<w:pPr\b[\s\S]*?<\/w:pPr>/g,
+  /<w:trPr\b[\s\S]*?<\/w:trPr>/g,
+  /<w:tcPr\b[\s\S]*?<\/w:tcPr>/g,
+];
+
+// `(?![A-Za-z])` is load-bearing: `<w:delText>` is the deleted *text*, and
+// `<w:insideH>` is a table border. Neither is a revision.
+const INSERTION_ELEMENT = /<w:(?:ins|moveTo)(?![A-Za-z])/g;
+const DELETION_ELEMENT = /<w:(?:del|moveFrom)(?![A-Za-z])/g;
+const ANY_REVISION_ELEMENT = /<w:(?:ins|del|moveTo|moveFrom)(?![A-Za-z])/;
+const REVISION_OPENING_TAG =
+  /<w:(ins|del|moveTo|moveFrom)(?![A-Za-z])((?:[^>"]|"[^"]*")*?)(\/?)>/g;
+const COMMENT_ANCHOR_TAG =
+  /<w:comment(Reference|RangeStart|RangeEnd)\b((?:[^>"]|"[^"]*")*?)\/?>/g;
+const COMMENT_ELEMENT =
+  /<w:comment\b((?:[^>"]|"[^"]*")*?)>([\s\S]*?)<\/w:comment>/g;
+
+const attributeValue = (attributes: string, name: string): string | undefined =>
+  new RegExp(`\\b${name}="([^"]*)"`).exec(attributes)?.[1];
+
+const collapseWhitespace = (value: string): string =>
+  stripManuscriptScriptMarkers(value).replace(/\s+/g, ' ').trim();
+
+// Move revisions are a deletion and an insertion Word happens to know are the
+// same words; pandoc drops the pair on the floor. Treating `w:moveTo` as an
+// insertion and `w:moveFrom` as a deletion keeps a moved paragraph in exactly
+// one place under either resolution.
+const isInsertionElement = (name: string): boolean =>
+  name === 'ins' || name === 'moveTo';
+
+const revisionElementEnd = (
+  xml: string,
+  name: string,
+  from: number,
+): { innerEnd: number; after: number } | null => {
+  const scanner = new RegExp(
+    `<(/?)w:${name}(?![A-Za-z])((?:[^>"]|"[^"]*")*?)(/?)>`,
+    'g',
+  );
+  scanner.lastIndex = from;
+  let depth = 1;
+  let match = scanner.exec(xml);
+  while (match !== null) {
+    if (match[3] !== '/') {
+      depth += match[1] === '/' ? -1 : 1;
+      if (depth === 0) {
+        return { innerEnd: match.index, after: scanner.lastIndex };
+      }
+    }
+    match = scanner.exec(xml);
+  }
+  return null;
+};
+
+// Deleted runs keep their text in `<w:delText>`, which no reader in this file
+// looks at. Rejecting a deletion means putting that text back where a normal
+// run would have it.
+const restoreDeletedRunText = (xml: string): string =>
+  xml
+    .replace(/<w:delText\b/g, '<w:t')
+    .replace(/<\/w:delText>/g, '</w:t>')
+    .replace(/<w:delInstrText\b/g, '<w:instrText')
+    .replace(/<\/w:delInstrText>/g, '</w:instrText>');
+
+// Rewrite a body so the remaining runs are the text the chosen resolution
+// keeps. Nesting is real — an author deletes what a co-author inserted — so the
+// walk recurses: inserted-then-deleted text survives neither resolution, which
+// is the right answer in both directions.
+export const resolveWordTrackedChanges = (
+  xml: string,
+  resolution: TrackedChangeResolution,
+): string => {
+  if (!ANY_REVISION_ELEMENT.test(xml)) return xml;
+
+  let resolved = '';
+  let cursor = 0;
+  REVISION_OPENING_TAG.lastIndex = 0;
+  let match = REVISION_OPENING_TAG.exec(xml);
+  while (match !== null) {
+    resolved += xml.slice(cursor, match.index);
+    const openingTagEnd = match.index + match[0].length;
+    // A self-closing marker sits on a paragraph mark or a table row: it has no
+    // text to keep or drop, and the paragraph itself stays either way.
+    const end =
+      match[3] === '/'
+        ? null
+        : revisionElementEnd(xml, match[1], REVISION_OPENING_TAG.lastIndex);
+    if (end === null) {
+      cursor = openingTagEnd;
+    } else {
+      if (isInsertionElement(match[1]) === (resolution === 'ACCEPT')) {
+        const inner = resolveWordTrackedChanges(
+          xml.slice(openingTagEnd, end.innerEnd),
+          resolution,
+        );
+        resolved += isInsertionElement(match[1])
+          ? inner
+          : restoreDeletedRunText(inner);
+      }
+      cursor = end.after;
+    }
+    REVISION_OPENING_TAG.lastIndex = cursor;
+    match = REVISION_OPENING_TAG.exec(xml);
+  }
+  return resolved + xml.slice(cursor);
+};
+
+const bodyCommentIds = (documentXml: string): Set<string> => {
+  const ids = new Set<string>();
+  for (const match of documentXml.matchAll(COMMENT_ANCHOR_TAG)) {
+    const commentId = attributeValue(match[2], 'w:id');
+    if (commentId !== undefined) ids.add(commentId);
+  }
+  return ids;
+};
+
+export const parseWordComments = (commentsXml: string): ImportedComment[] => {
+  const comments: ImportedComment[] = [];
+  for (const match of commentsXml.matchAll(COMMENT_ELEMENT)) {
+    const commentId = attributeValue(match[1], 'w:id');
+    if (commentId === undefined) continue;
+    const author = decodeXml(attributeValue(match[1], 'w:author') ?? '').trim();
+    const initials = decodeXml(
+      attributeValue(match[1], 'w:initials') ?? '',
+    ).trim();
+    const date = attributeValue(match[1], 'w:date') ?? '';
+    comments.push({
+      commentId,
+      // An anonymised review still has an author slot to fill.
+      author: author.length > 0 ? author : 'Unknown author',
+      ...(initials.length > 0 ? { initials } : {}),
+      ...(date.length > 0 ? { date } : {}),
+      text: collapseWhitespace(wordRunsText(match[2])),
+    });
+  }
+  return comments;
+};
+
+export const summarizeWordRevisions = (
+  documentXml: string,
+  commentsXml = '',
+): WordRevisionSummary => {
+  const body = REVISION_PROPERTY_ELEMENTS.reduce(
+    (xml, pattern) => xml.replace(pattern, ''),
+    documentXml,
+  );
+  return {
+    insertionCount: (body.match(INSERTION_ELEMENT) ?? []).length,
+    deletionCount: (body.match(DELETION_ELEMENT) ?? []).length,
+    // A comment can be anchored without a body (a stripped package) or carry a
+    // body nothing anchors; the author should hear about either.
+    commentCount: Math.max(
+      bodyCommentIds(documentXml).size,
+      parseWordComments(commentsXml).length,
+    ),
+  };
+};
+
+export const hasWordRevisions = (summary: WordRevisionSummary): boolean =>
+  summary.insertionCount + summary.deletionCount + summary.commentCount > 0;
+
+const countPhrase = (count: number, noun: string): string =>
+  `${count} ${count === 1 ? noun : `${noun}s`}`;
+
+const TRACKED_CHANGE_WARNING = 'This document has tracked changes:';
+const COMMENT_WARNING = /^This document has \d+ comments?\./;
+
+// A caller that knows more than the body XML did — the import wizard reads
+// `word/comments.xml`, which the parser was not given — replaces these rather
+// than stacking a second, differently-counted copy on top.
+export const isWordRevisionWarning = (warning: string): boolean =>
+  warning.startsWith(TRACKED_CHANGE_WARNING) || COMMENT_WARNING.test(warning);
+
+export const wordRevisionWarnings = (
+  summary: WordRevisionSummary,
+  resolution: TrackedChangeResolution,
+): string[] => {
+  const warnings: string[] = [];
+  if (summary.insertionCount + summary.deletionCount > 0) {
+    warnings.push(
+      `${TRACKED_CHANGE_WARNING} ${countPhrase(
+        summary.insertionCount,
+        'insertion',
+      )} and ${countPhrase(summary.deletionCount, 'deletion')}. ${
+        resolution === 'ACCEPT'
+          ? 'They are being accepted: inserted text is imported and deleted text is dropped.'
+          : 'They are being rejected: inserted text is dropped and deleted text is restored.'
+      } The revision history itself is not imported.`,
+    );
+  }
+  if (summary.commentCount > 0) {
+    warnings.push(
+      `This document has ${countPhrase(
+        summary.commentCount,
+        'comment',
+      )}. Each one is imported into the notes of the section it sits in, with its author and the text it was anchored to.`,
+    );
+  }
+  return warnings;
+};
+
+const isoDay = (date: string | undefined): string | undefined =>
+  date === undefined ? undefined : /^\d{4}-\d{2}-\d{2}/.exec(date)?.[0];
+
+// The composer stores no comment records, so a section's imported comments are
+// rendered into its existing notes field — one line each, attributed.
+export const importedCommentsNote = (comments: ImportedComment[]): string =>
+  comments
+    .map((comment) => {
+      const day = isoDay(comment.date);
+      const who = [
+        comment.author,
+        comment.initials === undefined ? '' : `(${comment.initials})`,
+        day === undefined ? '' : `on ${day}`,
+      ]
+        .filter((part) => part.length > 0)
+        .join(' ');
+      const anchor =
+        comment.anchoredText === undefined
+          ? ''
+          : ` [on "${comment.anchoredText}"]`;
+      return `Imported comment — ${who}${anchor}: ${comment.text}`;
+    })
+    .join('\n');
+
 export type WordStyleDefinition = {
   name: string;
   headingLevel: number;
@@ -504,6 +777,11 @@ export type WordStyleDefinition = {
 export type WordImportOptions = {
   styles?: Record<string, WordStyleDefinition>;
   imageByRelationshipId?: Record<string, { dataUrl: string; altText: string }>;
+  // Defaults to ACCEPT, which is what every import did before the choice
+  // existed — and the only behaviour a document with no revisions can have.
+  trackedChanges?: TrackedChangeResolution;
+  // `word/comments.xml` from the same .docx package, when the caller read it.
+  commentsXml?: string;
 };
 
 export type WordMarkdownBlock = {
@@ -513,6 +791,142 @@ export type WordMarkdownBlock = {
   styleName?: string;
   sourceHeadingLevel?: number;
   headingSource?: 'style' | 'semantic' | 'bold';
+  // Ids of the comments anchored in this block, so a comment can be traced to
+  // the heading it sits under once the text is Markdown.
+  commentIds?: string[];
+};
+
+const COMMENT_ANCHOR_MAX_LENGTH = 120;
+const HEADING_MARKDOWN_LINE = /^\s*#{1,6}\s+(.*\S)\s*$/m;
+
+// What the comment was written about, read from the range the source marked
+// around it. A bare `w:commentReference` with no range leaves the anchor
+// unknown rather than guessed at from the surrounding paragraph.
+const commentAnchorTexts = (documentXml: string): Record<string, string> => {
+  const rangeByCommentId = new Map<string, { start?: number; end?: number }>();
+  for (const match of documentXml.matchAll(COMMENT_ANCHOR_TAG)) {
+    const commentId = attributeValue(match[2], 'w:id');
+    if (commentId === undefined || match[1] === 'Reference') continue;
+    const range = rangeByCommentId.get(commentId) ?? {};
+    rangeByCommentId.set(
+      commentId,
+      match[1] === 'RangeStart'
+        ? { ...range, start: match.index + match[0].length }
+        : { ...range, end: match.index },
+    );
+  }
+
+  const texts: Record<string, string> = {};
+  for (const [commentId, range] of rangeByCommentId) {
+    if (
+      range.start === undefined ||
+      range.end === undefined ||
+      range.end <= range.start
+    ) {
+      continue;
+    }
+    const text = collapseWhitespace(
+      wordRunsText(documentXml.slice(range.start, range.end)),
+    );
+    if (text.length === 0) continue;
+    texts[commentId] =
+      text.length > COMMENT_ANCHOR_MAX_LENGTH
+        ? `${text.slice(0, COMMENT_ANCHOR_MAX_LENGTH - 1).trimEnd()}…`
+        : text;
+  }
+  return texts;
+};
+
+const anchoredCommentIds = (xml: string): string[] => {
+  const commentIds: string[] = [];
+  for (const match of xml.matchAll(COMMENT_ANCHOR_TAG)) {
+    const commentId = attributeValue(match[2], 'w:id');
+    if (commentId !== undefined && !commentIds.includes(commentId)) {
+      commentIds.push(commentId);
+    }
+  }
+  return commentIds;
+};
+
+export const parseWordCommentAnchors = (
+  documentXml: string,
+  commentsXml: string,
+  blocks: WordMarkdownBlock[],
+): ImportedCommentAnchor[] => {
+  const comments = parseWordComments(commentsXml);
+  if (comments.length === 0) return [];
+
+  const anchorTexts = commentAnchorTexts(documentXml);
+  const headingByCommentId = new Map<string, string>();
+  let currentHeading: string | undefined;
+  for (const block of blocks) {
+    // A comment on the heading paragraph itself belongs to the section that
+    // heading opens, so the heading is read before the block's comments.
+    const heading = HEADING_MARKDOWN_LINE.exec(block.markdown)?.[1];
+    if (heading !== undefined) currentHeading = heading;
+    for (const commentId of block.commentIds ?? []) {
+      if (currentHeading !== undefined && !headingByCommentId.has(commentId)) {
+        headingByCommentId.set(commentId, currentHeading);
+      }
+    }
+  }
+
+  return comments.map((comment) => {
+    const anchoredText = anchorTexts[comment.commentId];
+    const headingText = headingByCommentId.get(comment.commentId);
+    return {
+      ...comment,
+      ...(anchoredText !== undefined ? { anchoredText } : {}),
+      ...(headingText !== undefined ? { headingText } : {}),
+    };
+  });
+};
+
+const commentSectionIndex = (
+  sections: ImportedSectionDraft[],
+  anchor: ImportedCommentAnchor,
+): number => {
+  const headingText = anchor.headingText;
+  if (headingText !== undefined) {
+    const byHeading = sections.findIndex(
+      (section) =>
+        normalizeHeading(section.name) === normalizeHeading(headingText),
+    );
+    if (byHeading >= 0) return byHeading;
+  }
+  // The heading a comment sat under can be folded away (title-page furniture)
+  // or renamed, so fall back to the section that still holds the anchored text.
+  const anchoredText = anchor.anchoredText;
+  if (anchoredText !== undefined) {
+    const probe = anchoredText.slice(0, 40);
+    const byContent = sections.findIndex((section) =>
+      collapseWhitespace(section.content).includes(probe),
+    );
+    if (byContent >= 0) return byContent;
+  }
+  return 0;
+};
+
+export const attachImportedComments = (
+  sections: ImportedSectionDraft[],
+  anchors: ImportedCommentAnchor[],
+): ImportedSectionDraft[] => {
+  if (anchors.length === 0 || sections.length === 0) return sections;
+
+  const commentsBySectionIndex = new Map<number, ImportedComment[]>();
+  for (const anchor of anchors) {
+    const { headingText: _headingText, ...comment } = anchor;
+    const sectionIndex = commentSectionIndex(sections, anchor);
+    commentsBySectionIndex.set(sectionIndex, [
+      ...(commentsBySectionIndex.get(sectionIndex) ?? []),
+      comment,
+    ]);
+  }
+
+  return sections.map((section, index) => {
+    const comments = commentsBySectionIndex.get(index);
+    return comments === undefined ? section : { ...section, comments };
+  });
 };
 
 export const parseWordStyleDefinitions = (
@@ -952,9 +1366,17 @@ const wordParagraphToMarkdown = (
     ...(styleId.length > 0 ? { styleId } : {}),
     ...(styleName !== undefined ? { styleName } : {}),
   };
+  // Only the paragraph's own block claims its comments: a trailing heading
+  // split off the end opens the *next* section, and would drag the comment
+  // there with it.
+  const commentIds = anchoredCommentIds(paragraphXml);
+  const anchoredComments =
+    commentIds.length > 0 ? { commentIds } : ({} as { commentIds?: string[] });
 
   if (paragraphText.length === 0 && images.length === 0 && math.length === 0) {
-    return [{ kind: 'paragraph', markdown: '', ...provenance }];
+    return [
+      { kind: 'paragraph', markdown: '', ...provenance, ...anchoredComments },
+    ];
   }
 
   // A trailing bold run after a line break is the next heading, not the tail of
@@ -980,6 +1402,7 @@ const wordParagraphToMarkdown = (
         kind: 'paragraph',
         markdown: `\n## Keywords\n\n${text.replace(/^keywords?\s*:\s*/i, '')}\n`,
         ...provenance,
+        ...anchoredComments,
         sourceHeadingLevel: 2,
         headingSource: 'semantic',
       },
@@ -1024,6 +1447,7 @@ const wordParagraphToMarkdown = (
         .filter((part) => part.trim().length > 0)
         .join('\n\n'),
       ...provenance,
+      ...anchoredComments,
       ...(finalLevel > 0 && headingSource !== undefined
         ? { sourceHeadingLevel: finalLevel, headingSource }
         : {}),
@@ -1351,16 +1775,26 @@ export const parseWordMlToMarkdownBlocks = (
   documentXml: string,
   options: WordImportOptions = {},
 ): WordMarkdownBlock[] => {
-  const body =
-    /<w:body\b[\s\S]*?<\/w:body>/.exec(documentXml)?.[0] ?? documentXml;
+  // Resolve revisions before anything reads a run: every downstream pass —
+  // headings, tables, math, images — then sees one settled document rather than
+  // a mix of both versions.
+  const body = resolveWordTrackedChanges(
+    /<w:body\b[\s\S]*?<\/w:body>/.exec(documentXml)?.[0] ?? documentXml,
+    options.trackedChanges ?? 'ACCEPT',
+  );
   const tokens = tokenizeWordBody(body);
   const out: WordMarkdownBlock[] = [];
   for (const token of tokens) {
-    out.push(
-      ...(token.startsWith('<w:tbl')
-        ? [{ kind: 'table' as const, markdown: wordTableToMarkdown(token) }]
-        : wordParagraphToMarkdown(token, options)),
-    );
+    if (!token.startsWith('<w:tbl')) {
+      out.push(...wordParagraphToMarkdown(token, options));
+      continue;
+    }
+    const commentIds = anchoredCommentIds(token);
+    out.push({
+      kind: 'table',
+      markdown: wordTableToMarkdown(token),
+      ...(commentIds.length > 0 ? { commentIds } : {}),
+    });
   }
   return alignSyntheticFrontMatterHeadings(
     demoteLeadingTitleBlockHeadings(
@@ -1581,22 +2015,32 @@ const wrappedTitleLineCount = (documentXml: string): number => {
 export const parseWordDocumentFromBlocks = (
   documentXml: string,
   blocks: WordMarkdownBlock[],
+  options: WordImportOptions = {},
 ): ImportedDocument => {
+  const resolution = options.trackedChanges ?? 'ACCEPT';
+  // Counted on the source as it arrived; every count below it is counted on the
+  // document the author actually gets, so a deleted table stops being "Table 3"
+  // the moment its deletion is accepted.
+  const revisionSummary = summarizeWordRevisions(
+    documentXml,
+    options.commentsXml ?? '',
+  );
+  const resolvedXml = resolveWordTrackedChanges(documentXml, resolution);
   const markdown = serializeWordMarkdownBlocks(blocks);
   const document = parseMarkdownDocument(markdown);
-  const equationCount = (documentXml.match(/<m:oMath\b/g) ?? []).length;
+  const equationCount = (resolvedXml.match(/<m:oMath\b/g) ?? []).length;
   const embeddedImageCount = (
     markdown.match(/!\[[^\]]*\]\(data:image\//g) ?? []
   ).length;
-  const tableCount = (documentXml.match(/<w:tbl\b/g) ?? []).length;
-  const warnings: string[] = [];
+  const tableCount = (resolvedXml.match(/<w:tbl\b/g) ?? []).length;
+  const warnings: string[] = wordRevisionWarnings(revisionSummary, resolution);
 
   if (document.sections.length <= 1) {
     warnings.push(
       'Few semantic sections were detected. Review the section names and types before importing.',
     );
   }
-  if (embeddedImageCount === 0 && /<w:drawing\b/.test(documentXml)) {
+  if (embeddedImageCount === 0 && /<w:drawing\b/.test(resolvedXml)) {
     warnings.push(
       'The document contains images that could not be resolved from the DOCX package.',
     );
@@ -1605,7 +2049,7 @@ export const parseWordDocumentFromBlocks = (
   const { sections, wrappedTitleLines, subtitleLines, ...titlePageMetadata } =
     extractTitlePageMetadata(
       document.sections,
-      wrappedTitleLineCount(documentXml),
+      wrappedTitleLineCount(resolvedXml),
     );
   const title =
     document.title === undefined
@@ -1618,10 +2062,16 @@ export const parseWordDocumentFromBlocks = (
   return {
     ...document,
     ...(title !== undefined ? { title } : {}),
-    sections,
+    // Comments are attached last: the title-page pass folds sections away, and
+    // a comment must land in a section that still exists.
+    sections: attachImportedComments(
+      sections,
+      parseWordCommentAnchors(resolvedXml, options.commentsXml ?? '', blocks),
+    ),
     ...titlePageMetadata,
     warnings,
     stats: { equationCount, embeddedImageCount, tableCount },
+    ...(hasWordRevisions(revisionSummary) ? { revisionSummary } : {}),
   };
 };
 
@@ -1632,6 +2082,7 @@ export const parseWordDocument = (
   parseWordDocumentFromBlocks(
     documentXml,
     parseWordMlToMarkdownBlocks(documentXml, options),
+    options,
   );
 
 // ── Lift standalone tables into numbered figure records ─────────────────────

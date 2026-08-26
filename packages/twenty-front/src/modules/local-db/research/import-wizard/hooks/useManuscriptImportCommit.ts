@@ -1,7 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 
-import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
+import {
+  importedCommentsNote,
+  type ImportedDocument,
+} from '@/local-db/research/manuscript/manuscriptDocImport';
 import {
   type ExistingImportReference,
   type PreparedManuscriptImport,
@@ -190,6 +193,11 @@ export const useManuscriptImportCommit = ({
             ...(section.wordLimit !== undefined
               ? { wordLimit: section.wordLimit }
               : {}),
+            // A reviewer's comments have no record of their own; the section's
+            // notes are where they survive the import.
+            ...(section.comments === undefined || section.comments.length === 0
+              ? {}
+              : { notes: importedCommentsNote(section.comments) }),
           });
           currentCreatedCounts = {
             ...currentCreatedCounts,

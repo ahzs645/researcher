@@ -10,8 +10,16 @@ import { ManuscriptImportUploadStep } from '@/local-db/research/import-wizard/co
 import { MANUSCRIPT_IMPORT_WIZARD_MODAL_ID } from '@/local-db/research/import-wizard/constants/ManuscriptImportWizardModalId';
 import { MANUSCRIPT_IMPORT_WIZARD_STEPS } from '@/local-db/research/import-wizard/constants/ManuscriptImportWizardSteps';
 import { type ManuscriptImportWizardOptions } from '@/local-db/research/import-wizard/states/manuscriptImportWizardState';
-import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
-import { type ImportedDocumentSource } from '@/local-db/research/manuscript/manuscriptDocxFile';
+import {
+  withWordRevisions,
+  wordFileWithResolvedTrackedChanges,
+  type ManuscriptMappingSource,
+} from '@/local-db/research/import-wizard/utils/readManuscriptWordRevisions';
+import {
+  type ImportedDocument,
+  type TrackedChangeResolution,
+} from '@/local-db/research/manuscript/manuscriptDocImport';
+import { readImportedDocumentSource } from '@/local-db/research/manuscript/manuscriptDocxFile';
 import { type ImportBlockOverrides } from '@/local-db/research/manuscript/manuscriptImportBlocks';
 import { type PreparedManuscriptImport } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
@@ -22,8 +30,6 @@ type ManuscriptImportWizardProps = {
   options: ManuscriptImportWizardOptions;
   onClose: () => void;
 };
-
-type BlocksDocumentSource = Extract<ImportedDocumentSource, { kind: 'blocks' }>;
 
 type ReviewPayload = {
   document: ImportedDocument;
@@ -76,9 +82,10 @@ export const ManuscriptImportWizard = ({
 }: ManuscriptImportWizardProps) => {
   const { enqueueDialog } = useDialogManager();
   const [activeStep, setActiveStep] = useState(0);
-  const [blocksSource, setBlocksSource] = useState<BlocksDocumentSource | null>(
-    null,
-  );
+  const [blocksSource, setBlocksSource] =
+    useState<ManuscriptMappingSource | null>(null);
+  const [isResolvingTrackedChanges, setIsResolvingTrackedChanges] =
+    useState(false);
   const [reconcile, setReconcile] = useState(true);
   const [reviewPayload, setReviewPayload] = useState<ReviewPayload | null>(
     null,
@@ -128,12 +135,42 @@ export const ManuscriptImportWizard = ({
   };
 
   const handleBlocksLoaded = useCallback(
-    (source: BlocksDocumentSource, shouldReconcile: boolean) => {
+    (source: ManuscriptMappingSource, shouldReconcile: boolean) => {
       setBlocksSource(source);
+      setMapOverrides({});
       setReconcile(shouldReconcile);
       setActiveStep(1);
     },
     [],
+  );
+
+  // Re-read the document under the other resolution. Block ids are positional,
+  // so mapping decisions made against the old text are dropped rather than
+  // silently re-applied to different paragraphs.
+  const handleTrackedChangesChange = useCallback(
+    async (resolution: TrackedChangeResolution) => {
+      const wordFile = blocksSource?.wordFile;
+      if (
+        blocksSource === null ||
+        wordFile === undefined ||
+        resolution === blocksSource.revisions?.resolution ||
+        isResolvingTrackedChanges
+      ) {
+        return;
+      }
+      setIsResolvingTrackedChanges(true);
+      try {
+        const source = await readImportedDocumentSource(
+          await wordFileWithResolvedTrackedChanges(wordFile, resolution),
+        );
+        if (source.kind !== 'blocks') return;
+        setMapOverrides({});
+        setBlocksSource(await withWordRevisions(wordFile, source, resolution));
+      } finally {
+        setIsResolvingTrackedChanges(false);
+      }
+    },
+    [blocksSource, isResolvingTrackedChanges],
   );
 
   const handlePortableLoaded = useCallback(
@@ -213,9 +250,15 @@ export const ManuscriptImportWizard = ({
             />
           ) : activeStep === 1 && blocksSource !== null ? (
             <ManuscriptImportMapStep
+              // Remount on a new parse: the block list the mapping refers to
+              // has been replaced.
+              key={blocksSource.revisions?.resolution ?? 'ACCEPT'}
               blocks={blocksSource.blocks}
               sourceInfo={blocksSource.sourceInfo}
               sourceName={blocksSource.sourceName}
+              revisions={blocksSource.revisions}
+              isResolvingTrackedChanges={isResolvingTrackedChanges}
+              onTrackedChangesChange={handleTrackedChangesChange}
               reconcile={reconcile}
               existingReferences={options.existingReferences}
               existingFigureRefKeys={options.existingFigureRefKeys}

@@ -12,20 +12,21 @@ import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
+  withWordRevisions,
+  type ManuscriptMappingSource,
+} from '@/local-db/research/import-wizard/utils/readManuscriptWordRevisions';
+import {
   deriveImportBlocksFromMarkdown,
   type ImportedSourceInfo,
 } from '@/local-db/research/manuscript/manuscriptImportBlocks';
 import {
   ACCEPTED_MANUSCRIPT_IMPORT_EXTENSIONS,
   readImportedDocumentSource,
-  type ImportedDocumentSource,
 } from '@/local-db/research/manuscript/manuscriptDocxFile';
 import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
 
-type BlocksDocumentSource = Extract<ImportedDocumentSource, { kind: 'blocks' }>;
-
 type ManuscriptImportUploadStepProps = {
-  onBlocksLoaded: (source: BlocksDocumentSource, reconcile: boolean) => void;
+  onBlocksLoaded: (source: ManuscriptMappingSource, reconcile: boolean) => void;
   onPortableLoaded: (
     document: ImportedDocument,
     sourceName: string,
@@ -165,7 +166,6 @@ export const ManuscriptImportUploadStep = ({
     }
     onBlocksLoaded(
       {
-        kind: 'blocks',
         blocks,
         sourceInfo: sourceInfoForPaste(),
         sourceName: 'Pasted text',
@@ -188,7 +188,12 @@ export const ManuscriptImportUploadStep = ({
       if (source.kind === 'portable') {
         onPortableLoaded(source.document, file.name, reconcile);
       } else {
-        onBlocksLoaded(source, reconcile);
+        // Read as accepted, which is what every .docx import has always done;
+        // the map step is where a document with revisions offers the choice.
+        onBlocksLoaded(
+          await withWordRevisions(file, source, 'ACCEPT'),
+          reconcile,
+        );
       }
     } catch {
       setError(

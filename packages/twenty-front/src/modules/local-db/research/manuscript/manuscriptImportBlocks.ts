@@ -1,7 +1,9 @@
 import {
+  attachImportedComments,
   classifyLayoutTable,
   parseImportedAssetCaption,
   parseMarkdownDocument,
+  type ImportedCommentAnchor,
   type ImportedDocument,
   type WordMarkdownBlock,
 } from './manuscriptDocImport';
@@ -18,6 +20,7 @@ export type ImportedSourceInfo = Pick<
   | 'stats'
   | 'sourceStylesXml'
   | 'sourceDocumentName'
+  | 'revisionSummary'
 >;
 
 export type ImportBlockRole =
@@ -465,6 +468,10 @@ export const assembleImportedDocument = (
   blocks: ImportBlock[],
   overrides: ImportBlockOverrides,
   sourceInfo: ImportedSourceInfo = {},
+  // Comments the source anchored under a heading. Mapping rewrites the document
+  // through Markdown, so they are re-attached to whatever sections come out of
+  // it rather than carried on the blocks.
+  commentAnchors: ImportedCommentAnchor[] = [],
 ): ImportedDocument => {
   const blocksById = new Map(blocks.map((block) => [block.id, block]));
   const linkedCaptionsByAssetId = new Map<string, ImportBlock[]>();
@@ -540,6 +547,7 @@ export const assembleImportedDocument = (
   const document = parseMarkdownDocument(serializedBlocks.join('\n\n'));
   return {
     ...document,
+    sections: attachImportedComments(document.sections, commentAnchors),
     ...(sourceInfo.title !== undefined ? { title: sourceInfo.title } : {}),
     ...(sourceInfo.authorLine !== undefined
       ? { authorLine: sourceInfo.authorLine }
@@ -562,6 +570,9 @@ export const assembleImportedDocument = (
       : {}),
     ...(sourceInfo.sourceDocumentName !== undefined
       ? { sourceDocumentName: sourceInfo.sourceDocumentName }
+      : {}),
+    ...(sourceInfo.revisionSummary !== undefined
+      ? { revisionSummary: sourceInfo.revisionSummary }
       : {}),
     ...(suppressedAssetLineSignatures.size > 0
       ? {

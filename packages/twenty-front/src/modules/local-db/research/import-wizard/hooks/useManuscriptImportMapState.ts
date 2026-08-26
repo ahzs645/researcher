@@ -10,7 +10,10 @@ import {
   type ImportBlockRole,
   type ImportedSourceInfo,
 } from '@/local-db/research/manuscript/manuscriptImportBlocks';
-import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
+import {
+  type ImportedCommentAnchor,
+  type ImportedDocument,
+} from '@/local-db/research/manuscript/manuscriptDocImport';
 import {
   prepareManuscriptImport,
   type PrepareManuscriptImportOptions,
@@ -21,6 +24,7 @@ type UseManuscriptImportMapStateProps = {
   blocks: ImportBlock[];
   sourceInfo: ImportedSourceInfo;
   sourceName: string;
+  commentAnchors: ImportedCommentAnchor[];
   reconcile: boolean;
   existingReferences: PrepareManuscriptImportOptions['existingReferences'];
   existingFigureRefKeys: string[];
@@ -44,6 +48,7 @@ export const useManuscriptImportMapState = ({
   blocks,
   sourceInfo,
   sourceName,
+  commentAnchors,
   reconcile,
   existingReferences,
   existingFigureRefKeys,
@@ -303,7 +308,12 @@ export const useManuscriptImportMapState = ({
     if (isPreparing) return;
     setIsPreparing(true);
     try {
-      const document = assembleImportedDocument(blocks, overrides, sourceInfo);
+      const document = assembleImportedDocument(
+        blocks,
+        overrides,
+        sourceInfo,
+        commentAnchors,
+      );
       onContinue(
         document,
         prepareManuscriptImport(document, reconcile, {
@@ -317,6 +327,7 @@ export const useManuscriptImportMapState = ({
     }
   }, [
     blocks,
+    commentAnchors,
     existingFigureRefKeys,
     existingReferences,
     isPreparing,

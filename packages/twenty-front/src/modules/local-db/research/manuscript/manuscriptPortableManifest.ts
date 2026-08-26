@@ -14,6 +14,16 @@ export const PORTABLE_MANUSCRIPT_FORMAT = 'researcher-manuscript' as const;
 // v2 adds the journal template the manuscript was written against, so a
 // restore brings its format back with it instead of falling back to whatever
 // profile the workspace happens to default to. v1 packages still import.
+//
+// Per-journal section versions arrived after v2 and deliberately did not move
+// it. `variantOfKey`/`variantProfileKey` are optional fields on a section
+// entry: a package written before they existed imports exactly as it did, and
+// a reader written before they existed ignores fields it does not know. A bump
+// to 3 would buy nothing and cost the case that matters — an older copy of
+// this app checks `PORTABLE_MANUSCRIPT_READABLE_VERSIONS` and would refuse the
+// package outright, so an author carrying a paper to a machine that has not
+// updated yet would lose the whole paper rather than a few versions of one
+// section.
 export const PORTABLE_MANUSCRIPT_VERSION = 2 as const;
 export const PORTABLE_MANUSCRIPT_READABLE_VERSIONS = [1, 2];
 export const PORTABLE_MANUSCRIPT_FILENAME = 'research-paper.json';
@@ -76,6 +86,12 @@ export type PortableResearchPaperManifest = {
     wordLimit?: number;
     wordCount: number;
     includeInExport: boolean;
+    // Set only on a section that is an alternative version of another one:
+    // the key of the section it rewords, and the journal profile it is written
+    // for. Both are absent on an ordinary section — writing empty strings here
+    // would make every section look like a version of nothing.
+    variantOfKey?: string;
+    variantProfileKey?: string;
   }>;
   figures: Array<{
     key: string;
@@ -147,6 +163,27 @@ export const portableFigureImagePath = (
   return `portable-assets/${safeKey}.${extension}`;
 };
 
+// A version travels by the key this manifest gave its base, never by the base's
+// record id: ids are local to one workspace, so a paper that changed machines
+// would arrive with every version pointing at nothing. A `variantOfId` naming a
+// section that is not in this package keeps its raw id here — that key resolves
+// to nothing on the way back in, which is what makes the importer drop the
+// orphan rather than restore it as a section of its own.
+const portableSectionVariantFields = (
+  section: SectionLike,
+  sectionKeyById: ReadonlyMap<string, string>,
+): { variantOfKey?: string; variantProfileKey?: string } => {
+  const variantOfId = section.variantOfId?.trim();
+  if (variantOfId === undefined || variantOfId.length === 0) return {};
+  const variantProfileKey = section.variantProfileKey?.trim();
+  return {
+    variantOfKey: sectionKeyById.get(variantOfId) ?? variantOfId,
+    ...(variantProfileKey !== undefined && variantProfileKey.length > 0
+      ? { variantProfileKey }
+      : {}),
+  };
+};
+
 export const buildPortableResearchPaperManifest = (
   source: PortableManuscriptSource,
   exportStyle: JournalStyle,
@@ -199,6 +236,7 @@ export const buildPortableResearchPaperManifest = (
         : {}),
       wordCount: section.wordCount ?? 0,
       includeInExport: section.includeInExport !== false,
+      ...portableSectionVariantFields(section, sectionKeyById),
     })),
     figures: source.figures.map((figure, index) => {
       const refKey = figure.refKey ?? `figure-${index + 1}`;

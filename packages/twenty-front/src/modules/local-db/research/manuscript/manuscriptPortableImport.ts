@@ -26,6 +26,23 @@ const portableAssetKind = (
 ): (typeof PORTABLE_ASSET_KINDS)[number] =>
   PORTABLE_ASSET_KINDS.find((candidate) => candidate === value) ?? 'FIGURE';
 
+// One section of the package that is an alternative version of another, with
+// both ends given as `orderIndex`. That is the only handle a restore has: the
+// records do not exist yet, and `orderIndex` is what the commit step already
+// keys newly created sections by (it is how a figure finds its section too).
+export type PortableSectionVariantLink = {
+  orderIndex: number;
+  baseOrderIndex: number;
+  variantProfileKey?: string;
+};
+
+// A version attached to its base, once both are real records.
+export type PortableSectionVariantUpdate = {
+  sectionId: string;
+  variantOfId: string;
+  variantProfileKey?: string;
+};
+
 export type PreparedPortableResearchPaperImport = {
   sections: ImportedSectionDraft[];
   references: ReferenceDraft[];
@@ -34,6 +51,13 @@ export type PreparedPortableResearchPaperImport = {
   linkedAssetCount: number;
   tableCount: number;
   imageCount: number;
+  // Versions to re-attach after the sections are created, and what the restore
+  // could not carry across in the words the review step shows the author — a
+  // dropped version is work they wrote, so it says so rather than going quiet.
+  // `preparePortableResearchPaperImport` always sets both; they are optional
+  // so that a prepared import assembled by hand still describes one.
+  sectionVariants?: PortableSectionVariantLink[];
+  warnings?: string[];
   // The journal template the package carries (v2+), so the restore can link
   // or re-create it.
   journal?: PortableJournalTemplate;
@@ -72,6 +96,76 @@ export const matchPortableJournalTemplate = <
   );
 };
 
+type PortableSectionVariantResolution = {
+  links: PortableSectionVariantLink[];
+  // Order indices of the versions that cannot be attached to anything.
+  droppedOrderIndexes: Set<number>;
+  warnings: string[];
+};
+
+// Resolve each version's `variantOfKey` back to the base section's place in
+// this import. A version whose base key is not in the package is dropped
+// rather than restored: a version never stands on its own, so importing it as
+// an ordinary section would quietly add a second abstract to the paper. It is
+// still the author's writing, so the drop is reported instead of being silent.
+const resolvePortableSectionVariants = (
+  manifest: PortableResearchPaperManifest,
+  sectionOrderByKey: ReadonlyMap<string, number>,
+): PortableSectionVariantResolution => {
+  const links: PortableSectionVariantLink[] = [];
+  const droppedOrderIndexes = new Set<number>();
+  const warnings: string[] = [];
+  for (const section of manifest.sections) {
+    const variantOfKey = section.variantOfKey;
+    if (variantOfKey === undefined || variantOfKey.length === 0) continue;
+    const baseOrderIndex = sectionOrderByKey.get(variantOfKey);
+    if (baseOrderIndex === undefined) {
+      droppedOrderIndexes.add(section.orderIndex);
+      const writtenFor =
+        section.variantProfileKey === undefined
+          ? ''
+          : ` (written for ${section.variantProfileKey})`;
+      warnings.push(
+        `"${section.name}"${writtenFor} is an alternative version of a section this package does not contain, so it was not imported.`,
+      );
+      continue;
+    }
+    links.push({
+      orderIndex: section.orderIndex,
+      baseOrderIndex,
+      ...(section.variantProfileKey !== undefined
+        ? { variantProfileKey: section.variantProfileKey }
+        : {}),
+    });
+  }
+  return { links, droppedOrderIndexes, warnings };
+};
+
+// Turn the resolved links into the updates that attach each version to its
+// base. The ids only exist once the sections have been created, so this runs
+// at the end of a restore rather than while preparing one.
+export const portableSectionVariantUpdates = (
+  links: readonly PortableSectionVariantLink[],
+  sectionIdsByOrderIndex: ReadonlyMap<number, string>,
+): PortableSectionVariantUpdate[] =>
+  links.flatMap((link) => {
+    const sectionId = sectionIdsByOrderIndex.get(link.orderIndex);
+    const variantOfId = sectionIdsByOrderIndex.get(link.baseOrderIndex);
+    // A section the commit step never created (it failed, or the caller is
+    // restoring a subset) leaves nothing to point at, and half a link is
+    // worse than none: it would make the version export as a section.
+    if (sectionId === undefined || variantOfId === undefined) return [];
+    return [
+      {
+        sectionId,
+        variantOfId,
+        ...(link.variantProfileKey !== undefined
+          ? { variantProfileKey: link.variantProfileKey }
+          : {}),
+      },
+    ];
+  });
+
 export const preparePortableResearchPaperImport = (
   manifest: PortableResearchPaperManifest,
   sections: ImportedSectionDraft[],
@@ -80,6 +174,16 @@ export const preparePortableResearchPaperImport = (
   const sectionOrderByKey = new Map(
     manifest.sections.map((section) => [section.key, section.orderIndex]),
   );
+  const variants = resolvePortableSectionVariants(manifest, sectionOrderByKey);
+  // The drafts are this manifest's sections, so `orderIndex` identifies the
+  // same section on both sides. A package with nothing to drop keeps the
+  // caller's list untouched, including callers that pass sections of their own.
+  const importedSections =
+    variants.droppedOrderIndexes.size === 0
+      ? sections
+      : sections.filter(
+          (section) => !variants.droppedOrderIndexes.has(section.orderIndex),
+        );
   const figures: ImportedFigureDraft[] = manifest.figures.map(
     (figure, index) => ({
       name: figure.name,
@@ -120,7 +224,9 @@ export const preparePortableResearchPaperImport = (
   );
 
   return {
-    sections,
+    sections: importedSections,
+    sectionVariants: variants.links,
+    warnings: variants.warnings,
     references: manifest.references.map(
       ({ key: _key, ...reference }) => reference,
     ),

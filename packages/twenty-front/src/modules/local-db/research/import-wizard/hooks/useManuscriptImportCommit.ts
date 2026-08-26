@@ -13,6 +13,7 @@ import {
   matchPortableJournalTemplate,
   portableManuscriptRecordUpdate,
 } from '@/local-db/research/manuscript/manuscriptPortableImport';
+import { portableSectionVariantUpdates } from '@/local-db/research/manuscript/manuscriptPortableImport';
 import { type SubmissionTransposeUpdate } from '@/local-db/research/manuscript/manuscriptSubmissionTranspose';
 import { withImportedSourceStyles } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { serializeManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';
@@ -212,6 +213,30 @@ export const useManuscriptImportCommit = ({
           setCreatedRecords({
             ...currentCreatedRecords,
             sections: [...currentCreatedRecords.sections],
+          });
+        }
+
+        // A version has to wait for its base to exist before it can point at
+        // it, so the link is written after every section is created rather
+        // than in the loop above.
+        // Only a portable package carries versions, and `preparedImport` is a
+        // union of the two import shapes, so the branch is narrowed here
+        // rather than asserted.
+        for (const update of portableSectionVariantUpdates(
+          'sectionVariants' in preparedImport
+            ? (preparedImport.sectionVariants ?? [])
+            : [],
+          sectionIdsByOrder,
+        )) {
+          await updateOneRecord({
+            objectNameSingular: 'manuscriptSection',
+            idToUpdate: update.sectionId,
+            updateOneRecordInput: {
+              variantOfId: update.variantOfId,
+              ...(update.variantProfileKey !== undefined
+                ? { variantProfileKey: update.variantProfileKey }
+                : {}),
+            },
           });
         }
 

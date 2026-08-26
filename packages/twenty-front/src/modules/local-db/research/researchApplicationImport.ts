@@ -5,7 +5,10 @@
 // manuscript composer uses. Pure and unit-tested; the I/O (file read / unzip)
 // is the shared `manuscriptDocxFile` glue.
 
+import { isNonEmptyArray } from 'twenty-shared/utils';
+
 import {
+  importedCommentsNote,
   parseMarkdownDocument,
   parseWordDocument,
   type ImportedDocument,
@@ -18,6 +21,10 @@ export type ApplicationSectionDraft = {
   wordCount: number;
   status: string;
   orderIndex: number;
+  // Reviewer comments the source document anchored in this section, rendered
+  // into the section's notes. Absent when the source carried none — an import
+  // that always set it would blank the notes of every section it touches.
+  notes?: string;
 };
 
 // Heading → canonical grant-application content type (CANONICAL_CONTENT_OPTIONS).
@@ -62,6 +69,12 @@ export const applicationSectionDraftsFromDocument = (
     wordCount: section.wordCount,
     status: 'DRAFTING',
     orderIndex: section.orderIndex,
+    // Same landing place, same formatter as the manuscript wizard: a proposal
+    // reviewed in Word reads here exactly as a reviewed paper does, instead of
+    // arriving stripped of the feedback it was sent back with.
+    ...(isNonEmptyArray(section.comments)
+      ? { notes: importedCommentsNote(section.comments) }
+      : {}),
   }));
 
 export const applicationSectionsFromMarkdown = (
@@ -71,5 +84,10 @@ export const applicationSectionsFromMarkdown = (
 
 export const applicationSectionsFromWordXml = (
   documentXml: string,
+  // `word/comments.xml` from the same package. The body carries only anchors,
+  // so without it a commented proposal imports as if it had never been read.
+  commentsXml = '',
 ): ApplicationSectionDraft[] =>
-  applicationSectionDraftsFromDocument(parseWordDocument(documentXml));
+  applicationSectionDraftsFromDocument(
+    parseWordDocument(documentXml, { commentsXml }),
+  );

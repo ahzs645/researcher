@@ -275,6 +275,14 @@ const ManuscriptComposerPageContent = () => {
   const exportTableStyle = resolveManuscriptTableStyle(
     composer.effectiveStyle.tableStyle,
   );
+  // Both tabs that host the section-version bar need the workspace's journals
+  // to name a version by its journal, so the list is shaped once here rather
+  // than mapped separately in each of them.
+  const existingJournalTemplates = composer.journals.map((journal) => ({
+    id: journal.id,
+    name: journal.name,
+    profileKey: journal.profileKey,
+  }));
   const selectRelatedSection = (sectionId: string) => {
     const targetTab =
       composer.sections.find((section) => section.id === sectionId)
@@ -425,11 +433,7 @@ const ManuscriptComposerPageContent = () => {
               style={composer.effectiveStyle}
               exportTableStyle={exportTableStyle}
               exportStyleOverrides={manuscript.exportStyleOverrides}
-              existingJournals={composer.journals.map((journal) => ({
-                id: journal.id,
-                name: journal.name,
-                profileKey: journal.profileKey,
-              }))}
+              existingJournals={existingJournalTemplates}
               targetJournal={linkedJournal}
               submissionExtras={manuscript.submissionExtras}
               competingInterests={manuscript.competingInterests}
@@ -479,6 +483,7 @@ const ManuscriptComposerPageContent = () => {
               sections={composer.sections}
               figures={composer.figures}
               references={composer.references}
+              existingJournals={existingJournalTemplates}
               selectedSectionId={composer.selectedSection?.id}
               style={composer.effectiveStyle}
               onSave={composer.saveTitlePageDetails}
@@ -487,6 +492,7 @@ const ManuscriptComposerPageContent = () => {
                 composer.changeSectionIncludeInExport
               }
               onChangeSectionPlacement={composer.changeSectionPlacement}
+              onCreateSectionVariant={composer.createSectionVariant}
               onDeleteSection={composer.deleteSection}
               onPersistSection={composer.persistSectionById}
             />

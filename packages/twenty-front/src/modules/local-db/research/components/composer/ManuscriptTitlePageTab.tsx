@@ -8,6 +8,7 @@ import {
   type SectionRecord,
 } from '@/local-db/research/components/composer/manuscriptComposerData';
 import { ManuscriptFrontMatterSections } from '@/local-db/research/components/composer/ManuscriptFrontMatterSections';
+import { type ExistingJournalTemplate } from '@/local-db/research/import-wizard/hooks/useManuscriptImportCommit';
 import { parseManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';
 import {
   type FigureLike,
@@ -36,6 +37,9 @@ type ManuscriptTitlePageTabProps = {
   sections: SectionRecord[];
   figures: FigureLike[];
   references: ReferenceLike[];
+  // The workspace's journals, so a front-matter section's versions can be named
+  // by the journal they ship to rather than by their raw profile key.
+  existingJournals?: ExistingJournalTemplate[];
   selectedSectionId?: string;
   style: JournalStyle;
   onSave: (values: ManuscriptTitlePageDetails) => Promise<void>;
@@ -48,6 +52,7 @@ type ManuscriptTitlePageTabProps = {
     sectionId: string,
     placement: SectionPlacement,
   ) => Promise<void>;
+  onCreateSectionVariant: (baseSectionId: string) => Promise<void>;
   onDeleteSection: (sectionId: string) => Promise<void>;
   onPersistSection: (sectionId: string, markdown: string) => void;
 };
@@ -67,12 +72,14 @@ export const ManuscriptTitlePageTab = ({
   sections,
   figures,
   references,
+  existingJournals,
   selectedSectionId,
   style,
   onSave,
   onAddKeywordsSection,
   onChangeSectionIncludeInExport,
   onChangeSectionPlacement,
+  onCreateSectionVariant,
   onDeleteSection,
   onPersistSection,
 }: ManuscriptTitlePageTabProps) => {
@@ -207,9 +214,11 @@ export const ManuscriptTitlePageTab = ({
         />
       </StyledTitlePageColumns>
       <ManuscriptFrontMatterSections
+        existingJournals={existingJournals}
         figures={figures}
         onChangeIncludeInExport={onChangeSectionIncludeInExport}
         onChangePlacement={onChangeSectionPlacement}
+        onCreateSectionVariant={onCreateSectionVariant}
         onPersistSection={onPersistSection}
         references={references}
         sections={sections}

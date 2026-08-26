@@ -25,6 +25,10 @@ import {
   resolveAssetKey,
 } from './manuscriptNumbering';
 import {
+  resolveSectionVariants,
+  sectionVariantKey,
+} from './manuscriptSectionVariants';
+import {
   type FigureLike,
   type JournalStyle,
   type NumberedFigure,
@@ -77,17 +81,35 @@ const compareSections = (a: SectionLike, b: SectionLike): number => {
   return (a.name ?? '').localeCompare(b.name ?? '');
 };
 
+// The one choke point every exporter goes through, so per-journal section
+// versions are resolved here and nowhere else.
+//
+// Resolution runs last, on the sections that are actually going out. Filtering
+// first is what gives a version's own `includeInExport` its only possible
+// meaning — switch the alternative off and its base speaks for itself again —
+// because the resolved section keeps the base's flag, never the version's. It
+// also settles an excluded base cleanly: the base goes, and its versions are
+// left naming a section that is no longer here, so they drop rather than
+// escape as loose sections. The type filters are order-independent, since a
+// resolved section still carries the base's `sectionType`; and sorting before
+// resolution keeps the order the base's, since a version substitutes the
+// `name` that the sort breaks its ties on.
 export const manuscriptSectionsForExport = (
-  input: Pick<BuildBundleInput, 'references' | 'sections'>,
+  input: Pick<BuildBundleInput, 'references' | 'sections' | 'style'>,
 ): SectionLike[] =>
-  [...input.sections]
-    .filter(
-      (section) =>
-        section.includeInExport !== false &&
-        section.sectionType !== 'TITLE_PAGE' &&
-        !(section.sectionType === 'REFERENCES' && input.references.length > 0),
-    )
-    .sort(compareSections);
+  resolveSectionVariants(
+    [...input.sections]
+      .filter(
+        (section) =>
+          section.includeInExport !== false &&
+          section.sectionType !== 'TITLE_PAGE' &&
+          !(
+            section.sectionType === 'REFERENCES' && input.references.length > 0
+          ),
+      )
+      .sort(compareSections),
+    sectionVariantKey(input.style),
+  );
 
 const sectionHeadingLevel = (
   section: SectionLike,
@@ -492,6 +514,9 @@ export const buildManuscriptBundle = (
     nodes.push(...supplementNodes);
   }
 
+  // Off the resolved list, never the raw records: when this journal has its own
+  // version of the abstract, that is the text its word cap has to judge — and
+  // the text the submission readiness check reads back off the bundle.
   const abstractSection = sections.find(
     (section) => section.sectionType === 'ABSTRACT',
   );

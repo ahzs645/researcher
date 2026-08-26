@@ -28,6 +28,13 @@ export type SectionLike = {
   level?: number | null;
   wordLimit?: number | null;
   wordCount?: number | null;
+  // A section may carry alternative versions of itself, one per journal: an
+  // abstract cut to MDPI's 200 words next to the 320-word one arXiv takes.
+  // `variantOfId` names the section this rewords, and `variantProfileKey` the
+  // journal profile it is written for. A version is an ordinary section record
+  // that never exports on its own — it stands in for its base.
+  variantOfId?: string | null;
+  variantProfileKey?: string | null;
   includeInExport?: boolean | null;
 };
 

@@ -1839,6 +1839,22 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         type: 'BOOLEAN',
         icon: 'IconFileExport',
       },
+      {
+        name: 'variantOfId',
+        label: 'Alternative version of',
+        type: 'TEXT',
+        icon: 'IconVersions',
+        description:
+          'Id of the section this rewords. A version never exports on its own — it stands in for its base when exporting to its journal.',
+      },
+      {
+        name: 'variantProfileKey',
+        label: 'Version for journal',
+        type: 'TEXT',
+        icon: 'IconBuildingBank',
+        description:
+          'Journal profile key this version is written for, e.g. myst:tex/myst/mdpi:atmosphere',
+      },
       { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
     ],
     defaultColumns: [

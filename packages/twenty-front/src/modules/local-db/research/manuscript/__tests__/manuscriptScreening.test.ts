@@ -717,3 +717,33 @@ describe('manuscript screening', () => {
     });
   });
 });
+
+describe('alternative versions of a section', () => {
+  // Screening reads the records rather than the assembled bundle, so it is the
+  // one reader that has to drop version rows itself.
+  const dataStatement = section(
+    'Data availability',
+    'DATA_AVAILABILITY',
+    'The aethalometer and filter data are deposited at https://doi.org/10.5281/zenodo.1234567.',
+  );
+
+  it('does not screen a per-journal version as a second section', () => {
+    const withVersion: SectionLike[] = [
+      dataStatement,
+      {
+        ...dataStatement,
+        id: 'data-availability-mdpi',
+        name: 'Data availability (MDPI)',
+        content: 'Data available on request from the corresponding author.',
+        variantOfId: dataStatement.id,
+        variantProfileKey: 'myst:tex/myst/mdpi:atmosphere',
+      },
+    ];
+
+    // The restricted-access wording of the version must not drag the verdict
+    // down, and the deposited-data wording must not be counted twice.
+    expect(finding(withVersion, 'OPEN_DATA')).toEqual(
+      finding([dataStatement], 'OPEN_DATA'),
+    );
+  });
+});

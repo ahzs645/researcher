@@ -1,6 +1,7 @@
 import {
   buildManuscriptBundle,
   countWords,
+  manuscriptSectionsForExport,
   type BuildBundleInput,
 } from '@/local-db/research/manuscript/manuscriptAssembly';
 
@@ -399,5 +400,228 @@ describe('cross-reference consistency with the editor tokenizer', () => {
     expect(captioned.mainMarkdown).toContain('compare Figure 1.');
     // …and the caption's citation renders as a number, not a raw token.
     expect(captioned.mainMarkdown).toContain('Adapted from [1];');
+  });
+});
+
+const MDPI_KEY = 'myst:tex/myst/mdpi:atmosphere';
+const ARXIV_KEY = 'myst:tex/myst/arxiv:two-column';
+
+// One paper, two journals. The abstract, the keyword list and the results
+// paragraph each carry an MDPI version alongside the arXiv-length original.
+const variantInput: BuildBundleInput = {
+  manuscript: { id: 'm-var', name: 'Aerosol optical depth over the valley' },
+  style: {
+    name: 'Atmosphere (MDPI)',
+    profileKey: MDPI_KEY,
+    citationMode: 'NUMERIC',
+    figureLabelFormat: 'Figure {n}',
+    abstractWordLimit: 8,
+  },
+  sections: [
+    {
+      id: 's-abs',
+      name: 'Abstract',
+      sectionType: 'ABSTRACT',
+      placement: 'FRONT_MATTER',
+      orderIndex: 0,
+      content: 'One two three four five six seven eight nine ten eleven twelve',
+      wordLimit: 320,
+    },
+    {
+      id: 's-key',
+      name: 'Keywords',
+      sectionType: 'KEYWORDS',
+      placement: 'FRONT_MATTER',
+      orderIndex: 1,
+      content: 'aerosol; optical depth; sun photometer',
+    },
+    {
+      id: 's-res',
+      name: 'Results',
+      sectionType: 'RESULTS',
+      placement: 'MAIN',
+      orderIndex: 2,
+      content: 'The retrieval appears in [#fig:aod]',
+    },
+    {
+      id: 's-abs-mdpi',
+      name: 'Abstract',
+      sectionType: 'ABSTRACT',
+      placement: 'FRONT_MATTER',
+      orderIndex: 0,
+      content: 'Four words only here',
+      wordLimit: 200,
+      variantOfId: 's-abs',
+      variantProfileKey: MDPI_KEY,
+    },
+    {
+      id: 's-key-mdpi',
+      name: 'Keywords',
+      sectionType: 'KEYWORDS',
+      placement: 'FRONT_MATTER',
+      orderIndex: 1,
+      content: 'aerosol; AOD',
+      variantOfId: 's-key',
+      variantProfileKey: MDPI_KEY,
+    },
+    {
+      id: 's-res-mdpi',
+      name: 'Results',
+      sectionType: 'RESULTS',
+      placement: 'MAIN',
+      orderIndex: 2,
+      content: 'Condensed retrieval, in [#fig:aod]',
+      variantOfId: 's-res',
+      variantProfileKey: MDPI_KEY,
+    },
+  ],
+  figures: [
+    {
+      id: 'f-aod',
+      refKey: 'aod',
+      name: 'AOD',
+      caption: 'AOD series.',
+      assetKind: 'FIGURE',
+      placement: 'MAIN',
+      sectionId: 's-res',
+      imageUrl: 'https://example.org/aod.png',
+      imageSource: 'URL',
+    },
+  ],
+  references: [],
+};
+
+const arxivStyle = {
+  name: 'arXiv',
+  profileKey: ARXIV_KEY,
+  citationMode: 'NUMERIC',
+  figureLabelFormat: 'Figure {n}',
+  abstractWordLimit: 320,
+};
+
+const baseSections = variantInput.sections.filter(
+  (section) => section.variantOfId === undefined,
+);
+
+describe('per-journal section versions', () => {
+  const mdpi = buildManuscriptBundle(variantInput);
+  const arxiv = buildManuscriptBundle({ ...variantInput, style: arxivStyle });
+
+  it('substitutes the version and never exports it as a section of its own', () => {
+    const headings = mdpi.nodes.flatMap((node) =>
+      node.kind === 'heading' ? [node.text] : [],
+    );
+
+    // Same three sections in the same order — only the words changed.
+    expect(headings).toEqual(['Abstract', 'Keywords', 'Results']);
+    expect(mdpi.mainMarkdown).toContain('Four words only here');
+    expect(mdpi.mainMarkdown).not.toContain('One two three four five');
+    expect(mdpi.stats.sectionCount).toBe(3);
+    expect(arxiv.mainMarkdown).toContain('One two three four five');
+    expect(arxiv.stats.sectionCount).toBe(3);
+  });
+
+  it("keeps the base's id, so a cross-reference and its figure still resolve", () => {
+    // The figure is anchored to the base section id. Had the version's id
+    // survived instead, the anchor would miss and the figure would vanish.
+    expect(mdpi.mainMarkdown).toContain('Condensed retrieval, in Figure 1');
+    expect(mdpi.mainMarkdown).toContain('![AOD](https://example.org/aod.png)');
+    expect(mdpi.mainMarkdown).toContain('**Figure 1.** AOD series.');
+    expect(mdpi.warnings).toEqual([]);
+  });
+
+  it('reports the abstract and keywords the journal will actually receive', () => {
+    expect(mdpi.metadata.abstract).toBe('Four words only here');
+    expect(mdpi.metadata.keywords).toEqual(['aerosol', 'AOD']);
+    expect(arxiv.metadata.abstract).toBe(
+      'One two three four five six seven eight nine ten eleven twelve',
+    );
+    expect(arxiv.metadata.keywords).toEqual([
+      'aerosol',
+      'optical depth',
+      'sun photometer',
+    ]);
+  });
+
+  it('counts the words of the resolved sections, not of every record', () => {
+    // 4 + 2 + 3 against 12 + 5 + 4 — the versions replace their bases rather
+    // than piling on top of them.
+    expect(mdpi.stats.wordCount).toBe(9);
+    expect(arxiv.stats.wordCount).toBe(21);
+  });
+
+  it("checks the journal's abstract cap against the version it will send", () => {
+    const abstractWarning = /^Abstract is/;
+    expect(mdpi.warnings.some((warning) => abstractWarning.test(warning))).toBe(
+      false,
+    );
+
+    // The same journal, the same cap, with the version taken away: now the cap
+    // judges the long original, which is what it should have said all along.
+    const withoutVersion = buildManuscriptBundle({
+      ...variantInput,
+      sections: baseSections,
+    });
+    expect(withoutVersion.warnings).toContain('Abstract is 12 words (limit 8)');
+  });
+
+  it('lets a version be switched off, and takes versions down with an excluded base', () => {
+    const versionSwitchedOff = manuscriptSectionsForExport({
+      ...variantInput,
+      sections: variantInput.sections.map((section) =>
+        section.id === 's-abs-mdpi'
+          ? { ...section, includeInExport: false }
+          : section,
+      ),
+    });
+    // The version's own flag is the only place an author can say "not this
+    // one", since the resolved section keeps the base's flag.
+    expect(
+      versionSwitchedOff.find((section) => section.id === 's-abs')?.content,
+    ).toBe('One two three four five six seven eight nine ten eleven twelve');
+
+    const baseExcluded = manuscriptSectionsForExport({
+      ...variantInput,
+      sections: variantInput.sections.map((section) =>
+        section.id === 's-abs'
+          ? { ...section, includeInExport: false }
+          : section,
+      ),
+    });
+    // Neither the base nor its now-orphaned version escapes into the export.
+    expect(baseExcluded.map((section) => section.id)).toEqual([
+      's-key',
+      's-res',
+    ]);
+    expect(baseExcluded.map((section) => section.content)).not.toContain(
+      'Four words only here',
+    );
+  });
+
+  it('drops a version whose base was deleted', () => {
+    const orphaned = buildManuscriptBundle({
+      ...variantInput,
+      sections: variantInput.sections.filter(
+        (section) => section.id !== 's-abs',
+      ),
+    });
+
+    expect(orphaned.mainMarkdown).not.toContain('Four words only here');
+    expect(orphaned.metadata.abstract).toBe('');
+    expect(orphaned.stats.sectionCount).toBe(2);
+  });
+
+  it('matches on the journal name when the profile has no key yet', () => {
+    const houseStyle = buildManuscriptBundle({
+      ...variantInput,
+      style: { name: 'Atmosphere (MDPI)' },
+      sections: variantInput.sections.map((section) =>
+        section.id === 's-abs-mdpi'
+          ? { ...section, variantProfileKey: 'Atmosphere (MDPI)' }
+          : section,
+      ),
+    });
+
+    expect(houseStyle.metadata.abstract).toBe('Four words only here');
   });
 });

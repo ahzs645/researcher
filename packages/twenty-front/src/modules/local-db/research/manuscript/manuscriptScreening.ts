@@ -17,6 +17,8 @@
 // This file is the catalogue, the reading of the manuscript into screenable
 // sections, and the run that puts the two together.
 
+import { isNonEmptyString } from '@sniptt/guards';
+
 import { screenCompetingInterests } from './screening/competingInterestsStatement';
 import { screenEthicsApproval } from './screening/ethicsApproval';
 import { screenFunding } from './screening/fundingStatement';
@@ -223,6 +225,12 @@ export const collectScreeningSections = (
     }
     // A section the author has taken out of the export is not in the paper.
     if (section.includeInExport === false) return [];
+    // Nor is an alternative version of one. Screening runs over the records
+    // rather than the assembled bundle, so it is the one reader that has to
+    // drop version rows itself — otherwise a paper with a short abstract for
+    // one journal would be screened as though it had two abstracts, and every
+    // statement written twice would count twice.
+    if (isNonEmptyString(section.variantOfId)) return [];
 
     const text = markdownToProse(section.content ?? '');
     return [

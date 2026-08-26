@@ -41,12 +41,12 @@ const StyledInput = styled.input`
 
 const StyledToggle = styled.label`
   align-items: center;
+  align-self: flex-end;
   color: ${themeCssVariables.font.color.secondary};
   display: flex;
   font-size: ${themeCssVariables.font.size.xs};
   gap: ${themeCssVariables.spacing[2]};
   min-height: 32px;
-  align-self: flex-end;
 `;
 
 const StyledToggleHint = styled.span`

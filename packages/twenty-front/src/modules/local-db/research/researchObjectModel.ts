@@ -1373,6 +1373,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         description: 'Name and active email address',
       },
       {
+        name: 'contributorMetadata',
+        label: 'Contributor metadata',
+        type: 'TEXT',
+        icon: 'IconIdBadge2',
+        description:
+          'Optional JSON layered on the author line: ORCIDs, CRediT roles, ROR affiliations, funding',
+      },
+      {
         name: 'supplementTitle',
         label: 'Supplement cover title',
         type: 'TEXT',

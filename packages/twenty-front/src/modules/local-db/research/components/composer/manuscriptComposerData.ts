@@ -40,6 +40,9 @@ export type ManuscriptRecord = {
   affiliations?: string | null;
   titlePageExtraLines?: string | null;
   correspondingAuthor?: string | null;
+  // Optional structured contributor layer (ORCIDs, CRediT roles, ROR
+  // affiliations, funding) as JSON, keyed to the author line's own authors.
+  contributorMetadata?: string | null;
   supplementTitle?: string | null;
   supplementAuthorLine?: string | null;
   supplementAffiliations?: string | null;
@@ -87,6 +90,7 @@ export const MANUSCRIPT_GQL = {
   affiliations: true,
   titlePageExtraLines: true,
   correspondingAuthor: true,
+  contributorMetadata: true,
   supplementTitle: true,
   supplementAuthorLine: true,
   supplementAffiliations: true,

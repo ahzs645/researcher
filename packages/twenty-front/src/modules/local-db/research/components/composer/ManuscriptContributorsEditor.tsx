@@ -1,6 +1,17 @@
 import { useState } from 'react';
 
 import {
+  joinManuscriptAffiliationDetails,
+  joinManuscriptContributorDetails,
+  parseManuscriptContributorMetadata,
+  realignManuscriptContributorMetadata,
+  serializeManuscriptContributorMetadata,
+  type ManuscriptAffiliationDetail,
+  type ManuscriptContributorDetail,
+  type ManuscriptContributorMetadata,
+  type ManuscriptFundingAward,
+} from '@/local-db/research/manuscript/manuscriptContributorMetadata';
+import {
   parseManuscriptAffiliations,
   parseManuscriptAuthors,
   serializeManuscriptAffiliations,
@@ -10,17 +21,16 @@ import {
 } from '@/local-db/research/manuscript/manuscriptContributors';
 
 import {
-  StyledAffiliationRow,
-  StyledCheckboxLabel,
-  StyledContributorRow,
-  StyledReferenceOptions,
-} from './ManuscriptContributorsEditorStyles';
+  ManuscriptAffiliationRow,
+  ManuscriptAuthorRow,
+} from './ManuscriptContributorRows';
+import { ManuscriptContributorStatements } from './ManuscriptContributorStatements';
+import { ManuscriptFundingFields } from './ManuscriptFundingFields';
 import {
   StyledTitlePageField,
   StyledTitlePageHeading,
   StyledTitlePageHint,
   StyledTitlePageInput,
-  StyledTitlePageRowActions,
   StyledTitlePageSmallButton,
 } from './manuscriptTitlePageStyles';
 
@@ -28,6 +38,9 @@ export type ManuscriptContributorValues = {
   authorLine: string;
   affiliations: string;
   correspondingAuthor: string;
+  // Omitted unless the structured layer actually changed, so a composer that
+  // never loaded one cannot blank it on an unrelated edit.
+  contributorMetadata?: string;
 };
 
 type ManuscriptContributorsEditorProps = {
@@ -71,17 +84,46 @@ export const ManuscriptContributorsEditor = ({
   const [correspondingAuthor, setCorrespondingAuthor] = useState(
     initialValues.correspondingAuthor,
   );
+  const [metadata, setMetadata] = useState<ManuscriptContributorMetadata>(() =>
+    parseManuscriptContributorMetadata(initialValues.contributorMetadata),
+  );
+  const [openDetailId, setOpenDetailId] = useState<string | null>(null);
+  const [lastEmittedMetadata, setLastEmittedMetadata] = useState(
+    initialValues.contributorMetadata ?? '',
+  );
+
+  const authorDetails = joinManuscriptContributorDetails(authors, metadata);
+  const affiliationDetails = joinManuscriptAffiliationDetails(
+    affiliations,
+    metadata,
+  );
 
   const emit = (
     nextAuthors: ManuscriptAuthor[],
     nextAffiliations: ManuscriptAffiliation[],
+    nextMetadata: ManuscriptContributorMetadata = metadata,
     nextCorrespondingAuthor = correspondingAuthor,
-  ) =>
+  ) => {
+    // Re-key to the ids the serialized byline will parse back to: the byline
+    // is the source of truth for order, so the structured layer follows it.
+    const serialized = serializeManuscriptContributorMetadata(
+      realignManuscriptContributorMetadata(
+        nextMetadata,
+        nextAuthors,
+        nextAffiliations,
+      ),
+    );
+    // Only name the field when it actually moved, so a composer that never
+    // loaded a structured block cannot blank one it never saw.
+    const didMetadataChange = serialized !== lastEmittedMetadata;
+    setLastEmittedMetadata(serialized);
     onChange({
       authorLine: serializeManuscriptAuthors(nextAuthors, nextAffiliations),
       affiliations: serializeManuscriptAffiliations(nextAffiliations),
       correspondingAuthor: nextCorrespondingAuthor,
+      ...(didMetadataChange ? { contributorMetadata: serialized } : {}),
     });
+  };
 
   const commitAuthors = (next: ManuscriptAuthor[]) => {
     setAuthors(next);
@@ -91,15 +133,57 @@ export const ManuscriptContributorsEditor = ({
     setAffiliations(next);
     emit(authors, next);
   };
-  const updateAuthor = (
-    authorId: string,
-    update: (author: ManuscriptAuthor) => ManuscriptAuthor,
+  const commitMetadata = (next: ManuscriptContributorMetadata) => {
+    setMetadata(next);
+    emit(authors, affiliations, next);
+  };
+
+  // Detail is stored against the editor's own author ids, so a detail edit and
+  // a funding recipient always name the same person.
+  const updateAuthorDetail = (
+    detailIndex: number,
+    detail: ManuscriptContributorDetail,
   ) =>
-    commitAuthors(
-      authors.map((author) =>
-        author.id === authorId ? update(author) : author,
-      ),
+    commitMetadata({
+      ...metadata,
+      authors: authorDetails.map((entry, index) => ({
+        ...(index === detailIndex ? detail : entry.detail),
+        authorId: authors[index].id,
+      })),
+    });
+
+  const updateAffiliationDetail = (
+    detailIndex: number,
+    detail: ManuscriptAffiliationDetail,
+  ) =>
+    commitMetadata({
+      ...metadata,
+      affiliations: affiliationDetails.map((entry, index) => ({
+        ...(index === detailIndex ? detail : entry.detail),
+        affiliationId: affiliations[index].id,
+      })),
+    });
+
+  const updateFunding = (funding: ManuscriptFundingAward[]) =>
+    commitMetadata({ ...metadata, funding });
+
+  const toggleDetail = (detailId: string) =>
+    setOpenDetailId((current) => (current === detailId ? null : detailId));
+
+  const removeAffiliation = (affiliationId: string) => {
+    const nextAffiliations = affiliations.filter(
+      ({ id }) => id !== affiliationId,
     );
+    const nextAuthors = authors.map((author) => ({
+      ...author,
+      affiliationIds: author.affiliationIds.filter(
+        (id) => id !== affiliationId,
+      ),
+    }));
+    setAuthors(nextAuthors);
+    setAffiliations(nextAffiliations);
+    emit(nextAuthors, nextAffiliations);
+  };
 
   return (
     <>
@@ -123,82 +207,29 @@ export const ManuscriptContributorsEditor = ({
         </StyledTitlePageSmallButton>
       </StyledTitlePageHeading>
       {authors.map((author, authorIndex) => (
-        <StyledContributorRow key={author.id}>
-          <StyledTitlePageInput
-            aria-label={`Author ${authorIndex + 1} name`}
-            placeholder="Author name"
-            value={author.name}
-            onChange={(event) =>
-              updateAuthor(author.id, (current) => ({
-                ...current,
-                name: event.target.value,
-              }))
-            }
-          />
-          <StyledReferenceOptions>
-            {affiliations.map((affiliation, affiliationIndex) => (
-              <StyledCheckboxLabel key={affiliation.id}>
-                <input
-                  type="checkbox"
-                  aria-label={`${author.name || `Author ${authorIndex + 1}`} affiliation ${affiliationIndex + 1}`}
-                  checked={author.affiliationIds.includes(affiliation.id)}
-                  onChange={(event) =>
-                    updateAuthor(author.id, (current) => ({
-                      ...current,
-                      affiliationIds: event.target.checked
-                        ? [...current.affiliationIds, affiliation.id]
-                        : current.affiliationIds.filter(
-                            (id) => id !== affiliation.id,
-                          ),
-                    }))
-                  }
-                />
-                {affiliationIndex + 1}
-              </StyledCheckboxLabel>
-            ))}
-            <StyledCheckboxLabel>
-              <input
-                type="checkbox"
-                aria-label={`${author.name || `Author ${authorIndex + 1}`} corresponding author`}
-                checked={author.isCorresponding}
-                onChange={(event) =>
-                  updateAuthor(author.id, (current) => ({
-                    ...current,
-                    isCorresponding: event.target.checked,
-                  }))
-                }
-              />
-              Corresponding (*)
-            </StyledCheckboxLabel>
-          </StyledReferenceOptions>
-          <StyledTitlePageRowActions>
-            <StyledTitlePageSmallButton
-              type="button"
-              aria-label={`Move author ${authorIndex + 1} up`}
-              disabled={authorIndex === 0}
-              onClick={() => commitAuthors(moveItem(authors, authorIndex, -1))}
-            >
-              ↑
-            </StyledTitlePageSmallButton>
-            <StyledTitlePageSmallButton
-              type="button"
-              aria-label={`Move author ${authorIndex + 1} down`}
-              disabled={authorIndex === authors.length - 1}
-              onClick={() => commitAuthors(moveItem(authors, authorIndex, 1))}
-            >
-              ↓
-            </StyledTitlePageSmallButton>
-            <StyledTitlePageSmallButton
-              type="button"
-              aria-label={`Remove author ${authorIndex + 1}`}
-              onClick={() =>
-                commitAuthors(authors.filter(({ id }) => id !== author.id))
-              }
-            >
-              Remove
-            </StyledTitlePageSmallButton>
-          </StyledTitlePageRowActions>
-        </StyledContributorRow>
+        <ManuscriptAuthorRow
+          key={author.id}
+          affiliations={affiliations}
+          author={author}
+          detail={authorDetails[authorIndex].detail}
+          index={authorIndex}
+          isDetailOpen={openDetailId === author.id}
+          isFirst={authorIndex === 0}
+          isLast={authorIndex === authors.length - 1}
+          onChange={(next) =>
+            commitAuthors(
+              authors.map((entry) => (entry.id === author.id ? next : entry)),
+            )
+          }
+          onChangeDetail={(detail) => updateAuthorDetail(authorIndex, detail)}
+          onMove={(offset) =>
+            commitAuthors(moveItem(authors, authorIndex, offset))
+          }
+          onRemove={() =>
+            commitAuthors(authors.filter(({ id }) => id !== author.id))
+          }
+          onToggleDetail={() => toggleDetail(author.id)}
+        />
       ))}
       <StyledTitlePageHeading>
         Ordered affiliations
@@ -215,68 +246,40 @@ export const ManuscriptContributorsEditor = ({
         </StyledTitlePageSmallButton>
       </StyledTitlePageHeading>
       {affiliations.map((affiliation, affiliationIndex) => (
-        <StyledAffiliationRow key={affiliation.id}>
-          <span>{affiliationIndex + 1}</span>
-          <StyledTitlePageInput
-            aria-label={`Affiliation ${affiliationIndex + 1}`}
-            value={affiliation.name}
-            onChange={(event) =>
-              commitAffiliations(
-                affiliations.map((entry) =>
-                  entry.id === affiliation.id
-                    ? { ...entry, name: event.target.value }
-                    : entry,
-                ),
-              )
-            }
-          />
-          <StyledTitlePageRowActions>
-            <StyledTitlePageSmallButton
-              type="button"
-              aria-label={`Move affiliation ${affiliationIndex + 1} up`}
-              disabled={affiliationIndex === 0}
-              onClick={() =>
-                commitAffiliations(moveItem(affiliations, affiliationIndex, -1))
-              }
-            >
-              ↑
-            </StyledTitlePageSmallButton>
-            <StyledTitlePageSmallButton
-              type="button"
-              aria-label={`Move affiliation ${affiliationIndex + 1} down`}
-              disabled={affiliationIndex === affiliations.length - 1}
-              onClick={() =>
-                commitAffiliations(moveItem(affiliations, affiliationIndex, 1))
-              }
-            >
-              ↓
-            </StyledTitlePageSmallButton>
-            <StyledTitlePageSmallButton
-              type="button"
-              aria-label={`Remove affiliation ${affiliationIndex + 1}`}
-              onClick={() => {
-                const nextAffiliations = affiliations.filter(
-                  ({ id }) => id !== affiliation.id,
-                );
-                const nextAuthors = authors.map((entry) => ({
-                  ...entry,
-                  affiliationIds: entry.affiliationIds.filter(
-                    (id) => id !== affiliation.id,
-                  ),
-                }));
-                setAuthors(nextAuthors);
-                setAffiliations(nextAffiliations);
-                emit(nextAuthors, nextAffiliations);
-              }}
-            >
-              Remove
-            </StyledTitlePageSmallButton>
-          </StyledTitlePageRowActions>
-        </StyledAffiliationRow>
+        <ManuscriptAffiliationRow
+          key={affiliation.id}
+          affiliation={affiliation}
+          detail={affiliationDetails[affiliationIndex].detail}
+          index={affiliationIndex}
+          isDetailOpen={openDetailId === affiliation.id}
+          isFirst={affiliationIndex === 0}
+          isLast={affiliationIndex === affiliations.length - 1}
+          onChange={(next) =>
+            commitAffiliations(
+              affiliations.map((entry) =>
+                entry.id === affiliation.id ? next : entry,
+              ),
+            )
+          }
+          onChangeDetail={(detail) =>
+            updateAffiliationDetail(affiliationIndex, detail)
+          }
+          onMove={(offset) =>
+            commitAffiliations(moveItem(affiliations, affiliationIndex, offset))
+          }
+          onRemove={() => removeAffiliation(affiliation.id)}
+          onToggleDetail={() => toggleDetail(affiliation.id)}
+        />
       ))}
       <StyledTitlePageHint>
         Reordering affiliations automatically renumbers every linked author.
       </StyledTitlePageHint>
+      <ManuscriptFundingFields
+        authors={authors}
+        awards={metadata.funding}
+        onChange={updateFunding}
+      />
+      <ManuscriptContributorStatements authors={authors} metadata={metadata} />
       <StyledTitlePageField>
         Corresponding author and email
         <StyledTitlePageInput
@@ -284,7 +287,7 @@ export const ManuscriptContributorsEditor = ({
           value={correspondingAuthor}
           onChange={(event) => {
             setCorrespondingAuthor(event.target.value);
-            emit(authors, affiliations, event.target.value);
+            emit(authors, affiliations, metadata, event.target.value);
           }}
         />
       </StyledTitlePageField>

@@ -1044,6 +1044,7 @@ export const recordTables = {
     affiliations: v.optional(v.string()),
     titlePageExtraLines: v.optional(v.string()),
     correspondingAuthor: v.optional(v.string()),
+    contributorMetadata: v.optional(v.string()),
     supplementTitle: v.optional(v.string()),
     supplementAuthorLine: v.optional(v.string()),
     supplementAffiliations: v.optional(v.string()),

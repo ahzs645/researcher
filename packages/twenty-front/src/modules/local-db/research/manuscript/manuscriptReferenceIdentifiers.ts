@@ -650,10 +650,16 @@ export const htmlMetaToCslItem = ({
     metaContent(document, ['og:title', 'twitter:title']) ??
     xmlText(document.querySelector('title'));
 
-  const authorNames = [
-    ...metaContents(document, ['citation_author']),
-    ...metaContents(document, ['dc.creator', 'author']),
-  ];
+  // Whichever vocabulary is present, not both concatenated. Publishers
+  // routinely emit Highwire and Dublin Core side by side for the same people,
+  // and concatenating them imported every author twice — `metaContents` dedupes
+  // by element, which cannot see that two different tags name one person. This
+  // follows the same order of trustworthiness the title and container use.
+  const highwireAuthors = metaContents(document, ['citation_author']);
+  const authorNames =
+    highwireAuthors.length > 0
+      ? highwireAuthors
+      : metaContents(document, ['dc.creator', 'author']);
   const container = metaContent(document, [
     'citation_journal_title',
     'citation_conference_title',

@@ -422,6 +422,42 @@ describe('webpageCslItem', () => {
 describe('htmlMetaToCslItem', () => {
   const accessedOn = new Date('2026-08-26T10:00:00Z');
 
+  it('takes one vocabulary, not both, when a page carries Highwire and Dublin Core', () => {
+    // Publishers routinely emit both for the same people. Concatenating them
+    // imported every author twice, because the element-level dedupe cannot see
+    // that two different tags name one person.
+    const item = htmlMetaToCslItem({
+      html: [
+        '<html><head>',
+        '<meta name="citation_title" content="Absorption closure over four sites">',
+        '<meta name="citation_author" content="Jalil, Ahmad">',
+        '<meta name="citation_author" content="Kazemian, Hossein">',
+        '<meta name="DC.creator" content="Jalil, Ahmad">',
+        '<meta name="DC.creator" content="Kazemian, Hossein">',
+        '</head><body></body></html>',
+      ].join(''),
+      url: 'https://example.org/article',
+      accessedOn,
+    });
+
+    expect(item.author).toHaveLength(2);
+  });
+
+  it('falls back to Dublin Core when a page carries no Highwire authors', () => {
+    const item = htmlMetaToCslItem({
+      html: [
+        '<html><head>',
+        '<meta name="DC.title" content="A repository record">',
+        '<meta name="DC.creator" content="Jalil, Ahmad">',
+        '</head><body></body></html>',
+      ].join(''),
+      url: 'https://repository.example.org/item/1',
+      accessedOn,
+    });
+
+    expect(item.author).toHaveLength(1);
+  });
+
   it('reads Highwire citation_* tags into a journal article', () => {
     const item = htmlMetaToCslItem({
       html: HIGHWIRE_HTML,

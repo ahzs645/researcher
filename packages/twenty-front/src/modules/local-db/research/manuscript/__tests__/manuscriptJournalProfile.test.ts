@@ -17,7 +17,6 @@ const journal = {
   abstractWordLimit: 350,
   sectionNumbering: true,
   requiredArtifacts: ['COVER_LETTER', 'SUGGESTED_REVIEWERS'],
-  outputFormats: ['DOCX', 'PDF', 'ZIP'],
   // Unset on this journal: must not travel as an assertion of a default.
   supplementPrefix: '',
   twoColumn: null,
@@ -127,11 +126,11 @@ describe('parseJournalProfile', () => {
         bodyFontSize: 'twelve',
         sectionNumbering: 'yes',
         requiredArtifacts: 'COVER_LETTER',
-        outputFormats: ['DOCX'],
+        keywordMaximum: 8,
       }),
     );
 
-    expect(restored).toEqual({ name: 'Odd', outputFormats: ['DOCX'] });
+    expect(restored).toEqual({ name: 'Odd', keywordMaximum: 8 });
   });
 });
 

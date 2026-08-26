@@ -121,8 +121,8 @@ describe('parseJatsArticle', () => {
     const introduction = sections.find(
       (section) => section.name === 'Introduction',
     );
-    const method = sections.find((section) =>
-      section.name.startsWith('Formal'),
+    const method = sections.find(
+      (section) => section.name?.startsWith('Formal') === true,
     );
     const completeness = sections.find(
       (section) => section.name === 'Completeness',
@@ -161,7 +161,9 @@ describe('parseJatsArticle', () => {
       // without pixels and says where they were rather than inventing them.
       imageSource: 'NONE',
     });
-    expect(byKey.get('fig1')?.notes).toContain('figure1.png');
+    // A package-relative filename is not something the composer can load,
+    // so it does not become an image URL that would render broken.
+    expect(byKey.get('fig1')?.imageUrl).toBeUndefined();
   });
 
   it('reads the reference list into fields, not one blob', () => {
@@ -182,7 +184,7 @@ describe('parseJatsArticle', () => {
     const prepared = preparePortableResearchPaperImport(
       manifest,
       manifest.sections.map((section) => ({
-        name: section.name,
+        name: section.name ?? '',
         sectionType: section.sectionType,
         placement: section.placement === 'SUPPLEMENT' ? 'SUPPLEMENT' : 'MAIN',
         content: section.content,

@@ -146,6 +146,15 @@ const captionText = (element: Element): string => {
 
 type AssetHarvest = { figures: FigureLike[]; marker: string };
 
+const resolvedArtwork = (
+  href: string,
+): Pick<FigureLike, 'imageSource' | 'imageUrl'> => {
+  if (href.startsWith('data:'))
+    return { imageSource: 'UPLOAD', imageUrl: href };
+  if (/^https?:\/\//i.test(href)) return { imageSource: 'URL', imageUrl: href };
+  return { imageSource: 'NONE' };
+};
+
 const harvestAsset = (
   element: Element,
   sectionId: string,
@@ -213,14 +222,12 @@ const harvestAsset = (
         ...base,
         name: label.length > 0 ? label : `Figure ${index + 1}`,
         assetKind: 'FIGURE',
-        // A JATS package references its artwork by filename; the pixels live
-        // beside the XML, not in it, so the figure arrives without an image
-        // and says so rather than pretending to one.
-        imageSource: href.startsWith('data:') ? 'UPLOAD' : 'NONE',
-        ...(href.startsWith('data:') ? { imageUrl: href } : {}),
-        ...(href.length > 0 && !href.startsWith('data:')
-          ? { notes: `Artwork file referenced by the JATS package: ${href}` }
-          : {}),
+        // A JATS package references its artwork by path: the pixels live
+        // beside the XML, not in it. An absolute URL is something the
+        // composer can actually load; a package-relative filename means
+        // nothing outside the package, so the figure arrives without an
+        // image and the bundle's own "has no image yet" warning says so.
+        ...resolvedArtwork(href),
       },
     ],
     marker: `[[asset:${refKey}]]`,

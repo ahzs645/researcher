@@ -31,12 +31,10 @@ const JOURNAL_PROFILE_KEYS = [
   'sectionSkeleton',
   'submissionRequirements',
   'requiredArtifacts',
-  'outputFormats',
   'abstractWordLimit',
   'abstractWordMinimum',
   'keywordMinimum',
   'keywordMaximum',
-  'notes',
 ] as const satisfies ReadonlyArray<keyof JournalStyle>;
 
 export type JournalProfileKey = (typeof JOURNAL_PROFILE_KEYS)[number];
@@ -54,10 +52,7 @@ export type JournalProfileFile = {
   profile: PortableJournalProfile;
 };
 
-const STRING_ARRAY_KEYS = new Set<JournalProfileKey>([
-  'requiredArtifacts',
-  'outputFormats',
-]);
+const STRING_ARRAY_KEYS = new Set<JournalProfileKey>(['requiredArtifacts']);
 
 // The fields this module adds on top of the style keys, which the override
 // serializer does not know about.
@@ -72,7 +67,6 @@ const PROFILE_STRING_KEYS = new Set<JournalProfileKey>([
   'profileKey',
   'sectionSkeleton',
   'submissionRequirements',
-  'notes',
 ]);
 
 const isStringArray = (value: unknown): value is string[] =>

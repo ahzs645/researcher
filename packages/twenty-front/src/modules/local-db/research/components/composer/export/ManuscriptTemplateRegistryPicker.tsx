@@ -80,7 +80,7 @@ export const ManuscriptTemplateRegistryPicker = ({
         <StyledField>
           Template
           <StyledSelect
-            aria-label="Template"
+            aria-label="Journal template"
             value={templateId}
             disabled={disabled}
             onChange={(event) => {
@@ -101,7 +101,7 @@ export const ManuscriptTemplateRegistryPicker = ({
         <StyledField>
           Journal
           <StyledSelect
-            aria-label="Journal"
+            aria-label="Journal in family"
             value={journal}
             disabled={disabled || journals.length === 0}
             onChange={(event) => setJournal(event.target.value)}

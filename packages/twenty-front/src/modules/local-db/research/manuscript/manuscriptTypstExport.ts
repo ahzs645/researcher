@@ -1,10 +1,7 @@
 import { isNonEmptyString } from '@sniptt/guards';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
-import {
-  buildManuscriptBibtex,
-  manuscriptBibtexCitationKey,
-} from './manuscriptBibtexWrite';
+import { manuscriptBibtexCitationKey } from './manuscriptBibtexWrite';
 import { citationItemKey } from './manuscriptCitations';
 import { resolveCslStyleXml } from './manuscriptCiteproc';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
@@ -13,9 +10,11 @@ import { COMMAND_TEXT } from './manuscriptMathGlyphs';
 import { PAGE_MARGIN_POINTS } from './manuscriptPageMetrics';
 import {
   collectManuscriptSourceImages,
+  manuscriptSourceBibtexFile,
   manuscriptSourceByline,
   manuscriptSourceCaption,
   manuscriptSourceFigureImage,
+  manuscriptSourceFiguresByKey,
   manuscriptSourceLabel,
   manuscriptSourceLabelPrefix,
   prepareManuscriptSourceBundle,
@@ -188,7 +187,6 @@ export const latexToTypstMath = (latex: string): string => {
 };
 
 type TypstContext = {
-  figuresByKey: Map<string, NumberedFigure>;
   addImage: (dataUrl: string, hint: string) => string | null;
   sectionNumbering: boolean;
   inline: ManuscriptSourceInlineWriter;
@@ -460,8 +458,8 @@ const preambleToTypst = (bundle: ManuscriptBundle): string[] => {
   const { style } = bundle;
   const bodyFontSize = Number(style.bodyFontSize) || 12;
   const lineSpacing = Math.max(1, Number(style.lineSpacing) || 1.5);
-  const authors = manuscriptSourceByline(bundle.metadata).authors.map((author) =>
-    typstString(author.name),
+  const authors = manuscriptSourceByline(bundle.metadata).authors.map(
+    (author) => typstString(author.name),
   );
   return [
     `#set document(title: ${typstString(bundle.metadata.title)}${
@@ -522,11 +520,8 @@ export const buildManuscriptTypstFiles = (
   bundle: ManuscriptBundle,
 ): ExportFile[] => {
   const images = collectManuscriptSourceImages();
-  const figuresByKey = new Map(
-    bundle.numberedFigures.map((figure) => [figure.refKey ?? figure.id, figure]),
-  );
+  const figuresByKey = manuscriptSourceFiguresByKey(bundle);
   const context: TypstContext = {
-    figuresByKey,
     addImage: images.addImage,
     sectionNumbering: bundle.style.sectionNumbering === true,
     inline: typstInlineWriter(figuresByKey, images.addImage),
@@ -556,11 +551,7 @@ export const buildManuscriptTypstFiles = (
       mimeType: 'text/plain',
       content: document,
     },
-    {
-      filename: 'references.bib',
-      mimeType: 'application/x-bibtex',
-      content: buildManuscriptBibtex(bundle.cslJson),
-    },
+    manuscriptSourceBibtexFile(bundle),
     ...(styleXml === null
       ? []
       : [

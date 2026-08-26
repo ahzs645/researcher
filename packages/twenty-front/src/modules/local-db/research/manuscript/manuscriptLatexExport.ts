@@ -1,19 +1,18 @@
 import { isNonEmptyString } from '@sniptt/guards';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
-import {
-  buildManuscriptBibtex,
-  manuscriptBibtexCitationKey,
-} from './manuscriptBibtexWrite';
+import { manuscriptBibtexCitationKey } from './manuscriptBibtexWrite';
 import { citationItemKey } from './manuscriptCitations';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { sanitizeUrl } from './manuscriptHtmlMarkdown';
 import { PAGE_MARGIN_POINTS } from './manuscriptPageMetrics';
 import {
   collectManuscriptSourceImages,
+  manuscriptSourceBibtexFile,
   manuscriptSourceByline,
   manuscriptSourceCaption,
   manuscriptSourceFigureImage,
+  manuscriptSourceFiguresByKey,
   manuscriptSourceLabel,
   manuscriptSourceLabelPrefix,
   prepareManuscriptSourceBundle,
@@ -77,9 +76,6 @@ const escapeLatexUrl = (value: string): string =>
   );
 
 type LatexContext = {
-  // Cross-reference targets by the refKey the anchor resolved to, so a
-  // reference knows whether it points at an equation (`\eqref`) or not.
-  figuresByKey: Map<string, NumberedFigure>;
   // Writes an image out as a sidecar file and returns the name to reference.
   addImage: (dataUrl: string, hint: string) => string | null;
   sectionNumbering: boolean;
@@ -252,7 +248,8 @@ const latexBlockWriter = (
 ): ManuscriptSourceBlockWriter => ({
   paragraph: (text) => inlineToLatex(text, context),
   heading: (level, text) => headingToLatex(level, text, context),
-  code: (lines) => ['\\begin{verbatim}', ...lines, '\\end{verbatim}'].join('\n'),
+  code: (lines) =>
+    ['\\begin{verbatim}', ...lines, '\\end{verbatim}'].join('\n'),
   displayMath: (lines) =>
     ['\\begin{equation*}', lines.join('\n').trim(), '\\end{equation*}'].join(
       '\n',
@@ -441,9 +438,7 @@ const titleBlockToLatex = (
     .map((author) =>
       [
         escapeLatex(author.name),
-        author.markers.length > 0
-          ? `\\textsuperscript{${author.markers}}`
-          : '',
+        author.markers.length > 0 ? `\\textsuperscript{${author.markers}}` : '',
         author.isCorresponding ? '\\textsuperscript{*}' : '',
       ].join(''),
     )
@@ -481,7 +476,10 @@ const preambleToLatex = (bundle: ManuscriptBundle): string[] => {
     style.figureLabelFormat,
     'Figure',
   );
-  const tableName = manuscriptSourceLabelPrefix(style.tableLabelFormat, 'Table');
+  const tableName = manuscriptSourceLabelPrefix(
+    style.tableLabelFormat,
+    'Table',
+  );
   return [
     `\\documentclass[${options.join(',')}]{article}`,
     '\\usepackage[T1]{fontenc}',
@@ -517,11 +515,8 @@ export const buildManuscriptLatexFiles = (
   bundle: ManuscriptBundle,
 ): ExportFile[] => {
   const images = collectManuscriptSourceImages();
-  const figuresByKey = new Map(
-    bundle.numberedFigures.map((figure) => [figure.refKey ?? figure.id, figure]),
-  );
+  const figuresByKey = manuscriptSourceFiguresByKey(bundle);
   const context: LatexContext = {
-    figuresByKey,
     addImage: images.addImage,
     sectionNumbering: bundle.style.sectionNumbering === true,
     inline: latexInlineWriter(figuresByKey, images.addImage),
@@ -545,11 +540,7 @@ export const buildManuscriptLatexFiles = (
       mimeType: 'application/x-tex',
       content: document,
     },
-    {
-      filename: 'references.bib',
-      mimeType: 'application/x-bibtex',
-      content: buildManuscriptBibtex(bundle.cslJson),
-    },
+    manuscriptSourceBibtexFile(bundle),
     ...images.imageFiles(),
   ];
 };

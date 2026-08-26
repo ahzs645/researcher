@@ -1,6 +1,7 @@
 import { isNonEmptyString } from '@sniptt/guards';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
+import { buildManuscriptBibtex } from './manuscriptBibtexWrite';
 import {
   citationAnchorKeys,
   CITATION_ANCHOR_PATTERN,
@@ -101,6 +102,30 @@ export const manuscriptSourceByline = (
     ),
   };
 };
+
+// The assets a cross-reference can land on, under the key its anchor resolved
+// to — the same key the target's own label is written from, so a `\ref` and a
+// `<label>` always name the same asset.
+export const manuscriptSourceFiguresByKey = (
+  bundle: Pick<ManuscriptBundle, 'numberedFigures'>,
+): Map<string, NumberedFigure> =>
+  new Map(
+    bundle.numberedFigures.map((figure) => [
+      figure.refKey ?? figure.id,
+      figure,
+    ]),
+  );
+
+// Both documents name this file themselves — `\bibliography{references}` and
+// `#bibliography("references.bib")` — so the name lives with the file rather
+// than being spelled out twice beside two citations of it.
+export const manuscriptSourceBibtexFile = (
+  bundle: Pick<ManuscriptBundle, 'cslJson'>,
+): ExportFile => ({
+  filename: 'references.bib',
+  mimeType: 'application/x-bibtex',
+  content: buildManuscriptBibtex(bundle.cslJson),
+});
 
 export type ManuscriptSourceImages = {
   // The filename to reference, or null when the source is not a base64 data
@@ -214,10 +239,8 @@ export const renderManuscriptSourceInline = (
   const parked: string[] = [];
   const park = (markup: string): string =>
     `${PLACEHOLDER}${parked.push(markup) - 1}${PLACEHOLDER}`;
-  const wrap = (
-    { open, close }: ManuscriptSourceWrap,
-    inner: string,
-  ): string => `${park(open)}${inner}${park(close)}`;
+  const wrap = ({ open, close }: ManuscriptSourceWrap, inner: string): string =>
+    `${park(open)}${inner}${park(close)}`;
 
   const working = value
     .replace(CITATION_ANCHOR_PATTERN, (_match, keys: string, label: string) =>
@@ -235,8 +258,7 @@ export const renderManuscriptSourceInline = (
     .replace(/`([^`]+)`/g, (_match, code: string) => park(writer.code(code)))
     .replace(
       /!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g,
-      (_match, alt: string, source: string) =>
-        park(writer.image(source, alt)),
+      (_match, alt: string, source: string) => park(writer.image(source, alt)),
     )
     .replace(/<sup>([\s\S]*?)<\/sup>/gi, (_match, inner: string) =>
       wrap(writer.superscript, inner),
@@ -440,7 +462,7 @@ export type ManuscriptSourceNodeWriter = {
 // heading followed by ordinary prose, and only their heading text says what
 // they are.
 export const renderManuscriptSourceNodes = (
-  bundle: ManuscriptBundle,
+  bundle: Pick<ManuscriptBundle, 'nodes' | 'style'>,
   writer: ManuscriptSourceNodeWriter,
 ): string[] => {
   const body: string[] = [];

@@ -1045,9 +1045,21 @@ export const useManuscriptComposer = () => {
     });
 
   const selectJournal = async (nextJournalId: string) => {
-    const selectedJournal = journals.find(
+    // A journal added a moment ago — imported from a file, or taken from the
+    // template registry — is not in the list this render closed over yet.
+    // Fetching once before giving up is the difference between "added and
+    // selected" and "could not find the selected journal".
+    let selectedJournal = journals.find(
       (journal) => journal.id === nextJournalId,
     );
+    if (!isDefined(selectedJournal)) {
+      const refetched = await refetchJournals();
+      selectedJournal = (
+        (refetched?.data?.journalTemplates?.edges ?? []) as Array<{
+          node: JournalRecord;
+        }>
+      ).find(({ node }) => node.id === nextJournalId)?.node;
+    }
     if (!isDefined(selectedJournal)) {
       throw new Error('Could not find the selected journal');
     }

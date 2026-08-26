@@ -265,18 +265,42 @@ over.
 
 Ordered by what it would change about using the app.
 
-### Dangling seams — built but not connected
+### Dangling seams — closed
 
-1. **Retractions do not reach the readiness panel.**
-   `retractionSubmissionChecks()` is exported and tested, and nothing calls it.
-   The scan works from its own button; the checks were meant to sit beside
-   unresolved citations.
-2. **Screening findings do not reach the export or the submission package.**
-   They render in the readiness panel only. Nothing blocks an export by design,
-   but a package could carry the report.
-3. **Comments do not render on the application-import screen.**
-   `ApplicationImportPage` creates sections without notes, so imported comments
-   reach it and are not shown. The wizard path renders them.
+These three were built-but-unconnected when this record was first written. All
+three are now wired, and the shape of each fix was a decision in its own right.
+
+1. **Retractions and screening reach the readiness list.** `validateSubmission`
+   takes them as an argument rather than computing them, because it is pure and
+   synchronous and they are neither: the retraction verdicts are session state
+   from a Crossref scan, and screening reads the manuscript sections the bundle
+   flattens away. *Instead of:* making `validateSubmission` async and letting it
+   fetch — which would have put a network call behind every keystroke that
+   re-renders the export panel.
+2. **Screening never raises an ERROR, and now produces a file.** One aggregate
+   line naming the absent and weak items, plus `screening-report.txt` in the
+   submission ZIP. *Instead of:* one check per finding (a dozen new rows would
+   bury the handful of real errors in a list already running about fifteen), or
+   gating the export (the panel promises the author these do not block, and a
+   heuristic false negative would strand a finished paper).
+3. **The scan result is an in-memory atom, never storage.** A scan is true only
+   of the reference list as it stood when it ran. The References tab retires one
+   whose bibliography has changed underneath it, and says so rather than quietly
+   forgetting the author ever ran it — decided there, because that is where the
+   reference ids are and a count of references is not evidence that they are the
+   same references. *Instead of:* persisting the scan (a stale all-clear would
+   outlive the references it was about) or re-scanning at export (a network call
+   on a button that must work offline).
+4. **The application-import screen renders the whole warning channel.** The
+   original bug was larger than "comments are not shown": `ApplicationImportPage`
+   never rendered `document.warnings` at all, so the parser's own "this document
+   has N comments" line had never reached a grant author either. Comments now
+   land in section notes via the wizard's own formatter, so the same document
+   reads identically on both paths. The count is stated once, in the warnings and
+   not also in the snackbar — `summarizeWordRevisions` counts one comment per
+   anchor in `document.xml` while only comments with a surviving body in
+   `comments.xml` can reach a note, so two counts could legitimately disagree on
+   screen.
 
 ### Fidelity gaps
 
@@ -305,12 +329,34 @@ Ordered by what it would change about using the app.
     and group authors, and writing the rendered contributions/funding
     statements into manuscript sections.
 
+### Closed since
+
+- **Tracked formatting revisions (`w:rPrChange`, `w:pPrChange`) are resolved.**
+  This record previously described the gap as "detected but not applied", and
+  understated it: because Word omits default properties, an empty current
+  property set left the previous copy as the only one present, so a run the
+  reviewer had *un*-bolded still read as bold under ACCEPT and invented a
+  heading. Both resolutions were wrong, in opposite directions. Generalised to
+  all seven `*PrChange` elements, since `trPr` and `tcPr` were already in the
+  properties strip and leaving their partners unhandled would have left the same
+  residue in tables.
+- **A JATS package imports with its artwork.** Matching is normalised path, then
+  bare filename, then filename without extension — the last is not an edge case,
+  because a typesetter writes `<graphic xlink:href="fig1"/>` so one article can
+  be set from `fig1.tif` for print and `fig1.jpg` for web. Capped at 10 MB per
+  image and 40 MB per package, rejected inside the unzip filter so an oversized
+  entry is never inflated: everything here lives in the browser and base64 costs
+  another third. A bare `.xml` still degrades to no image, unchanged.
+- **`manuscriptScreening.ts` is a 282-line barrel** over thirteen modules in
+  `manuscript/screening/`. Split by *check* rather than by tool, because
+  rtransparent covers three unrelated statements and SciScore two. The test file
+  is byte-identical across the refactor, which is what makes it one.
+
 ### House-keeping
 
-11. **`manuscriptScreening.ts` is 913 lines** against a 500-line guideline.
-    `manuscriptLatexExport.ts` (555) and `manuscriptTypstExport.ts` (575) are
-    just over; extracting `latexToTypstMath` and the LaTeX tabular span-filler
-    into their own modules would bring both under.
+11. **`manuscriptLatexExport.ts` (555) and `manuscriptTypstExport.ts` (575)** are
+    just over the 500-line guideline. The ~250 lines they once duplicated now
+    live in `manuscriptSourceExport.ts`; what remains is genuinely per-format.
 12. **Image-based screening is not implemented** — rainbow colour maps
     (JetFighter), bar graphs of continuous data (Barzooka). They need pixels
     and a model, and were deliberately skipped.

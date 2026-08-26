@@ -1,4 +1,5 @@
 import { styled } from '@linaria/react';
+import { isNonEmptyString } from '@sniptt/guards';
 import { useEffect, useMemo, useState } from 'react';
 import { IconChevronDown, IconChevronRight } from 'twenty-ui/display';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
@@ -8,6 +9,7 @@ import {
   buildManuscriptSectionOutlineTree,
   sectionAncestorIds,
 } from '@/local-db/research/components/composer/manuscriptSectionOutlineTree';
+import { sectionVariantsByBaseId } from '@/local-db/research/manuscript/manuscriptSectionVariants';
 import {
   type SectionLike,
   type SectionPlacement,
@@ -98,8 +100,12 @@ type ManuscriptSectionOutlineProps = {
   onEditFrontMatter: () => void;
   onSelectSection: (sectionId: string) => void;
   onReorderSection: (sourceId: string, targetId: string) => void;
+  // Every section record, versions included: the outline lists the paper's own
+  // sections and reads the versions to say which one a row exports as.
   sections: SectionLike[];
   selectedSectionId?: string;
+  activeVariantKey: string | null;
+  activeJournalLabel: string | null;
 };
 
 export const ManuscriptSectionOutline = ({
@@ -109,8 +115,21 @@ export const ManuscriptSectionOutline = ({
   onReorderSection,
   sections,
   selectedSectionId,
+  activeVariantKey,
+  activeJournalLabel,
 }: ManuscriptSectionOutlineProps) => {
-  const frontMatterCount = sections.filter(
+  const variantsByBaseId = useMemo(
+    () => sectionVariantsByBaseId(sections),
+    [sections],
+  );
+  // The outline is the shape of the paper. A version is an alternative wording
+  // of a section already in it, so it is never a row of its own, never in a
+  // group's count, and never a drag target.
+  const paperSections = useMemo(
+    () => sections.filter((section) => !isNonEmptyString(section.variantOfId)),
+    [sections],
+  );
+  const frontMatterCount = paperSections.filter(
     (section) => section.placement === 'FRONT_MATTER',
   ).length;
   const groupedSections = useMemo(() => {
@@ -119,11 +138,11 @@ export const ManuscriptSectionOutline = ({
       backMatter: [],
       supplement: [],
     };
-    sections
+    paperSections
       .filter((section) => section.placement !== 'FRONT_MATTER')
       .forEach((section) => groups[groupIdForSection(section)].push(section));
     return groups;
-  }, [sections]);
+  }, [paperSections]);
   const writingSectionCount = Object.values(groupedSections).reduce(
     (count, groupSections) => count + groupSections.length,
     0,
@@ -219,6 +238,9 @@ export const ManuscriptSectionOutline = ({
                       depth={0}
                       expandedSectionIds={expandedSectionIds}
                       selectedSectionId={selectedSectionId}
+                      variantsByBaseId={variantsByBaseId}
+                      activeVariantKey={activeVariantKey}
+                      activeJournalLabel={activeJournalLabel}
                       onChangePlacement={onChangePlacement}
                       onSelectSection={onSelectSection}
                       onReorderSection={onReorderSection}

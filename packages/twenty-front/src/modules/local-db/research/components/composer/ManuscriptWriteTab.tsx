@@ -1,5 +1,7 @@
 import { styled } from '@linaria/react';
-import { useEffect, useRef, useState } from 'react';
+import { isNonEmptyString } from '@sniptt/guards';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { isDefined } from 'twenty-shared/utils';
 import { H2Title } from 'twenty-ui/display';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
@@ -7,12 +9,17 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 import { ManuscriptImportPanel } from '@/local-db/research/components/ManuscriptImportPanel';
 import { ManuscriptDuplicateSectionReview } from '@/local-db/research/components/composer/ManuscriptDuplicateSectionReview';
 import { ManuscriptSectionOutline } from '@/local-db/research/components/composer/ManuscriptSectionOutline';
+import { ManuscriptSectionVersionBar } from '@/local-db/research/components/composer/ManuscriptSectionVersionBar';
 import { ManuscriptWriteEditor } from '@/local-db/research/components/composer/ManuscriptWriteEditor';
 import { type ExistingJournalTemplate } from '@/local-db/research/import-wizard/hooks/useManuscriptImportCommit';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { extractCitationKeys } from '@/local-db/research/manuscript/manuscriptCrossReference';
 import { type ScaffoldSectionDraft } from '@/local-db/research/manuscript/manuscriptScaffold';
 import { findDuplicateSectionGroups } from '@/local-db/research/manuscript/manuscriptSectionDedupe';
+import {
+  sectionVariantKey,
+  sectionVariantsByBaseId,
+} from '@/local-db/research/manuscript/manuscriptSectionVariants';
 import { type SubmissionRequirementTemplate } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 import {
   type FigureLike,
@@ -21,6 +28,7 @@ import {
   type SectionLike,
   type SectionPlacement,
 } from '@/local-db/research/manuscript/manuscriptTypes';
+import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
 type ManuscriptWriteTabProps = {
   manuscriptId: string;
@@ -47,6 +55,7 @@ type ManuscriptWriteTabProps = {
   onPersistSection: (markdown: string) => void;
   onPersistSectionError: () => void;
   onAddSection: (draft?: ScaffoldSectionDraft) => void;
+  onCreateSectionVariant: (baseSectionId: string) => Promise<void>;
   onScaffoldSections: () => void;
   onReorderSection: (sourceId: string, targetId: string) => void;
   missingScaffold: ScaffoldSectionDraft[];
@@ -98,6 +107,13 @@ const StyledOutlineColumn = styled.div`
   min-width: 0;
 `;
 
+const StyledEditorArea = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[3]};
+  min-width: 0;
+`;
+
 const StyledAddSectionSelect = styled.select`
   background: ${themeCssVariables.background.secondary};
   border: 1px solid ${themeCssVariables.border.color.medium};
@@ -129,6 +145,7 @@ export const ManuscriptWriteTab = ({
   onPersistSection,
   onPersistSectionError,
   onAddSection,
+  onCreateSectionVariant,
   onScaffoldSections,
   onReorderSection,
   missingScaffold,
@@ -137,15 +154,52 @@ export const ManuscriptWriteTab = ({
   onDeleteDuplicateSections,
 }: ManuscriptWriteTabProps) => {
   const editorShellRef = useRef<HTMLDivElement>(null);
+  const { enqueueErrorSnackBar } = useSnackBar();
   const [minimumEditorHeight, setMinimumEditorHeight] = useState<
     number | undefined
   >();
-  const duplicateSectionGroups = findDuplicateSectionGroups(sections);
-  const firstWritingSectionId = sections.find(
+  const [isCreatingVersion, setIsCreatingVersion] = useState(false);
+  // The paper's own sections. A per-journal version carries its base's name and
+  // type, so leaving versions in here would make the duplicate-section review
+  // offer to delete the version the author just wrote.
+  const paperSections = useMemo(
+    () => sections.filter((section) => !isNonEmptyString(section.variantOfId)),
+    [sections],
+  );
+  const variantsByBaseId = useMemo(
+    () => sectionVariantsByBaseId(sections),
+    [sections],
+  );
+  const activeVariantKey = sectionVariantKey(style);
+  const activeJournalLabel = style.name ?? activeVariantKey;
+  // Versions are keyed by profile, not by journal record, so a version can name
+  // a profile this workspace does not have. Only the journals it does have can
+  // be given their proper name; the rest fall back to the key itself.
+  const journalNameByVariantKey = useMemo(
+    () =>
+      new Map(
+        (existingJournals ?? []).flatMap((journal) => {
+          const key = sectionVariantKey(journal);
+          return isNonEmptyString(key) && isNonEmptyString(journal.name)
+            ? [[key, journal.name] as const]
+            : [];
+        }),
+      ),
+    [existingJournals],
+  );
+  const duplicateSectionGroups = findDuplicateSectionGroups(paperSections);
+  const firstWritingSectionId = paperSections.find(
     (section) => section.placement !== 'FRONT_MATTER',
   )?.id;
   const selectedWritingSection =
     selectedSection?.placement === 'FRONT_MATTER' ? undefined : selectedSection;
+  // Editing a version keeps the outline on the base row: the version has no
+  // place of its own in the paper, and losing the highlight would leave the
+  // author with no idea where in the paper they are.
+  const selectedVariantOfId = selectedWritingSection?.variantOfId;
+  const selectedBaseSection = isNonEmptyString(selectedVariantOfId)
+    ? paperSections.find((section) => section.id === selectedVariantOfId)
+    : selectedWritingSection;
   const citationKeys = sections.reduce<string[]>((keys, section) => {
     for (const key of extractCitationKeys(section.content ?? '')) {
       if (!keys.includes(key)) keys.push(key);
@@ -170,6 +224,23 @@ export const ManuscriptWriteTab = ({
     onSelectSection(sectionId);
   };
 
+  // The refusal to write a second version for the same journal comes back as a
+  // rejected promise and is shown as it was written, rather than being turned
+  // into a generic failure the author cannot act on.
+  const createSectionVersion = (baseSectionId: string) => {
+    setIsCreatingVersion(true);
+    void onCreateSectionVariant(baseSectionId)
+      .catch((error: unknown) =>
+        enqueueErrorSnackBar({
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Could not add a journal version',
+        }),
+      )
+      .finally(() => setIsCreatingVersion(false));
+  };
+
   return (
     <StyledTab>
       <StyledHeader>
@@ -179,8 +250,8 @@ export const ManuscriptWriteTab = ({
             compact
             manuscriptId={manuscriptId}
             manuscriptName={manuscriptName}
-            existingSectionCount={sections.length}
-            existingSections={sections}
+            existingSectionCount={paperSections.length}
+            existingSections={paperSections}
             existingReferences={references}
             existingFigureRefKeys={figures
               .map(({ refKey }) => refKey)
@@ -219,7 +290,7 @@ export const ManuscriptWriteTab = ({
           </StyledAddSectionSelect>
           <Button
             title={
-              sections.length === 0
+              paperSections.length === 0
                 ? 'Scaffold sections'
                 : `Add missing sections (${missingScaffold.length})`
             }
@@ -239,7 +310,9 @@ export const ManuscriptWriteTab = ({
           />
           <ManuscriptSectionOutline
             sections={sections}
-            selectedSectionId={selectedWritingSection?.id}
+            selectedSectionId={selectedBaseSection?.id}
+            activeVariantKey={activeVariantKey}
+            activeJournalLabel={activeJournalLabel}
             onChangePlacement={onChangeSectionPlacement}
             onEditFrontMatter={onEditFrontMatter}
             onSelectSection={selectSection}
@@ -247,22 +320,38 @@ export const ManuscriptWriteTab = ({
           />
         </StyledOutlineColumn>
 
-        <ManuscriptWriteEditor
-          citationKeys={citationKeys}
-          editorShellRef={editorShellRef}
-          figures={figures}
-          minimumEditorHeight={minimumEditorHeight}
-          onEditorReady={() => setMinimumEditorHeight(undefined)}
-          onDeleteSection={onDeleteSection}
-          onDuplicateSection={onDuplicateSection}
-          onPersistSection={onPersistSection}
-          onPersistSectionError={onPersistSectionError}
-          onSectionMetadataChanged={onSectionMetadataChanged}
-          references={references}
-          section={selectedWritingSection}
-          sections={sections}
-          style={style}
-        />
+        <StyledEditorArea>
+          {isDefined(selectedBaseSection) &&
+          isDefined(selectedWritingSection) ? (
+            <ManuscriptSectionVersionBar
+              baseSection={selectedBaseSection}
+              versions={variantsByBaseId.get(selectedBaseSection.id) ?? []}
+              selectedSectionId={selectedWritingSection.id}
+              activeVariantKey={activeVariantKey}
+              activeJournalLabel={activeJournalLabel}
+              journalNameByVariantKey={journalNameByVariantKey}
+              isCreatingVersion={isCreatingVersion}
+              onCreateVersion={createSectionVersion}
+              onSelectSection={selectSection}
+            />
+          ) : null}
+          <ManuscriptWriteEditor
+            citationKeys={citationKeys}
+            editorShellRef={editorShellRef}
+            figures={figures}
+            minimumEditorHeight={minimumEditorHeight}
+            onEditorReady={() => setMinimumEditorHeight(undefined)}
+            onDeleteSection={onDeleteSection}
+            onDuplicateSection={onDuplicateSection}
+            onPersistSection={onPersistSection}
+            onPersistSectionError={onPersistSectionError}
+            onSectionMetadataChanged={onSectionMetadataChanged}
+            references={references}
+            section={selectedWritingSection}
+            sections={sections}
+            style={style}
+          />
+        </StyledEditorArea>
       </StyledWorkspace>
     </StyledTab>
   );

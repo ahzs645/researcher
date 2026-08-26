@@ -445,6 +445,7 @@ const ManuscriptComposerPageContent = () => {
                 })
               }
               onAddSection={(draft) => void composer.addSection(draft)}
+              onCreateSectionVariant={composer.createSectionVariant}
               onScaffoldSections={() => void composer.scaffoldSections()}
               missingScaffold={composer.missingScaffold}
               onSectionMetadataChanged={() =>

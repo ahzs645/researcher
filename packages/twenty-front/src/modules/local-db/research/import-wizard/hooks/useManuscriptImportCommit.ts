@@ -12,8 +12,8 @@ import {
 import {
   matchPortableJournalTemplate,
   portableManuscriptRecordUpdate,
+  portableSectionVariantUpdates,
 } from '@/local-db/research/manuscript/manuscriptPortableImport';
-import { portableSectionVariantUpdates } from '@/local-db/research/manuscript/manuscriptPortableImport';
 import { type SubmissionTransposeUpdate } from '@/local-db/research/manuscript/manuscriptSubmissionTranspose';
 import { withImportedSourceStyles } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { serializeManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';

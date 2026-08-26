@@ -115,9 +115,14 @@ export const SECTION_GQL = {
   wordCount: true,
   includeInExport: true,
   status: true,
+  variantOfId: true,
+  variantProfileKey: true,
   manuscript: { id: true },
 };
 
+// The landing list's lighter selection. It carries the version fields too, so
+// a manuscript's section count on that screen is not inflated by versions it
+// has no way of telling apart from sections.
 export const SECTION_SUMMARY_GQL = {
   id: true,
   name: true,
@@ -128,6 +133,8 @@ export const SECTION_SUMMARY_GQL = {
   wordCount: true,
   includeInExport: true,
   status: true,
+  variantOfId: true,
+  variantProfileKey: true,
   manuscript: { id: true },
 };
 

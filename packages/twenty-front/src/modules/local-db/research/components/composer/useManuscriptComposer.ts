@@ -1,3 +1,4 @@
+import { isNonEmptyString } from '@sniptt/guards';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { isDefined } from 'twenty-shared/utils';
@@ -46,6 +47,10 @@ import {
   missingScaffoldSections,
   type ScaffoldSectionDraft,
 } from '@/local-db/research/manuscript/manuscriptScaffold';
+import {
+  sectionVariantKey,
+  sectionVariantsByBaseId,
+} from '@/local-db/research/manuscript/manuscriptSectionVariants';
 import {
   type JournalStyle,
   type ReferenceLike,
@@ -211,6 +216,18 @@ export const useManuscriptComposer = () => {
       ),
     [sectionRecords, manuscript],
   );
+  // A per-journal version is an ordinary section record that stands in for its
+  // base at export — it is not a section of the paper in its own right. So
+  // anything that counts, scaffolds or lists "the sections" works off the base
+  // sections, and only the export resolver and the version UI see the rest.
+  const baseSections = useMemo(
+    () => sections.filter((section) => !isNonEmptyString(section.variantOfId)),
+    [sections],
+  );
+  const variantsByBaseId = useMemo(
+    () => sectionVariantsByBaseId(sections),
+    [sections],
+  );
   const figures = useMemo(
     () =>
       (figureRecords as unknown as FigureRecord[])
@@ -239,10 +256,13 @@ export const useManuscriptComposer = () => {
   }, [manuscript, journals, journalId]);
 
   useEffect(() => {
+    // A version is selectable — the author edits it like any section — but it
+    // is never what the composer falls back to, since landing on a journal
+    // version rather than the paper's own text would misread as the paper.
     if (sections.length > 0 && !sections.some(({ id }) => id === sectionId)) {
-      setSectionId(sections[0].id);
+      setSectionId((baseSections[0] ?? sections[0]).id);
     }
-  }, [sections, sectionId]);
+  }, [baseSections, sections, sectionId]);
 
   const style: JournalStyle = useMemo(
     () => journals.find((journal) => journal.id === journalId) ?? {},
@@ -399,6 +419,65 @@ export const useManuscriptComposer = () => {
     if (isDefined(createdId)) selectSection(createdId);
   };
 
+  // Store one alternative wording of a section for the journal now selected.
+  // Seeded with the base's text rather than an empty box: cutting 250 words
+  // down to 200 is the actual task, and a blank editor would only make the
+  // author paste the base back in first.
+  const createSectionVariant = async (baseSectionId: string) => {
+    if (!isDefined(manuscript)) return;
+    const base = sections.find(({ id }) => id === baseSectionId);
+    if (!isDefined(base)) return;
+    if (isNonEmptyString(base.variantOfId)) {
+      throw new Error('A journal version cannot have versions of its own');
+    }
+    const variantKey = sectionVariantKey(effectiveStyle);
+    if (!isNonEmptyString(variantKey)) {
+      throw new Error('Choose a journal profile before adding a version');
+    }
+    // Refused rather than silently duplicated: two versions claiming the same
+    // base and key is a data error the export resolver can only break a tie
+    // over, and the author would have no way to tell which one it picked.
+    if (
+      (variantsByBaseId.get(base.id) ?? []).some(
+        (variant) => variant.variantProfileKey === variantKey,
+      )
+    ) {
+      throw new Error(
+        `${base.name ?? 'This section'} already has a version for ${effectiveStyle.name ?? variantKey}`,
+      );
+    }
+    const content = base.content ?? '';
+    // The cap the author writes against: the journal's abstract limit for an
+    // abstract, the section's own limit otherwise. Written onto the record so
+    // the editor's existing "182 / 200 words" footer reads it with no special
+    // case, and so the export resolver substitutes the right limit downstream.
+    const wordLimit =
+      base.sectionType?.toUpperCase() === 'ABSTRACT'
+        ? (effectiveStyle.abstractWordLimit ?? base.wordLimit)
+        : base.wordLimit;
+    const created = await createSection({
+      name: base.name ?? 'Untitled section',
+      manuscriptId: manuscript.id,
+      sectionType: base.sectionType ?? 'OTHER',
+      // Placement, level and order mirror the base. A version is not a place
+      // in the paper — it inherits its base's — and mirroring keeps the two
+      // adjacent in the raw record list, where nothing filters them apart.
+      placement: base.placement ?? 'MAIN',
+      orderIndex: base.orderIndex ?? sections.length,
+      level: base.level ?? 1,
+      status: 'DRAFTING',
+      includeInExport: base.includeInExport !== false,
+      content,
+      wordCount: countWords(content),
+      variantOfId: base.id,
+      variantProfileKey: variantKey,
+      ...(isDefined(wordLimit) ? { wordLimit } : {}),
+    });
+    await refetchSections();
+    const createdId = (created as { id?: string } | undefined)?.id;
+    if (isDefined(createdId)) selectSection(createdId);
+  };
+
   const createBlankManuscript = async () => {
     const created = await createManuscript({
       name: 'Untitled manuscript',
@@ -416,9 +495,9 @@ export const useManuscriptComposer = () => {
     () =>
       missingScaffoldSections(
         buildSectionSkeleton(manuscript?.manuscriptType, effectiveStyle),
-        sections,
+        baseSections,
       ),
-    [manuscript?.manuscriptType, sections, effectiveStyle],
+    [manuscript?.manuscriptType, baseSections, effectiveStyle],
   );
 
   const scaffoldSections = async () => {
@@ -601,7 +680,15 @@ export const useManuscriptComposer = () => {
       }
 
       const duplicateSectionIds = new Map<string, string>();
-      for (const section of sections) {
+      // An orphan version — one whose base is not in this manuscript — is not
+      // copied at all: with no base to stand in for it would come back as an
+      // ordinary section and export itself into the copy.
+      const sectionsToCopy = sections.filter(
+        (section) =>
+          !isNonEmptyString(section.variantOfId) ||
+          sections.some(({ id }) => id === section.variantOfId),
+      );
+      for (const section of sectionsToCopy) {
         const created = (await createSection({
           name: section.name ?? 'Untitled section',
           manuscriptId: duplicateId,
@@ -616,10 +703,28 @@ export const useManuscriptComposer = () => {
           ...(isDefined(section.wordLimit)
             ? { wordLimit: section.wordLimit }
             : {}),
+          ...(isNonEmptyString(section.variantProfileKey)
+            ? { variantProfileKey: section.variantProfileKey }
+            : {}),
         })) as { id?: string } | undefined;
         if (isDefined(created?.id)) {
           duplicateSectionIds.set(section.id, created.id);
         }
+      }
+      // The link back to the base is written in a second pass, because a
+      // version can be created before its base and the copy's id is only known
+      // once every section exists.
+      for (const section of sectionsToCopy) {
+        const copiedBaseId = isNonEmptyString(section.variantOfId)
+          ? duplicateSectionIds.get(section.variantOfId)
+          : undefined;
+        const copiedVariantId = duplicateSectionIds.get(section.id);
+        if (!isDefined(copiedBaseId) || !isDefined(copiedVariantId)) continue;
+        await updateOneRecord({
+          objectNameSingular: 'manuscriptSection',
+          idToUpdate: copiedVariantId,
+          updateOneRecordInput: { variantOfId: copiedBaseId },
+        });
       }
 
       for (const figure of figures) {
@@ -686,9 +791,21 @@ export const useManuscriptComposer = () => {
   };
 
   const deleteSection = async (sectionIdToDelete: string) => {
-    await deleteSectionRecord(sectionIdToDelete);
+    // Versions belong to their base, so they go with it. Left behind they are
+    // records no screen lists and no export reaches — and if the base's id is
+    // ever reused they would attach themselves to a section they never came
+    // from.
+    const deletedIds = [
+      sectionIdToDelete,
+      ...(variantsByBaseId.get(sectionIdToDelete) ?? []).map(({ id }) => id),
+    ];
+    await Promise.all(deletedIds.map(deleteSectionRecord));
     await refetchSections();
-    if (sectionId === sectionIdToDelete && isDefined(manuscript)) {
+    if (
+      isDefined(sectionId) &&
+      deletedIds.includes(sectionId) &&
+      isDefined(manuscript)
+    ) {
       setSectionId(null);
       updateSelectionParams(manuscript.id, null);
     }
@@ -723,9 +840,15 @@ export const useManuscriptComposer = () => {
   };
 
   const deleteSections = async (sectionIdsToDelete: string[]) => {
-    await Promise.all(sectionIdsToDelete.map(deleteSectionRecord));
+    // Same cascade as deleting one section: a version outliving its base is a
+    // record nothing can reach and nothing can export.
+    const deletedIds = sectionIdsToDelete.flatMap((sectionIdToDelete) => [
+      sectionIdToDelete,
+      ...(variantsByBaseId.get(sectionIdToDelete) ?? []).map(({ id }) => id),
+    ]);
+    await Promise.all(deletedIds.map(deleteSectionRecord));
     await refetchSections();
-    if (isDefined(sectionId) && sectionIdsToDelete.includes(sectionId)) {
+    if (isDefined(sectionId) && deletedIds.includes(sectionId)) {
       setSectionId(null);
       if (isDefined(manuscript)) updateSelectionParams(manuscript.id, null);
     }
@@ -1073,6 +1196,9 @@ export const useManuscriptComposer = () => {
   ) => {
     const section = sections.find(({ id }) => id === sectionIdToMove);
     if (!isDefined(section) || section.placement === placement) return;
+    // A version has no placement of its own: it is moved by moving its base,
+    // and never on its own.
+    if (isNonEmptyString(section.variantOfId)) return;
     const nextOrder =
       Math.max(
         -1,
@@ -1088,6 +1214,16 @@ export const useManuscriptComposer = () => {
         idToUpdate: section.id,
         updateOneRecordInput: { placement, orderIndex: nextOrder },
       }),
+      // Versions follow their base. Left behind in the old group, a version of
+      // a section moved out of the front matter would become unreachable in
+      // the write tab, which only edits what is not front matter.
+      ...(variantsByBaseId.get(section.id) ?? []).map((variant) =>
+        updateOneRecord({
+          objectNameSingular: 'manuscriptSection',
+          idToUpdate: variant.id,
+          updateOneRecordInput: { placement, orderIndex: nextOrder },
+        }),
+      ),
       ...figures
         .filter((figure) => figure.sectionId === section.id)
         .map((figure) =>
@@ -1108,7 +1244,12 @@ export const useManuscriptComposer = () => {
       !isDefined(source) ||
       !isDefined(target) ||
       source.id === target.id ||
-      source.placement !== target.placement
+      source.placement !== target.placement ||
+      // A version sits where its base sits. The outline never renders one as a
+      // row, so this cannot fire from the UI — it is here so a version can
+      // never acquire a position of its own by some other path.
+      isNonEmptyString(source.variantOfId) ||
+      isNonEmptyString(target.variantOfId)
     ) {
       return;
     }
@@ -1179,13 +1320,18 @@ export const useManuscriptComposer = () => {
     bundle,
     portableSource,
     selectManuscript,
-    // Every section across all manuscripts, for the composer's landing list.
-    allSections: sectionRecords as unknown as SectionRecord[],
+    // Every section across all manuscripts, for the composer's landing list —
+    // versions excluded, since that list counts sections and words per paper
+    // and a version is an alternative wording of a section it already counted.
+    allSections: (sectionRecords as unknown as SectionRecord[]).filter(
+      (section) => !isNonEmptyString(section.variantOfId),
+    ),
     selectSection,
     persistSection,
     persistSectionById,
     persistCitationLinkedSections,
     addSection,
+    createSectionVariant,
     createBlankManuscript,
     scaffoldSections,
     missingScaffold,

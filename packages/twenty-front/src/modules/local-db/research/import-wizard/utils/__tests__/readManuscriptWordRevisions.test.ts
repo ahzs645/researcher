@@ -39,6 +39,7 @@ describe('wordRevisionsFromBytes', () => {
     expect(revisions?.summary).toEqual({
       insertionCount: 1,
       deletionCount: 1,
+      formattingChangeCount: 0,
       commentCount: 1,
     });
     expect(revisions?.comments).toEqual([

@@ -131,6 +131,7 @@ describe('readImportedDocumentFile', () => {
     expect(document.revisionSummary).toEqual({
       insertionCount: 1,
       deletionCount: 1,
+      formattingChangeCount: 0,
       commentCount: 1,
     });
     expect(document.warnings).toEqual(

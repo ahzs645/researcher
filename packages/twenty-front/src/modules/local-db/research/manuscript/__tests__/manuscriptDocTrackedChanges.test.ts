@@ -6,6 +6,7 @@ import {
   parseWordDocument,
   parseWordMlToMarkdown,
   parseWordMlToMarkdownBlocks,
+  resolveWordFormattingRevisions,
   resolveWordTrackedChanges,
   summarizeWordRevisions,
   type ImportedSectionDraft,
@@ -101,6 +102,7 @@ describe('parseWordDocument tracked changes', () => {
     expect(parseWordDocument(REVISED_DOCUMENT).revisionSummary).toEqual({
       insertionCount: 1,
       deletionCount: 1,
+      formattingChangeCount: 0,
       commentCount: 0,
     });
   });
@@ -135,6 +137,7 @@ describe('parseWordDocument tracked changes', () => {
     expect(parseWordDocument(document).revisionSummary).toEqual({
       insertionCount: 2,
       deletionCount: 1,
+      formattingChangeCount: 0,
       commentCount: 0,
     });
     expect((parseWordDocument(document).warnings ?? [])[0]).toContain(
@@ -213,6 +216,7 @@ describe('parseWordDocument tracked changes', () => {
     expect(parseWordDocument(document).revisionSummary).toEqual({
       insertionCount: 1,
       deletionCount: 1,
+      formattingChangeCount: 0,
       commentCount: 0,
     });
   });
@@ -227,6 +231,7 @@ describe('parseWordDocument tracked changes', () => {
     expect(summarizeWordRevisions(document)).toEqual({
       insertionCount: 0,
       deletionCount: 0,
+      formattingChangeCount: 0,
       commentCount: 0,
     });
     expect(parseWordMlToMarkdown(document)).toContain('A split paragraph.');
@@ -294,6 +299,7 @@ describe('word comments', () => {
     expect(document.revisionSummary).toEqual({
       insertionCount: 0,
       deletionCount: 0,
+      formattingChangeCount: 0,
       commentCount: 2,
     });
     expect(document.warnings?.[0]).toBe(
@@ -305,6 +311,7 @@ describe('word comments', () => {
     expect(parseWordDocument(COMMENTED_DOCUMENT).revisionSummary).toEqual({
       insertionCount: 0,
       deletionCount: 0,
+      formattingChangeCount: 0,
       commentCount: 2,
     });
   });
@@ -364,5 +371,214 @@ describe('word comments', () => {
         { commentId: '1', author: 'Rae Ivy', text: 'Orphaned note.' },
       ])[0].comments,
     ).toEqual([{ commentId: '1', author: 'Rae Ivy', text: 'Orphaned note.' }]);
+  });
+});
+
+// A formatting revision keeps the reviewer's new properties in the run and the
+// author's previous ones nested inside them, so a fixture has to be written the
+// same way round: current first, `<w:rPrChange>` last.
+const rPrChange = (previousProperties: string): string =>
+  `<w:rPrChange w:id="41" w:author="Rae Ivy" w:date="2026-03-04T09:12:00Z"><w:rPr>${previousProperties}</w:rPr></w:rPrChange>`;
+
+const pPrChange = (previousProperties: string): string =>
+  `<w:pPrChange w:id="42" w:author="Rae Ivy" w:date="2026-03-04T09:12:00Z"><w:pPr>${previousProperties}</w:pPr></w:pPrChange>`;
+
+// A reviewer un-bolded a run the author had bolded as a heading.
+const UNBOLDED_RUN = `<w:r><w:rPr><w:sz w:val="24"/>${rPrChange(
+  '<w:b/>',
+)}</w:rPr><w:t>Coastal transects</w:t></w:r>`;
+
+// A reviewer took the Heading 1 style off a paragraph and left it unstyled.
+const UNSTYLED_PARAGRAPH = `<w:p><w:pPr>${pPrChange(
+  '<w:pStyle w:val="Heading1"/>',
+)}</w:pPr><w:r><w:t>Coastal transects</w:t></w:r></w:p>`;
+
+describe('word formatting revisions', () => {
+  it('drops the change element and keeps the current properties when accepting', () => {
+    expect(resolveWordFormattingRevisions(UNBOLDED_RUN, 'ACCEPT')).toBe(
+      '<w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>Coastal transects</w:t></w:r>',
+    );
+  });
+
+  it('restores the previous properties when rejecting', () => {
+    expect(resolveWordFormattingRevisions(UNBOLDED_RUN, 'REJECT')).toBe(
+      '<w:r><w:rPr><w:b/></w:rPr><w:t>Coastal transects</w:t></w:r>',
+    );
+  });
+
+  it('resolves a paragraph properties change the same way in both directions', () => {
+    expect(resolveWordFormattingRevisions(UNSTYLED_PARAGRAPH, 'ACCEPT')).toBe(
+      '<w:p><w:pPr></w:pPr><w:r><w:t>Coastal transects</w:t></w:r></w:p>',
+    );
+    expect(resolveWordFormattingRevisions(UNSTYLED_PARAGRAPH, 'REJECT')).toBe(
+      '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Coastal transects</w:t></w:r></w:p>',
+    );
+  });
+
+  it('leaves every run with exactly one properties element under either resolution', () => {
+    const propertiesElements = (xml: string): number =>
+      (xml.match(/<w:rPr(?![A-Za-z])/g) ?? []).length;
+
+    expect(propertiesElements(UNBOLDED_RUN)).toBe(2);
+    expect(
+      propertiesElements(
+        resolveWordFormattingRevisions(UNBOLDED_RUN, 'ACCEPT'),
+      ),
+    ).toBe(1);
+    expect(
+      propertiesElements(
+        resolveWordFormattingRevisions(UNBOLDED_RUN, 'REJECT'),
+      ),
+    ).toBe(1);
+  });
+
+  it('leaves a document with no formatting revisions exactly as it was', () => {
+    expect(resolveWordFormattingRevisions(CLEAN_DOCUMENT, 'REJECT')).toBe(
+      CLEAN_DOCUMENT,
+    );
+    expect(resolveWordFormattingRevisions(REVISED_DOCUMENT, 'ACCEPT')).toBe(
+      REVISED_DOCUMENT,
+    );
+  });
+
+  it('reads the bold off the properties the resolution chose, not off both', () => {
+    // Bold is what makes an unstyled short line a heading. Accepting the
+    // reviewer's un-bolding demotes it to prose; rejecting keeps the heading.
+    const document = wordDocument(
+      `${heading('Results')}${paragraph(UNBOLDED_RUN)}`,
+    );
+
+    const accepted = parseWordMlToMarkdown(document);
+    const rejected = parseWordMlToMarkdown(document, {
+      trackedChanges: 'REJECT',
+    });
+
+    expect(accepted).toContain('Coastal transects');
+    expect(accepted).not.toContain('# Coastal transects');
+    expect(rejected).toContain('### Coastal transects');
+  });
+
+  it('reads the paragraph style off the properties the resolution chose', () => {
+    const document = wordDocument(`${heading('Results')}${UNSTYLED_PARAGRAPH}`);
+
+    const accepted = parseWordMlToMarkdown(document);
+    const rejected = parseWordMlToMarkdown(document, {
+      trackedChanges: 'REJECT',
+    });
+
+    expect(accepted).toContain('Coastal transects');
+    expect(accepted).not.toContain('# Coastal transects');
+    expect(rejected).toContain('# Coastal transects');
+  });
+
+  it('resolves the bold of a trailing heading run split off after a line break', () => {
+    // The trailing-run heading rule reads the *first* `<w:rPr>` of each run, so
+    // an unresolved previous copy nested inside the current one made every such
+    // run look bold whichever way the author resolved the review.
+    const document = wordDocument(
+      `${heading('Results')}${paragraph(
+        [
+          '<w:r><w:t>The instrument settled overnight.</w:t></w:r>',
+          '<w:r><w:br/></w:r>',
+          `<w:r><w:rPr><w:b/>${rPrChange(
+            '<w:sz w:val="24"/>',
+          )}</w:rPr><w:t>Coastal transects</w:t></w:r>`,
+        ].join(''),
+      )}`,
+    );
+
+    expect(parseWordMlToMarkdown(document)).toContain('### Coastal transects');
+    expect(
+      parseWordMlToMarkdown(document, { trackedChanges: 'REJECT' }),
+    ).not.toContain('### Coastal transects');
+  });
+
+  it('resolves a formatting revision nested inside an inserted run', () => {
+    const document = wordDocument(
+      `${heading('Results')}${paragraph(
+        [
+          '<w:r><w:t>Values were </w:t></w:r>',
+          `<w:ins w:id="1" w:author="R"><w:r><w:rPr><w:i/>${rPrChange(
+            '<w:b/>',
+          )}</w:rPr><w:t>markedly </w:t></w:r></w:ins>`,
+          '<w:r><w:t>stable.</w:t></w:r>',
+        ].join(''),
+      )}`,
+    );
+
+    // The insertion is one insertion and the restyling of it is one formatting
+    // revision — never two insertions.
+    expect(summarizeWordRevisions(document)).toEqual({
+      insertionCount: 1,
+      deletionCount: 0,
+      formattingChangeCount: 1,
+      commentCount: 0,
+    });
+    expect(resolveWordTrackedChanges(document, 'ACCEPT')).not.toContain(
+      'rPrChange',
+    );
+    expect(resolveWordTrackedChanges(document, 'REJECT')).not.toContain(
+      'rPrChange',
+    );
+    expect(
+      sectionNamed(parseWordDocument(document).sections, 'Results').content,
+    ).toBe('Values were markedly stable.');
+    expect(
+      sectionNamed(
+        parseWordDocument(document, { trackedChanges: 'REJECT' }).sections,
+        'Results',
+      ).content,
+    ).toBe('Values were stable.');
+  });
+
+  it('counts formatting revisions and reports them even when nothing else changed', () => {
+    const document = wordDocument(
+      `${heading('Results')}${paragraph(UNBOLDED_RUN)}${UNSTYLED_PARAGRAPH}`,
+    );
+
+    expect(parseWordDocument(document).revisionSummary).toEqual({
+      insertionCount: 0,
+      deletionCount: 0,
+      formattingChangeCount: 2,
+      commentCount: 0,
+    });
+    expect(parseWordDocument(document).warnings?.[0]).toBe(
+      'This document has 2 formatting revisions. They are being accepted: the formatting the reviewer set is used. Formatting is only read where it decides structure — a bold run or a heading style becoming a heading — and is not imported as styling.',
+    );
+    expect(
+      parseWordDocument(document, { trackedChanges: 'REJECT' }).warnings?.[0],
+    ).toBe(
+      'This document has 2 formatting revisions. They are being rejected: the formatting from before the review is used. Formatting is only read where it decides structure — a bold run or a heading style becoming a heading — and is not imported as styling.',
+    );
+  });
+
+  it('warns about formatting revisions alongside the insertions and deletions', () => {
+    const document = wordDocument(
+      `${heading('Results')}${REVISED_SENTENCE}${paragraph(UNBOLDED_RUN)}`,
+    );
+    const warnings = parseWordDocument(document).warnings ?? [];
+
+    expect(warnings[0]).toContain('1 insertion and 1 deletion');
+    expect(warnings[1]).toContain('This document has 1 formatting revision.');
+  });
+
+  it('never counts a formatting revision as an insertion or a deletion', () => {
+    // The previous copy of a paragraph mark's properties carries the `w:ins`
+    // that marked the paragraph split; counting it would invent an insertion.
+    const document = wordDocument(
+      `${heading('Results')}${paragraph(
+        `<w:pPr><w:rPr><w:ins w:id="9" w:author="R"/></w:rPr>${pPrChange(
+          '<w:rPr><w:ins w:id="9" w:author="R"/></w:rPr>',
+        )}</w:pPr><w:r><w:t>A split paragraph.</w:t></w:r>`,
+      )}`,
+    );
+
+    expect(summarizeWordRevisions(document)).toEqual({
+      insertionCount: 0,
+      deletionCount: 0,
+      formattingChangeCount: 1,
+      commentCount: 0,
+    });
+    expect(parseWordMlToMarkdown(document)).toContain('A split paragraph.');
   });
 });

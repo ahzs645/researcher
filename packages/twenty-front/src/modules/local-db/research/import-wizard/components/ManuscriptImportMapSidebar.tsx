@@ -242,9 +242,17 @@ export const ManuscriptImportMapSidebar = ({
   const reviewCount = countImportBlocksNeedingReview(blocks, overrides);
   // A document can carry comments without carrying a single revision, and then
   // there is nothing to accept or reject.
-  const trackedChangeCount =
+  //
+  // Two counts, because they answer different questions. The insertion and
+  // deletion tiles are about text, and a formatting-only document would show
+  // them as a pair of zeros; the accept/reject choice is about every revision,
+  // and a document whose only revisions are formatting still has to be told
+  // which side of them to import.
+  const textChangeCount =
     (revisions?.summary.insertionCount ?? 0) +
     (revisions?.summary.deletionCount ?? 0);
+  const trackedChangeCount =
+    textChangeCount + (revisions?.summary.formattingChangeCount ?? 0);
 
   return (
     <StyledSidebar>
@@ -257,7 +265,7 @@ export const ManuscriptImportMapSidebar = ({
             {trackedChangeCount > 0 ? 'Tracked changes' : 'Comments'}
           </StyledSectionTitle>
           <StyledCounts>
-            {trackedChangeCount === 0 ? null : (
+            {textChangeCount === 0 ? null : (
               <>
                 <StyledCount>
                   <StyledCountValue>
@@ -272,6 +280,14 @@ export const ManuscriptImportMapSidebar = ({
                   Deletions
                 </StyledCount>
               </>
+            )}
+            {revisions.summary.formattingChangeCount === 0 ? null : (
+              <StyledCount>
+                <StyledCountValue>
+                  {revisions.summary.formattingChangeCount}
+                </StyledCountValue>
+                Formatting
+              </StyledCount>
             )}
             {revisions.summary.commentCount === 0 ? null : (
               <StyledCount>

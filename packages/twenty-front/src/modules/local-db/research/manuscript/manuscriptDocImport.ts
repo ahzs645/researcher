@@ -519,6 +519,11 @@ export type TrackedChangeResolution = 'ACCEPT' | 'REJECT';
 export type WordRevisionSummary = {
   insertionCount: number;
   deletionCount: number;
+  // Word's third kind of revision: the reviewer changed how something looks
+  // rather than what it says. It reaches the author as its own line because it
+  // is the one kind that used to be resolved silently and only in one
+  // direction.
+  formattingChangeCount: number;
   commentCount: number;
 };
 
@@ -551,6 +556,31 @@ const REVISION_PROPERTY_ELEMENTS = [
   /<w:trPr\b[\s\S]*?<\/w:trPr>/g,
   /<w:tcPr\b[\s\S]*?<\/w:tcPr>/g,
 ];
+
+// Word records a formatting revision by nesting the *previous* properties
+// inside the current ones: `<w:rPr>… now …<w:rPrChange><w:rPr>… before …
+// </w:rPr></w:rPrChange></w:rPr>`. Every properties element has exactly one
+// partner named for it, and this is all of them — nothing else in
+// WordprocessingML records a formatting revision. Listed innermost-first for
+// the same reason `REVISION_PROPERTY_ELEMENTS` is: a run's own properties
+// should be settled before a paragraph's are replaced wholesale.
+const FORMATTING_REVISION_PROPERTIES = [
+  'rPr',
+  'pPr',
+  'tcPr',
+  'trPr',
+  'tblPrEx',
+  'tblPr',
+  'sectPr',
+];
+
+// Built from the list above so the two cannot drift. The alternation puts
+// `tblPr` before `tblPrEx`, which backtracks correctly: `<w:tblPrExChange>` is
+// not a `tblPr` change.
+const FORMATTING_REVISION_ELEMENT = new RegExp(
+  `<w:(?:${FORMATTING_REVISION_PROPERTIES.join('|')})Change(?![A-Za-z])`,
+  'g',
+);
 
 // `(?![A-Za-z])` is load-bearing: `<w:delText>` is the deleted *text*, and
 // `<w:insideH>` is a table border. Neither is a revision.
@@ -611,11 +641,117 @@ const restoreDeletedRunText = (xml: string): string =>
     .replace(/<w:delInstrText\b/g, '<w:instrText')
     .replace(/<\/w:delInstrText>/g, '</w:instrText>');
 
+const propertiesOpeningTag = (name: string): RegExp =>
+  new RegExp(`<w:${name}(?![A-Za-z])((?:[^>"]|"[^"]*")*?)(/?)>`, 'g');
+
+type ElementSpan = {
+  start: number;
+  innerStart: number;
+  innerEnd: number;
+  after: number;
+};
+
+// Where the first `<w:name>` in a slice begins and ends. A properties element
+// can hold a copy of itself, so the end has to be found by balancing rather
+// than by a lazy match that would stop on the copy's closing tag.
+const firstElementSpan = (xml: string, name: string): ElementSpan | null => {
+  const opening = propertiesOpeningTag(name);
+  const match = opening.exec(xml);
+  if (match === null) return null;
+  if (match[2] === '/') {
+    return {
+      start: match.index,
+      innerStart: opening.lastIndex,
+      innerEnd: opening.lastIndex,
+      after: opening.lastIndex,
+    };
+  }
+  const end = revisionElementEnd(xml, name, opening.lastIndex);
+  return end === null
+    ? null
+    : {
+        start: match.index,
+        innerStart: opening.lastIndex,
+        innerEnd: end.innerEnd,
+        after: end.after,
+      };
+};
+
+// Settle one kind of formatting revision. Accepting means dropping the change
+// element and letting the current properties stand; rejecting means the run or
+// paragraph keeps the properties recorded inside it instead. Either way the
+// change element is gone afterwards, which is the point: leaving it would hand
+// every downstream reader two sets of properties where it expects one, and the
+// lazy `<w:rPr>…</w:rPr>` matches this file is full of would end on the wrong
+// closing tag.
+const resolveFormattingRevision = (
+  xml: string,
+  propertiesName: string,
+  resolution: TrackedChangeResolution,
+): string => {
+  const changeName = `${propertiesName}Change`;
+  if (!xml.includes(`<w:${changeName}`)) return xml;
+
+  const opening = propertiesOpeningTag(propertiesName);
+  let resolved = '';
+  let cursor = 0;
+  let match = opening.exec(xml);
+  while (match !== null) {
+    // A self-closing properties element holds nothing, so it holds no change.
+    const end =
+      match[2] === '/'
+        ? null
+        : revisionElementEnd(xml, propertiesName, opening.lastIndex);
+    if (end !== null) {
+      const innerStart = opening.lastIndex;
+      const inner = xml.slice(innerStart, end.innerEnd);
+      const change = firstElementSpan(inner, changeName);
+      if (change !== null) {
+        const previousBody = inner.slice(change.innerStart, change.innerEnd);
+        const previous = firstElementSpan(previousBody, propertiesName);
+        // A change element holding no copy records that there were no
+        // properties before it, so rejecting it leaves the element empty.
+        const restored =
+          previous === null
+            ? ''
+            : previousBody.slice(previous.innerStart, previous.innerEnd);
+        resolved +=
+          xml.slice(cursor, innerStart) +
+          (resolution === 'ACCEPT'
+            ? inner.slice(0, change.start) + inner.slice(change.after)
+            : restored);
+        cursor = end.innerEnd;
+        // The previous copy has been spliced in or thrown away; scanning back
+        // into it would only find the same element a second time.
+        opening.lastIndex = cursor;
+      }
+    }
+    match = opening.exec(xml);
+  }
+  return resolved + xml.slice(cursor);
+};
+
+// Reading a run's `w:rPr` is "accept the formatting change" chosen by accident:
+// right under ACCEPT, wrong under REJECT, where the author asked to see the
+// document as it stood before the reviewer touched it and would instead get the
+// reviewer's bold. Resolving it here rather than at each reader keeps the two
+// resolutions to one place, next to the insertions and deletions they arrive
+// with.
+export const resolveWordFormattingRevisions = (
+  xml: string,
+  resolution: TrackedChangeResolution,
+): string =>
+  FORMATTING_REVISION_PROPERTIES.reduce(
+    (current, propertiesName) =>
+      resolveFormattingRevision(current, propertiesName, resolution),
+    xml,
+  );
+
 // Rewrite a body so the remaining runs are the text the chosen resolution
 // keeps. Nesting is real — an author deletes what a co-author inserted — so the
 // walk recurses: inserted-then-deleted text survives neither resolution, which
 // is the right answer in both directions.
-export const resolveWordTrackedChanges = (
+const resolveRevisionElements = (
   xml: string,
   resolution: TrackedChangeResolution,
 ): string => {
@@ -638,7 +774,7 @@ export const resolveWordTrackedChanges = (
       cursor = openingTagEnd;
     } else {
       if (isInsertionElement(match[1]) === (resolution === 'ACCEPT')) {
-        const inner = resolveWordTrackedChanges(
+        const inner = resolveRevisionElements(
           xml.slice(openingTagEnd, end.innerEnd),
           resolution,
         );
@@ -653,6 +789,19 @@ export const resolveWordTrackedChanges = (
   }
   return resolved + xml.slice(cursor);
 };
+
+// Formatting revisions are settled first and only once, before the insertion
+// walk recurses into anything: a run still carrying both its old and its new
+// properties answers "is this bold?" with both at the same time, and that is
+// the first question every downstream pass asks of a run.
+export const resolveWordTrackedChanges = (
+  xml: string,
+  resolution: TrackedChangeResolution,
+): string =>
+  resolveRevisionElements(
+    resolveWordFormattingRevisions(xml, resolution),
+    resolution,
+  );
 
 const bodyCommentIds = (documentXml: string): Set<string> => {
   const ids = new Set<string>();
@@ -689,13 +838,23 @@ export const summarizeWordRevisions = (
   documentXml: string,
   commentsXml = '',
 ): WordRevisionSummary => {
+  // Dropping the change elements first — which is what accepting them does —
+  // leaves no properties element sitting inside a copy of itself, so the lazy
+  // strips below still end on their own closing tag rather than on the copy's,
+  // and a paragraph-mark `w:ins` recorded in a copy cannot be counted as one
+  // more insertion.
   const body = REVISION_PROPERTY_ELEMENTS.reduce(
     (xml, pattern) => xml.replace(pattern, ''),
-    documentXml,
+    resolveWordFormattingRevisions(documentXml, 'ACCEPT'),
   );
   return {
     insertionCount: (body.match(INSERTION_ELEMENT) ?? []).length,
     deletionCount: (body.match(DELETION_ELEMENT) ?? []).length,
+    // Counted on the document as it arrived, like the two above: the change
+    // elements the strip has just removed are exactly the count.
+    formattingChangeCount: (
+      documentXml.match(FORMATTING_REVISION_ELEMENT) ?? []
+    ).length,
     // A comment can be anchored without a body (a stripped package) or carry a
     // body nothing anchors; the author should hear about either.
     commentCount: Math.max(
@@ -706,19 +865,27 @@ export const summarizeWordRevisions = (
 };
 
 export const hasWordRevisions = (summary: WordRevisionSummary): boolean =>
-  summary.insertionCount + summary.deletionCount + summary.commentCount > 0;
+  summary.insertionCount +
+    summary.deletionCount +
+    summary.formattingChangeCount +
+    summary.commentCount >
+  0;
 
 const countPhrase = (count: number, noun: string): string =>
   `${count} ${count === 1 ? noun : `${noun}s`}`;
 
 const TRACKED_CHANGE_WARNING = 'This document has tracked changes:';
 const COMMENT_WARNING = /^This document has \d+ comments?\./;
+const FORMATTING_REVISION_WARNING =
+  /^This document has \d+ formatting revisions?\./;
 
 // A caller that knows more than the body XML did — the import wizard reads
 // `word/comments.xml`, which the parser was not given — replaces these rather
 // than stacking a second, differently-counted copy on top.
 export const isWordRevisionWarning = (warning: string): boolean =>
-  warning.startsWith(TRACKED_CHANGE_WARNING) || COMMENT_WARNING.test(warning);
+  warning.startsWith(TRACKED_CHANGE_WARNING) ||
+  FORMATTING_REVISION_WARNING.test(warning) ||
+  COMMENT_WARNING.test(warning);
 
 export const wordRevisionWarnings = (
   summary: WordRevisionSummary,
@@ -735,6 +902,18 @@ export const wordRevisionWarnings = (
           ? 'They are being accepted: inserted text is imported and deleted text is dropped.'
           : 'They are being rejected: inserted text is dropped and deleted text is restored.'
       } The revision history itself is not imported.`,
+    );
+  }
+  if (summary.formattingChangeCount > 0) {
+    warnings.push(
+      `This document has ${countPhrase(
+        summary.formattingChangeCount,
+        'formatting revision',
+      )}. ${
+        resolution === 'ACCEPT'
+          ? 'They are being accepted: the formatting the reviewer set is used.'
+          : 'They are being rejected: the formatting from before the review is used.'
+      } Formatting is only read where it decides structure — a bold run or a heading style becoming a heading — and is not imported as styling.`,
     );
   }
   if (summary.commentCount > 0) {

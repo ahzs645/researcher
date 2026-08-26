@@ -22,6 +22,7 @@ import {
   sanitizeUrl,
   type ManuscriptHtmlRenderContext,
 } from './manuscriptHtmlMarkdown';
+import { renderManuscriptDiscoveryHead } from './manuscriptHtmlMetadata';
 import {
   buildManuscriptHtmlCss,
   MANUSCRIPT_HTML_TABLE_STYLE_IDS,
@@ -473,12 +474,12 @@ export const exportManuscriptToHtml = async (
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<title>${escapeHtml(prepared.metadata.title)}</title>`,
-    isNonEmptyString(prepared.metadata.authors)
-      ? `<meta name="author" content="${escapeHtmlAttribute(prepared.metadata.authors)}">`
-      : '',
     isNonEmptyString(prepared.metadata.abstract)
       ? `<meta name="description" content="${escapeHtmlAttribute(prepared.metadata.abstract.slice(0, 300))}">`
       : '',
+    // Highwire, Dublin Core and a JSON-LD ScholarlyArticle: the file says what
+    // it is to Google Scholar, Zotero and a repository, not just to a reader.
+    ...renderManuscriptDiscoveryHead(prepared),
     `<style>${buildManuscriptHtmlCss(prepared.style)}</style>`,
     '</head>',
     '<body>',

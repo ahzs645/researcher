@@ -76,7 +76,10 @@ export type ManuscriptExportStyleOverrides = Partial<
   citationModeSettings?: CitationModeSettings;
 };
 
-const STRING_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
+// Exported so the journal-profile reader validates against the same field
+// types the override serializer already knows, rather than a second list that
+// would drift.
+export const STRING_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'citationMode',
   'citationStyleId',
   'figureLabelFormat',
@@ -100,7 +103,7 @@ const STRING_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'tableStyle',
 ]);
 
-const NUMBER_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
+export const NUMBER_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'figureCaptionFontSize',
   'figureCaptionLineSpacing',
   'figureCaptionGap',
@@ -118,7 +121,7 @@ const NUMBER_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'tableLineSpacing',
 ]);
 
-const BOOLEAN_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
+export const BOOLEAN_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'keepSourceNumbers',
   'supplementCoverPage',
   'lineNumbering',

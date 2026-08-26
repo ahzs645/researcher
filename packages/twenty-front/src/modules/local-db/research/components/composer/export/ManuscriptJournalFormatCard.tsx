@@ -188,8 +188,8 @@ export const ManuscriptJournalFormatCard = ({
       </StyledFields>
       <StyledProfileExchange>
         <StyledCustomizationLabel>
-          A profile is one file: send it to a collaborator, or add one they
-          sent you.
+          A profile is one file: send it to a collaborator, or add one they sent
+          you.
         </StyledCustomizationLabel>
         <StyledProfileActions>
           <Button

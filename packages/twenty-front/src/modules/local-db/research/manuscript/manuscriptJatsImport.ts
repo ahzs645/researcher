@@ -13,6 +13,8 @@
 // assets, references, contributors and cross-reference links all land through
 // one path that is already tested.
 
+import { isNonEmptyString } from '@sniptt/guards';
+
 import {
   type PortableManuscriptSource,
   type PortableManuscriptMetadata,
@@ -146,12 +148,92 @@ const captionText = (element: Element): string => {
 
 type AssetHarvest = { figures: FigureLike[]; marker: string };
 
+// The artwork of a JATS *package*, keyed by the path it was found at inside
+// the package and carrying the pixels as a data URL. A bare .xml file has no
+// package around it and passes nothing, which is why this is optional: the
+// parser stays a pure function of the XML when that is all there is.
+export type JatsArtworkAssets = Record<string, string>;
+
+type ArtworkIndex = {
+  byPath: Map<string, string>;
+  byFileName: Map<string, string>;
+  byFileStem: Map<string, string>;
+};
+
+const normalisedPath = (value: string): string =>
+  value
+    .replace(/\\/g, '/')
+    .replace(/^\.?\//, '')
+    .toLowerCase();
+
+const fileNameOf = (path: string): string =>
+  path.slice(path.lastIndexOf('/') + 1);
+
+const fileStemOf = (fileName: string): string =>
+  fileName.replace(/\.[^./]+$/, '');
+
+// Each entry is filed under three keys, and a graphic's href is looked up in
+// that order: the whole package-relative path, then the bare file name, then
+// the file name with its extension taken off.
+//
+// The path first, because it is the only key that tells `figures/fig1.jpg`
+// from `supplement/fig1.jpg`. The file name next, because packages are
+// routinely re-arranged after the XML was written — the images get moved into
+// `images/` and nobody re-points the hrefs. The stem last, and it is not the
+// edge case it looks like: JATS convention is to write the href without an
+// extension at all (`<graphic xlink:href="fig1"/>`) precisely so one article
+// can be typeset from several renditions — fig1.tif for print, fig1.jpg for
+// the web — and PMC's own packages are full of them. Matching only on the
+// path would drop the figures from most real packages.
+//
+// First entry wins on a collision. A package holding two files that reduce to
+// the same key has already lost whatever would have settled it, and guessing
+// twice is worse than guessing once.
+const buildArtworkIndex = (assets: JatsArtworkAssets): ArtworkIndex => {
+  const index: ArtworkIndex = {
+    byPath: new Map(),
+    byFileName: new Map(),
+    byFileStem: new Map(),
+  };
+  for (const [path, dataUrl] of Object.entries(assets)) {
+    if (!isNonEmptyString(dataUrl)) continue;
+    const normalised = normalisedPath(path);
+    const fileName = fileNameOf(normalised);
+    const keyed: Array<[Map<string, string>, string]> = [
+      [index.byPath, normalised],
+      [index.byFileName, fileName],
+      [index.byFileStem, fileStemOf(fileName)],
+    ];
+    for (const [map, key] of keyed) {
+      if (key.length > 0 && !map.has(key)) map.set(key, dataUrl);
+    }
+  }
+  return index;
+};
+
+const packagedArtwork = (
+  href: string,
+  artwork: ArtworkIndex,
+): string | undefined => {
+  const normalised = normalisedPath(href);
+  const fileName = fileNameOf(normalised);
+  return (
+    artwork.byPath.get(normalised) ??
+    artwork.byFileName.get(fileName) ??
+    artwork.byFileStem.get(fileStemOf(fileName))
+  );
+};
+
 const resolvedArtwork = (
   href: string,
+  artwork: ArtworkIndex,
 ): Pick<FigureLike, 'imageSource' | 'imageUrl'> => {
   if (href.startsWith('data:'))
     return { imageSource: 'UPLOAD', imageUrl: href };
   if (/^https?:\/\//i.test(href)) return { imageSource: 'URL', imageUrl: href };
+  const packaged = packagedArtwork(href, artwork);
+  if (isNonEmptyString(packaged))
+    return { imageSource: 'UPLOAD', imageUrl: packaged };
   return { imageSource: 'NONE' };
 };
 
@@ -159,6 +241,7 @@ const harvestAsset = (
   element: Element,
   sectionId: string,
   index: number,
+  artwork: ArtworkIndex,
 ): AssetHarvest | null => {
   const tag = element.tagName.toLowerCase();
   const label = text(child(element, 'label'));
@@ -224,10 +307,13 @@ const harvestAsset = (
         assetKind: 'FIGURE',
         // A JATS package references its artwork by path: the pixels live
         // beside the XML, not in it. An absolute URL is something the
-        // composer can actually load; a package-relative filename means
-        // nothing outside the package, so the figure arrives without an
-        // image and the bundle's own "has no image yet" warning says so.
-        ...resolvedArtwork(href),
+        // composer can actually load, and when the whole package was opened
+        // the importer has already read those neighbouring files and can hand
+        // them over here. A path with nothing behind it — a lone .xml, or a
+        // package missing that rendition — still means nothing outside the
+        // package, so the figure arrives without an image and the bundle's
+        // own "has no image yet" warning says so.
+        ...resolvedArtwork(href, artwork),
       },
     ],
     marker: `[[asset:${refKey}]]`,
@@ -252,6 +338,7 @@ const harvestSection = (
   level: number,
   placement: 'MAIN' | 'SUPPLEMENT',
   counters: { section: number; asset: number },
+  artwork: ArtworkIndex,
 ): SectionHarvest => {
   const title = text(child(element, 'title'));
   const sectionId = slug(
@@ -272,7 +359,7 @@ const harvestSection = (
       continue;
     }
     if (tag === 'fig' || tag === 'table-wrap' || tag === 'disp-formula') {
-      const harvest = harvestAsset(node, sectionId, counters.asset);
+      const harvest = harvestAsset(node, sectionId, counters.asset, artwork);
       if (harvest !== null) {
         counters.asset += 1;
         figures.push(...harvest.figures);
@@ -305,7 +392,13 @@ const harvestSection = (
   counters.section += 1;
 
   for (const nested of children(element, 'sec')) {
-    const harvest = harvestSection(nested, level + 1, placement, counters);
+    const harvest = harvestSection(
+      nested,
+      level + 1,
+      placement,
+      counters,
+      artwork,
+    );
     sections.push(...harvest.sections);
     figures.push(...harvest.figures);
   }
@@ -448,7 +541,14 @@ const keywordSection = (
   };
 };
 
-export const parseJatsArticle = (xml: string): PortableManuscriptSource => {
+// `assets` is what a JATS package brings that a bare .xml cannot: the artwork
+// that sits next to the article, already read into data URLs. Left out, this
+// parses exactly as it always did.
+export const parseJatsArticle = (
+  xml: string,
+  assets: JatsArtworkAssets = {},
+): PortableManuscriptSource => {
+  const artwork = buildArtworkIndex(assets);
   const parsed = new DOMParser().parseFromString(xml, 'application/xml');
   if (parsed.querySelector('parsererror') !== null) {
     throw new Error('This file is not readable XML');
@@ -478,7 +578,7 @@ export const parseJatsArticle = (xml: string): PortableManuscriptSource => {
   }
 
   for (const element of body === null ? [] : children(body, 'sec')) {
-    const harvest = harvestSection(element, 1, 'MAIN', counters);
+    const harvest = harvestSection(element, 1, 'MAIN', counters, artwork);
     sections.push(...harvest.sections);
     figures.push(...harvest.figures);
   }
@@ -486,7 +586,7 @@ export const parseJatsArticle = (xml: string): PortableManuscriptSource => {
   // conflicts, availability — as sections in their own right, and losing them
   // would silently drop the declarations the readiness panel checks for.
   for (const element of back === null ? [] : children(back, 'sec, ack')) {
-    const harvest = harvestSection(element, 1, 'MAIN', counters);
+    const harvest = harvestSection(element, 1, 'MAIN', counters, artwork);
     sections.push(...harvest.sections);
     figures.push(...harvest.figures);
   }
@@ -497,7 +597,7 @@ export const parseJatsArticle = (xml: string): PortableManuscriptSource => {
           'sec[sec-type="supplementary-material"] > sec',
         ),
       ]) {
-    const harvest = harvestSection(element, 1, 'SUPPLEMENT', counters);
+    const harvest = harvestSection(element, 1, 'SUPPLEMENT', counters, artwork);
     sections.push(...harvest.sections);
     figures.push(...harvest.figures);
   }

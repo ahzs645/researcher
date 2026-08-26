@@ -197,7 +197,7 @@ export const ManuscriptImportUploadStep = ({
       }
     } catch {
       setError(
-        'Could not read that file. Choose a valid DOCX, PDF, Markdown, text, or portable ZIP file.',
+        'Could not read that file. Choose a valid DOCX, PDF, Markdown, text, or ZIP file — a research package or a JATS package.',
       );
     } finally {
       setIsBusy(false);
@@ -240,7 +240,7 @@ export const ManuscriptImportUploadStep = ({
           {isBusy ? 'Reading document…' : 'Drop a manuscript here'}
         </StyledDropTitle>
         <StyledHint>
-          DOCX, PDF, Markdown, text, or portable research ZIP
+          DOCX, PDF, Markdown, text, or a ZIP — research package or JATS
         </StyledHint>
         <StyledChooseFile>Choose file…</StyledChooseFile>
       </StyledDropZone>

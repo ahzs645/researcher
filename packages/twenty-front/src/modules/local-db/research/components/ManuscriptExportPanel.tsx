@@ -223,6 +223,7 @@ export const ManuscriptExportPanel = ({
       />
       <ManuscriptJournalFormatCard
         citationStyleKey={citationStyleKey}
+        effectiveStyle={effectiveStyle}
         hasStyleOverrides={Object.keys(styleOverrides).length > 0}
         isSavingSettings={isSavingSettings}
         journals={journals}

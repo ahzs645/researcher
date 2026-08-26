@@ -9,9 +9,7 @@ describe('classifyApplicationHeading', () => {
     expect(classifyApplicationHeading('1. Background and Rationale')).toBe(
       'BACKGROUND',
     );
-    expect(classifyApplicationHeading('Research Objectives')).toBe(
-      'OBJECTIVES',
-    );
+    expect(classifyApplicationHeading('Research Objectives')).toBe('OBJECTIVES');
     expect(classifyApplicationHeading('Methodology')).toBe('METHODOLOGY');
     expect(classifyApplicationHeading('Knowledge Translation & Impact')).toBe(
       'IMPACT',
@@ -19,9 +17,7 @@ describe('classifyApplicationHeading', () => {
     expect(classifyApplicationHeading('Budget Justification')).toBe(
       'BUDGET_JUSTIFICATION',
     );
-    expect(classifyApplicationHeading('Workplan and Timeline')).toBe(
-      'TIMELINE',
-    );
+    expect(classifyApplicationHeading('Workplan and Timeline')).toBe('TIMELINE');
     expect(classifyApplicationHeading('Team and Expertise')).toBe('TEAM');
     expect(classifyApplicationHeading('EDI Considerations')).toBe('EDI');
   });

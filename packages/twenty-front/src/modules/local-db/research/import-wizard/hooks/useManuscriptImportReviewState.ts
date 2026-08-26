@@ -93,14 +93,18 @@ export const useManuscriptImportReviewState = ({
 
   // A portable package came out of this app: its sections, assets, references
   // and journal are records we wrote, not a reading of someone's Word file.
-  // There is nothing to review, so restore it instead of asking.
+  // There is nothing to review, so restore it instead of asking. A JATS
+  // article is just as structured but is somebody else's file, so it is
+  // shown before anything is written.
   // A latch, not state: it must flip before React can publish a render, or a
   // double-invoked effect restores the package twice.
   // oxlint-disable-next-line twenty/no-state-useref
   const hasStartedRestore = useRef(false);
+  const restoresItself =
+    preparedImport.portable && preparedImport.autoRestore === true;
   useEffect(() => {
     if (
-      !preparedImport.portable ||
+      !restoresItself ||
       hasStartedRestore.current ||
       isCommitting ||
       failed
@@ -112,7 +116,7 @@ export const useManuscriptImportReviewState = ({
     // `confirmImport` closes over the prepared import; re-running on its
     // identity would restore twice.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [preparedImport.portable]);
+  }, [restoresItself]);
 
   const updateSection = (
     sectionIndex: number,
@@ -157,7 +161,7 @@ export const useManuscriptImportReviewState = ({
     // instant the records land leaves them with no statement of what came
     // back. Every other import is confirmed by hand, so closing *is* the
     // acknowledgement.
-    if (succeeded && !preparedImport.portable) onClose();
+    if (succeeded && !restoresItself) onClose();
   };
 
   return {

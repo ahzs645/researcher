@@ -135,19 +135,23 @@ export const ManuscriptImportReviewStep = ({
     onClose,
     registerCommitState,
   });
-  // A portable package was produced by this app, so its classification is
-  // already correct — confirm what arrived instead of re-asking for it.
+  // A structured file needs no re-classification — confirm what arrived
+  // instead of re-asking for it. Only one this app wrote commits itself.
   const isPortable = preparedImport.portable;
+  const isRestoring =
+    preparedImport.portable && preparedImport.autoRestore === true;
 
   return (
     <StyledContainer>
       <StyledHeader>
         <StyledTitle>
-          {isPortable
+          {isRestoring
             ? isCommitting
               ? 'Restoring your research package…'
               : 'Here’s what was restored'
-            : 'Review & commit'}
+            : isPortable
+              ? 'Here’s what this article contains'
+              : 'Review & commit'}
         </StyledTitle>
         <StyledHint>
           {sourceName}
@@ -233,7 +237,7 @@ export const ManuscriptImportReviewStep = ({
           </div>
         ) : (
           <StyledSummary>
-            {isPortable
+            {isRestoring
               ? isCommitting
                 ? 'Restoring sections, assets, references and journal…'
                 : 'Restored into this manuscript.'
@@ -241,7 +245,7 @@ export const ManuscriptImportReviewStep = ({
           </StyledSummary>
         )}
         <div>
-          {isPortable ? null : (
+          {isRestoring ? null : (
             <Button
               title="Back"
               variant="secondary"
@@ -252,7 +256,7 @@ export const ManuscriptImportReviewStep = ({
           )}
           {/* A first-party package restores itself; the only button it needs
               is the one that gets you out if the restore fails. */}
-          {isPortable && !failed ? (
+          {isRestoring && !failed ? (
             <Button
               title={isCommitting ? 'Restoring…' : 'Done'}
               variant="primary"

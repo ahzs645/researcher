@@ -68,6 +68,9 @@ export type ImportedDocument = {
   sourceStylesXml?: string;
   sourceDocumentName?: string;
   portablePackage?: PortableResearchPaperManifest;
+  // Where that structure came from: a package this app exported, or a JATS
+  // article someone else's tool wrote.
+  portableSourceKind?: 'PACKAGE' | 'JATS';
 };
 
 export type ImportedFigureDraft = {

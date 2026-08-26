@@ -215,3 +215,30 @@ describe('parseJatsArticle', () => {
     );
   });
 });
+
+describe('a JATS article arriving through the importer', () => {
+  it('is structured, but is not committed without being shown', () => {
+    const manifest = buildPortableResearchPaperManifest(parsed(), {}, {});
+    const sections = manifest.sections.map((section) => ({
+      name: section.name,
+      sectionType: section.sectionType,
+      placement:
+        section.placement === 'SUPPLEMENT'
+          ? ('SUPPLEMENT' as const)
+          : ('MAIN' as const),
+      content: section.content,
+      orderIndex: section.orderIndex,
+      wordCount: section.wordCount,
+      includeInExport: section.includeInExport,
+    }));
+
+    // A package this app wrote restores itself; somebody else's article is
+    // just as structured and still gets looked at first.
+    expect(
+      preparePortableResearchPaperImport(manifest, sections, false).autoRestore,
+    ).toBe(false);
+    expect(
+      preparePortableResearchPaperImport(manifest, sections).autoRestore,
+    ).toBe(true);
+  });
+});

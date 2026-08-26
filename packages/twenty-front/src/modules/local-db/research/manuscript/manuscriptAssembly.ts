@@ -122,6 +122,10 @@ export type ManuscriptMeta = {
   affiliations?: string | null;
   titlePageExtraLines?: string[] | null;
   correspondingAuthor?: string | null;
+  // The structured contributor block (ORCID, CRediT roles, ROR, funding) as
+  // stored JSON. The JATS writer reads it off here; every other exporter
+  // works from the byline, which stays the source of truth for names.
+  contributorMetadata?: string | null;
   supplementTitle?: string | null;
   supplementAuthorLine?: string | null;
   supplementAffiliations?: string | null;

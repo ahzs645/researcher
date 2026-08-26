@@ -38,6 +38,11 @@ export type PreparedPortableResearchPaperImport = {
   // or re-create it.
   journal?: PortableJournalTemplate;
   portable: true;
+  // Whether this app wrote the file. A package we exported needs no review —
+  // its structure is records we saved. A JATS article is just as structured
+  // but came from somewhere else, and committing a stranger's file without
+  // showing it first would be the wrong kind of confident.
+  autoRestore: boolean;
 };
 
 // Which existing journal template a package's own template *is*. A seeded
@@ -70,6 +75,7 @@ export const matchPortableJournalTemplate = <
 export const preparePortableResearchPaperImport = (
   manifest: PortableResearchPaperManifest,
   sections: ImportedSectionDraft[],
+  autoRestore = true,
 ): PreparedPortableResearchPaperImport => {
   const sectionOrderByKey = new Map(
     manifest.sections.map((section) => [section.key, section.orderIndex]),
@@ -145,6 +151,7 @@ export const preparePortableResearchPaperImport = (
       (figure) => figure.assetKind !== 'TABLE',
     ).length,
     portable: true,
+    autoRestore,
   };
 };
 

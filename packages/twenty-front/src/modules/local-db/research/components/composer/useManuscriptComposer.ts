@@ -271,6 +271,7 @@ export const useManuscriptComposer = () => {
           manuscript.titlePageExtraLines,
         ),
         correspondingAuthor: manuscript.correspondingAuthor,
+        contributorMetadata: manuscript.contributorMetadata,
         supplementTitle: manuscript.supplementTitle,
         supplementAuthorLine: manuscript.supplementAuthorLine,
         supplementAffiliations: manuscript.supplementAffiliations,

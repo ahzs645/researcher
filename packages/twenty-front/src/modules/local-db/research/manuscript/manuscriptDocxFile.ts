@@ -21,6 +21,11 @@ import {
 } from './manuscriptImportBlocks';
 import { extractPdfText } from './manuscriptPdfFile';
 import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
+import { parseJatsArticle } from './manuscriptJatsImport';
+import {
+  buildPortableResearchPaperManifest,
+  type PortableResearchPaperManifest,
+} from './manuscriptPortableManifest';
 import { readPortableResearchPaperZip } from './manuscriptPortableZip';
 import { tiffToPngDataUrl } from './manuscriptTiff';
 
@@ -294,47 +299,71 @@ const fileExtension = (name: string): string =>
 
 // Read a user-picked file into an `ImportedDocument`. Supports .docx (real Word
 // files), .md/.markdown and .txt (treated as Markdown/plain text).
+// One manifest, whether it arrived as a package this app wrote or was read
+// out of somebody's JATS. Everything downstream — sections, assets,
+// references, contributors, cross-reference links — is the restore path that
+// already exists, so JATS needed no importer of its own.
+const importedDocumentFromManifest = (
+  portablePackage: PortableResearchPaperManifest,
+  sourceKind: 'PACKAGE' | 'JATS',
+): ImportedDocument => ({
+  title: portablePackage.metadata.title,
+  authorLine: portablePackage.metadata.authorLine,
+  affiliations: portablePackage.metadata.affiliations,
+  correspondingAuthor: portablePackage.metadata.correspondingAuthor,
+  sections: portablePackage.sections.map((section) => ({
+    name: section.name,
+    sectionType: section.sectionType,
+    placement: section.placement,
+    content: section.content,
+    orderIndex: section.orderIndex,
+    level: section.level ?? 1,
+    wordCount: section.wordCount,
+    includeInExport: section.includeInExport,
+    status: section.status,
+    ...(section.wordLimit !== undefined
+      ? { wordLimit: section.wordLimit }
+      : {}),
+  })),
+  stats: {
+    equationCount: portablePackage.sections.reduce(
+      (count, section) =>
+        count + (section.content.match(/\$\$[\s\S]*?\$\$/g) ?? []).length,
+      0,
+    ),
+    embeddedImageCount: portablePackage.figures.filter(
+      (figure) => figure.imageUrl !== undefined,
+    ).length,
+    tableCount: portablePackage.figures.filter(
+      (figure) => figure.assetKind === 'TABLE',
+    ).length,
+  },
+  portablePackage,
+  portableSourceKind: sourceKind,
+});
+
+const readJatsManifest = async (
+  file: File,
+): Promise<PortableResearchPaperManifest> =>
+  buildPortableResearchPaperManifest(
+    parseJatsArticle(await file.text()),
+    {},
+    {},
+  );
+
 export const readImportedDocumentFile = async (
   file: File,
 ): Promise<ImportedDocument> => {
   const extension = fileExtension(file.name);
+  if (extension === 'xml' || extension === 'jats') {
+    return importedDocumentFromManifest(await readJatsManifest(file), 'JATS');
+  }
   if (extension === 'zip') {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const portablePackage = readPortableResearchPaperZip(bytes);
-    return {
-      title: portablePackage.metadata.title,
-      authorLine: portablePackage.metadata.authorLine,
-      affiliations: portablePackage.metadata.affiliations,
-      correspondingAuthor: portablePackage.metadata.correspondingAuthor,
-      sections: portablePackage.sections.map((section) => ({
-        name: section.name,
-        sectionType: section.sectionType,
-        placement: section.placement,
-        content: section.content,
-        orderIndex: section.orderIndex,
-        level: section.level ?? 1,
-        wordCount: section.wordCount,
-        includeInExport: section.includeInExport,
-        status: section.status,
-        ...(section.wordLimit !== undefined
-          ? { wordLimit: section.wordLimit }
-          : {}),
-      })),
-      stats: {
-        equationCount: portablePackage.sections.reduce(
-          (count, section) =>
-            count + (section.content.match(/\$\$[\s\S]*?\$\$/g) ?? []).length,
-          0,
-        ),
-        embeddedImageCount: portablePackage.figures.filter(
-          (figure) => figure.imageUrl !== undefined,
-        ).length,
-        tableCount: portablePackage.figures.filter(
-          (figure) => figure.assetKind === 'TABLE',
-        ).length,
-      },
-      portablePackage,
-    };
+    return importedDocumentFromManifest(
+      readPortableResearchPaperZip(bytes),
+      'PACKAGE',
+    );
   }
   if (extension === 'docx') {
     return readImportedWordDocument(await file.arrayBuffer(), file.name);
@@ -352,7 +381,7 @@ export const readImportedDocumentSource = async (
   file: File,
 ): Promise<ImportedDocumentSource> => {
   const extension = fileExtension(file.name);
-  if (extension === 'zip') {
+  if (extension === 'zip' || extension === 'xml' || extension === 'jats') {
     return { kind: 'portable', document: await readImportedDocumentFile(file) };
   }
   if (extension === 'docx') {
@@ -388,5 +417,6 @@ export const readImportedDocumentSource = async (
   };
 };
 
-export const ACCEPTED_IMPORT_EXTENSIONS = '.docx,.pdf,.md,.markdown,.txt';
+export const ACCEPTED_IMPORT_EXTENSIONS =
+  '.docx,.pdf,.md,.markdown,.txt,.xml,.jats';
 export const ACCEPTED_MANUSCRIPT_IMPORT_EXTENSIONS = `${ACCEPTED_IMPORT_EXTENSIONS},.zip`;

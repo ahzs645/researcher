@@ -92,6 +92,7 @@ export const ManuscriptTitlePageTab = ({
       authorLine: manuscript.authorLine ?? '',
       affiliations: manuscript.affiliations ?? '',
       correspondingAuthor: manuscript.correspondingAuthor ?? '',
+      contributorMetadata: manuscript.contributorMetadata ?? '',
     },
   );
   const [extraLines, setExtraLines] = useState(() =>
@@ -112,6 +113,7 @@ export const ManuscriptTitlePageTab = ({
     manuscript.authorLine,
     manuscript.affiliations,
     manuscript.correspondingAuthor,
+    manuscript.contributorMetadata,
     manuscript.titlePageExtraLines,
     keywordsSection?.content,
   ]);
@@ -126,6 +128,7 @@ export const ManuscriptTitlePageTab = ({
       authorLine: manuscript.authorLine ?? '',
       affiliations: manuscript.affiliations ?? '',
       correspondingAuthor: manuscript.correspondingAuthor ?? '',
+      contributorMetadata: manuscript.contributorMetadata ?? '',
     });
     setExtraLines(
       parseManuscriptTitlePageExtraLines(manuscript.titlePageExtraLines),

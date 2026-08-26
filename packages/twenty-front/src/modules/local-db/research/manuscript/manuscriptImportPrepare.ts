@@ -145,6 +145,7 @@ export const prepareManuscriptImport = (
       preparePortableResearchPaperImport(
         document.portablePackage,
         document.sections,
+        document.portableSourceKind !== 'JATS',
       ),
       existingFigureRefKeys,
     );

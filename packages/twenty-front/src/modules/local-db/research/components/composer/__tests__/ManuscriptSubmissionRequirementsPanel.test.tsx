@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { ManuscriptSubmissionRequirementsPanel } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementsPanel';
+import { type FigureLike } from '@/local-db/research/manuscript/manuscriptTypes';
+import { type SubmissionRequirementManuscript } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 
 const enqueueErrorSnackBar = jest.fn();
 
@@ -149,5 +151,131 @@ describe('ManuscriptSubmissionRequirementsPanel', () => {
 
     expect(screen.getByText('Pick target journal')).toBeInTheDocument();
     expect(verdictFor('Limitations acknowledged')).toBe('Found');
+  });
+});
+
+describe('ManuscriptSubmissionRequirementsPanel screening axes', () => {
+  // Rendered through one helper because the panel takes eight props and only
+  // two of them vary across these cases.
+  const renderPanel = (
+    manuscript: SubmissionRequirementManuscript,
+    figures?: FigureLike[],
+  ) =>
+    render(
+      <ManuscriptSubmissionRequirementsPanel
+        manuscript={manuscript}
+        figures={figures}
+        isExplicitTarget={false}
+        onConfirmTargetJournal={async () => undefined}
+        onPickTargetJournal={jest.fn()}
+        onSaveValues={async () => undefined}
+        onSaveRequirements={async () => undefined}
+        onKeepJournalValue={async () => undefined}
+      />,
+    );
+
+  const AEROSOL_METHODS = {
+    sections: [
+      {
+        id: 'methods',
+        name: 'Methods',
+        sectionType: 'METHODS',
+        content:
+          'Filter samples were collected on quartz fibre filters and analysed by thermal-optical transmittance.',
+      },
+    ],
+  };
+
+  // Seven grey "not found" rows on an aerosol paper would teach the author to
+  // stop reading the panel; saying nothing at all would hide that the checks
+  // ran. One quiet line is the answer.
+  it('names the checks that do not apply instead of scoring them', () => {
+    renderPanel(AEROSOL_METHODS);
+
+    const screening = screen.getByLabelText('Automated screening');
+
+    expect(screening).toHaveTextContent('Not applicable to this manuscript');
+    expect(screening).toHaveTextContent('Cell line authentication');
+    expect(screening).not.toHaveTextContent('Not found Cell line');
+  });
+
+  it('names the figure a figure finding is about', () => {
+    renderPanel(AEROSOL_METHODS, [
+      {
+        id: 'figure-1',
+        name: 'Figure 1',
+        assetKind: 'FIGURE',
+        caption: '',
+        imageUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      },
+    ]);
+
+    expect(screen.getByText('Figure 1 has no caption.')).toBeInTheDocument();
+  });
+
+  describe('verifying a trial registration', () => {
+    const REGISTERED_MANUSCRIPT = {
+      sections: [
+        {
+          id: 'registration',
+          name: 'Trial registration',
+          sectionType: 'OTHER',
+          content:
+            'This trial was registered at ClinicalTrials.gov under NCT04280705.',
+        },
+      ],
+    };
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('offers a button and never fetches on render', () => {
+      const fetchMock = jest.fn();
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      renderPanel(REGISTERED_MANUSCRIPT);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(
+        screen.getByText('Verify with ClinicalTrials.gov'),
+      ).toBeInTheDocument();
+    });
+
+    it('shows the registry’s own answer once the button is pressed', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          protocolSection: {
+            identificationModule: {
+              nctId: 'NCT04280705',
+              briefTitle: 'Adaptive COVID-19 Treatment Trial (ACTT)',
+            },
+            statusModule: { overallStatus: 'COMPLETED' },
+          },
+        }),
+      }) as unknown as typeof fetch;
+
+      renderPanel(REGISTERED_MANUSCRIPT);
+      fireEvent.click(screen.getByText('Verify with ClinicalTrials.gov'));
+
+      await waitFor(() =>
+        expect(
+          screen.getByText(/Adaptive COVID-19 Treatment Trial/),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.getByText('1 identifier resolved to a registered study'),
+      ).toBeInTheDocument();
+    });
+
+    it('offers no button when the manuscript carries no registration number', () => {
+      renderPanel(AEROSOL_METHODS);
+
+      expect(
+        screen.queryByText('Verify with ClinicalTrials.gov'),
+      ).not.toBeInTheDocument();
+    });
   });
 });

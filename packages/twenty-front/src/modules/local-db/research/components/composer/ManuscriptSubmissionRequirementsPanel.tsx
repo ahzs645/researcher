@@ -7,12 +7,15 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 import {
   ManuscriptScreeningFindingRow,
   ManuscriptSubmissionRequirementRow,
+  ManuscriptTrialVerificationCheck,
 } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementRow';
 import { ManuscriptSubmissionRequirementPicker } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementPicker';
 import {
-  screenManuscript,
+  runManuscriptScreening,
   summarizeScreeningFindings,
 } from '@/local-db/research/manuscript/manuscriptScreening';
+import { type FigureLike } from '@/local-db/research/manuscript/manuscriptTypes';
+import { splitTrialIdentifiers } from '@/local-db/research/manuscript/screening/trialVerification';
 import {
   collectSubmissionConflicts,
   collectSubmissionNotices,
@@ -29,6 +32,10 @@ import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
 type ManuscriptSubmissionRequirementsPanelProps = {
   manuscript: SubmissionRequirementManuscript;
+  // The figure axis. Screening reads figures as well as sections, and a panel
+  // handed none simply screens the sections — which is what every caller did
+  // before figures existed here.
+  figures?: FigureLike[];
   template?: SubmissionRequirementTemplate & { name?: string | null };
   isExplicitTarget: boolean;
   onConfirmTargetJournal: () => Promise<void>;
@@ -96,6 +103,7 @@ const StyledScreeningNote = styled.p`
 
 export const ManuscriptSubmissionRequirementsPanel = ({
   manuscript,
+  figures,
   template,
   isExplicitTarget,
   onConfirmTargetJournal,
@@ -108,10 +116,16 @@ export const ManuscriptSubmissionRequirementsPanel = ({
   const { enqueueErrorSnackBar } = useSnackBar();
   // Screening reads the manuscript itself, so it does not depend on a target
   // journal and is rendered whether or not one is picked.
-  const screeningFindings = useMemo(
-    () => screenManuscript(manuscript),
-    [manuscript],
+  const screeningRun = useMemo(
+    () =>
+      runManuscriptScreening({
+        sections: manuscript.sections,
+        competingInterests: manuscript.competingInterests,
+        figures,
+      }),
+    [manuscript.sections, manuscript.competingInterests, figures],
   );
+  const screeningFindings = screeningRun.findings;
   const screeningSummary = summarizeScreeningFindings(screeningFindings);
   const screeningPanel = (
     <StyledScreening aria-label="Automated screening">
@@ -124,13 +138,38 @@ export const ManuscriptSubmissionRequirementsPanel = ({
       </StyledHeader>
       <StyledScreeningNote>
         What the BIH Charité screening tools look for in a finished paper, run
-        over the manuscript text. These are screening findings, not journal
-        requirements, and none of them blocks an export — a journal that does
-        not ask for a data statement is not a reason to submit without one.
+        over the manuscript text and its figures. These are screening findings,
+        not journal requirements, and none of them blocks an export — a journal
+        that does not ask for a data statement is not a reason to submit without
+        one.
       </StyledScreeningNote>
       {screeningFindings.map((finding) => (
-        <ManuscriptScreeningFindingRow key={finding.key} finding={finding} />
+        <ManuscriptScreeningFindingRow
+          key={finding.key}
+          finding={finding}
+          footer={
+            finding.key === 'TRIAL_REGISTRATION' &&
+            splitTrialIdentifiers(finding.identifiers ?? []).verifiable.length >
+              0 ? (
+              <ManuscriptTrialVerificationCheck
+                identifiers={finding.identifiers ?? []}
+              />
+            ) : undefined
+          }
+        />
       ))}
+      {screeningRun.declinations.length === 0 ? null : (
+        // Named rather than dropped. Seven grey "not found" rows on an aerosol
+        // paper would teach the author to stop reading the panel, and silence
+        // would hide that the checks ran at all.
+        <StyledScreeningNote>
+          Not applicable to this manuscript:{' '}
+          {screeningRun.declinations
+            .map((declination) => declination.label)
+            .join(', ')}
+          .
+        </StyledScreeningNote>
+      )}
     </StyledScreening>
   );
   const [requirements, setRequirements] = useState(() =>

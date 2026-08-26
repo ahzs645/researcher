@@ -5,8 +5,10 @@
 
 import {
   MANUSCRIPT_SCREENING_CHECKS,
+  type ScreeningDeclination,
   type ScreeningFinding,
 } from './manuscriptScreening';
+import { type TrialVerificationSummary } from './screening/trialVerification';
 import { type SubmissionCheck } from './manuscriptSubmission';
 
 const SCREENING_CHECK_ID = 'automated-screening';
@@ -75,6 +77,48 @@ const VERDICT_ORDER: Record<ScreeningFinding['verdict'], number> = {
   PRESENT: 2,
 };
 
+// What the report can carry beyond the findings themselves: the checks that
+// declined to apply, and a registry lookup if one has been run. Both are
+// optional, so the callers that build a package offline keep working and the
+// report never implies a verification that never happened.
+export type ScreeningReportExtras = {
+  declinations?: ScreeningDeclination[];
+  trialVerification?: TrialVerificationSummary;
+};
+
+// An identifier line is only worth printing if it says what is known about the
+// identifier. Without a registry lookup that is "recognised from the text";
+// with one it is the registry's own answer, which is the whole point of having
+// run it.
+const identifierLines = (
+  finding: ScreeningFinding,
+  trialVerification: TrialVerificationSummary | undefined,
+): string[] => {
+  const identifiers = finding.identifiers ?? [];
+  if (identifiers.length === 0) return [];
+
+  const verifications = trialVerification?.verifications ?? [];
+  if (verifications.length === 0) {
+    return [
+      `  Identifiers (recognised, not verified): ${identifiers.join(', ')}`,
+    ];
+  }
+
+  return [
+    '  Identifiers:',
+    ...identifiers.map((identifier) => {
+      const verification = verifications.find(
+        (candidate) => candidate.identifier === identifier,
+      );
+      return `    ${identifier} — ${
+        verification === undefined
+          ? 'recognised from the text, not verified'
+          : verification.summary
+      }`;
+    }),
+  ];
+};
+
 // The artifact a coauthor or an editor can be handed: until now the screening
 // existed only as rows on a tab, which is nothing anyone can pass on. Plain
 // text like `submission-readiness.txt`, and it quotes the matched sentence so
@@ -82,6 +126,7 @@ const VERDICT_ORDER: Record<ScreeningFinding['verdict'], number> = {
 export const buildScreeningReport = (
   findings: ScreeningFinding[],
   manuscriptTitle: string,
+  { declinations = [], trialVerification }: ScreeningReportExtras = {},
 ): string =>
   [
     'Automated screening',
@@ -104,17 +149,28 @@ export const buildScreeningReport = (
         ...(finding.evidence.length > 0
           ? [
               `  Evidence: "${finding.evidence}"${
-                finding.sectionName === undefined
+                (finding.sectionName ?? finding.figureLabel) === undefined
                   ? ''
-                  : ` — ${finding.sectionName}`
+                  : ` — ${finding.sectionName ?? finding.figureLabel}`
               }`,
             ]
           : []),
-        ...(finding.identifiers !== undefined && finding.identifiers.length > 0
-          ? [
-              `  Identifiers (recognised, not verified): ${finding.identifiers.join(', ')}`,
-            ]
-          : []),
+        ...(finding.figureLabel === undefined
+          ? []
+          : [`  Figure: ${finding.figureLabel}`]),
+        ...identifierLines(finding, trialVerification),
         '',
       ]),
+    // Named rather than dropped: a reader who wonders whether this manuscript
+    // was screened for blinding gets an answer, and the answer is not "no".
+    ...(declinations.length === 0
+      ? []
+      : [
+          'Not applicable to this manuscript',
+          ...declinations.map(
+            (declination) =>
+              `  ${declination.label} · ${declination.tool} — ${declination.reason}`,
+          ),
+          '',
+        ]),
   ].join('\n');

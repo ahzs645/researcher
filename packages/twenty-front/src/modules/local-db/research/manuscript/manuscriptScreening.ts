@@ -15,33 +15,58 @@
 //
 // One screener per check lives in ./screening, each owning the cues it reads.
 // This file is the catalogue, the reading of the manuscript into screenable
-// sections, and the run that puts the two together.
+// sections and figures, and the run that puts the two together.
+//
+// Not every check is about every manuscript. The SciScore rigor criteria are
+// about experiments on living subjects and cultured cells, and asked of an
+// atmospheric-measurement paper they are category errors rather than failures.
+// A check that is not about this manuscript declines: it produces no finding
+// and says why, in a `ScreeningDeclination` this file collects alongside the
+// findings. `rigorScope` carries the reasoning; `screeningTypes` carries the
+// argument for why that is not a fourth verdict.
 
 import { isNonEmptyString } from '@sniptt/guards';
 
+import { screenBlinding } from './screening/blinding';
+import { screenCellLineAuthentication } from './screening/cellLineAuthentication';
 import { screenCompetingInterests } from './screening/competingInterestsStatement';
 import { screenEthicsApproval } from './screening/ethicsApproval';
+import { screenFigureDocumentation } from './screening/figureDocumentation';
 import { screenFunding } from './screening/fundingStatement';
 import { screenInformedConsent } from './screening/informedConsent';
 import { screenLimitations } from './screening/limitationsStatement';
+import { screenMycoplasmaTesting } from './screening/mycoplasmaTesting';
 import { screenOpenCode } from './screening/openCodeStatement';
 import { screenOpenData } from './screening/openDataStatement';
+import { screenPowerAnalysis } from './screening/powerAnalysis';
 import { screenProtocolRegistration } from './screening/protocolRegistration';
+import { screenRandomisation } from './screening/randomisation';
+import { screenResourceIdentifiers } from './screening/resourceIdentifiers';
+import { screenSexAsBiologicalVariable } from './screening/sexAsBiologicalVariable';
 import { screenTrialRegistration } from './screening/trialRegistration';
+import { isDeclined } from './screening/screeningOutcomes';
+import { screeningScope } from './screening/rigorScope';
 import {
   type ScreeningCheckDefinition,
   type ScreeningCheckKey,
+  type ScreeningDeclination,
+  type ScreeningFigure,
   type ScreeningFinding,
   type ScreeningManuscript,
-  type ScreeningOutcome,
+  type ScreeningResult,
+  type ScreeningRun,
   type ScreeningSection,
 } from './screening/screeningTypes';
 
 export {
   type ScreeningCheckDefinition,
   type ScreeningCheckKey,
+  type ScreeningDeclination,
+  type ScreeningFigure,
   type ScreeningFinding,
   type ScreeningManuscript,
+  type ScreeningRun,
+  type ScreeningScope,
   type ScreeningTool,
   type ScreeningVerdict,
 } from './screening/screeningTypes';
@@ -100,6 +125,54 @@ export const MANUSCRIPT_SCREENING_CHECKS: ScreeningCheckDefinition[] = [
     label: 'Informed consent',
     tool: 'SciScore',
     question: 'Is informed consent reported as obtained or waived?',
+  },
+  {
+    key: 'RANDOMISATION',
+    label: 'Randomisation of subjects',
+    tool: 'SciScore',
+    question: 'Were subjects assigned to their groups at random?',
+  },
+  {
+    key: 'BLINDING',
+    label: 'Blinding',
+    tool: 'SciScore',
+    question: 'Does the paper say who was blinded to the group allocation?',
+  },
+  {
+    key: 'SEX_AS_BIOLOGICAL_VARIABLE',
+    label: 'Sex as a biological variable',
+    tool: 'SciScore',
+    question: 'Is the sex of the subjects reported?',
+  },
+  {
+    key: 'POWER_ANALYSIS',
+    label: 'Power analysis',
+    tool: 'SciScore',
+    question: 'Is the group size justified by a power calculation?',
+  },
+  {
+    key: 'CELL_LINE_AUTHENTICATION',
+    label: 'Cell line authentication',
+    tool: 'SciScore',
+    question: 'Are the cell lines reported as authenticated?',
+  },
+  {
+    key: 'MYCOPLASMA_TESTING',
+    label: 'Mycoplasma contamination check',
+    tool: 'SciScore',
+    question: 'Are the cultured cells reported as tested for mycoplasma?',
+  },
+  {
+    key: 'RESOURCE_IDENTIFIERS',
+    label: 'Resource identifiers (RRID)',
+    tool: 'SciScore',
+    question: 'Do the key biological resources carry an RRID?',
+  },
+  {
+    key: 'FIGURE_DOCUMENTATION',
+    label: 'Figure captions and alt text',
+    tool: 'composer',
+    question: 'Does every figure image carry a caption and alternative text?',
   },
 ];
 
@@ -247,12 +320,50 @@ export const collectScreeningSections = (
     ];
   });
 
-export const screenManuscript = (
+// Figures are read the same way sections are: into a shape a check can match
+// over without knowing where the record came from. An image check gets the
+// data URL; this check gets the caption and the alt text.
+export const collectScreeningFigures = (
   manuscript: ScreeningManuscript,
-): ScreeningFinding[] => {
+): ScreeningFigure[] =>
+  [...(manuscript.figures ?? [])]
+    .sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0))
+    .map((figure, index) => {
+      const name = (figure.name ?? '').trim();
+      const refKey = (figure.refKey ?? '').trim();
+      const assetKind = (figure.assetKind ?? 'FIGURE').toLocaleUpperCase();
+      const imageUrl = isNonEmptyString(figure.imageUrl)
+        ? figure.imageUrl.trim()
+        : null;
+
+      return {
+        id: figure.id,
+        label: isNonEmptyString(name)
+          ? name
+          : isNonEmptyString(refKey)
+            ? refKey
+            : `${assetKind === 'TABLE' ? 'Table' : 'Figure'} ${index + 1}`,
+        assetKind,
+        caption: markdownToProse(figure.caption ?? ''),
+        altText: (figure.altText ?? '').trim(),
+        imageUrl,
+        // A Mermaid diagram has no image until export draws it, and is still a
+        // picture the reader will see.
+        hasImage: imageUrl !== null || isNonEmptyString(figure.diagramSource),
+      };
+    });
+
+// The full run: what every check said, and which checks declined to say
+// anything. `screenManuscript` is the findings half of this, kept as it was
+// for the callers that only want rows.
+export const runManuscriptScreening = (
+  manuscript: ScreeningManuscript,
+): ScreeningRun => {
   const sections = collectScreeningSections(manuscript);
+  const figures = collectScreeningFigures(manuscript);
+  const scope = screeningScope(sections, figures);
   const trialRegistration = screenTrialRegistration(sections);
-  const outcomes: Record<ScreeningCheckKey, ScreeningOutcome> = {
+  const results: Record<ScreeningCheckKey, ScreeningResult> = {
     OPEN_DATA: screenOpenData(sections),
     OPEN_CODE: screenOpenCode(sections),
     LIMITATIONS: screenLimitations(sections),
@@ -265,15 +376,33 @@ export const screenManuscript = (
     ),
     ETHICS_APPROVAL: screenEthicsApproval(sections),
     INFORMED_CONSENT: screenInformedConsent(sections),
+    RANDOMISATION: screenRandomisation(sections, scope),
+    BLINDING: screenBlinding(sections, scope),
+    SEX_AS_BIOLOGICAL_VARIABLE: screenSexAsBiologicalVariable(sections, scope),
+    POWER_ANALYSIS: screenPowerAnalysis(sections, scope),
+    CELL_LINE_AUTHENTICATION: screenCellLineAuthentication(sections, scope),
+    MYCOPLASMA_TESTING: screenMycoplasmaTesting(sections, scope),
+    RESOURCE_IDENTIFIERS: screenResourceIdentifiers(sections, scope),
+    FIGURE_DOCUMENTATION: screenFigureDocumentation(figures, scope),
   };
 
-  return MANUSCRIPT_SCREENING_CHECKS.map(({ key, label, tool }) => ({
-    key,
-    label,
-    tool,
-    ...outcomes[key],
-  }));
+  const findings: ScreeningFinding[] = [];
+  const declinations: ScreeningDeclination[] = [];
+  for (const { key, label, tool } of MANUSCRIPT_SCREENING_CHECKS) {
+    const result = results[key];
+    if (isDeclined(result)) {
+      declinations.push({ key, label, tool, reason: result.reason });
+      continue;
+    }
+    findings.push({ key, label, tool, ...result });
+  }
+
+  return { findings, declinations };
 };
+
+export const screenManuscript = (
+  manuscript: ScreeningManuscript,
+): ScreeningFinding[] => runManuscriptScreening(manuscript).findings;
 
 export type ScreeningSummary = {
   present: number;

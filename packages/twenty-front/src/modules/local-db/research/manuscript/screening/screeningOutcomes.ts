@@ -3,8 +3,11 @@
 // beside the vocabulary rather than in any one screener.
 
 import {
+  type ScreeningDeclined,
+  type ScreeningFigure,
   type ScreeningOutcome,
   type ScreeningPassage,
+  type ScreeningResult,
   type ScreeningSection,
   type ScreeningVerdict,
   type SentenceClassification,
@@ -38,6 +41,38 @@ export const absent = (detail: string): ScreeningOutcome => ({
   detail,
   evidence: '',
 });
+
+// A finding that points at a figure instead of a section. The evidence is the
+// caption where there is one, for the same reason a section finding quotes its
+// sentence: the author judges the verdict rather than trusting it.
+export const figureOutcome = ({
+  figure,
+  verdict,
+  detail,
+  evidence,
+}: {
+  figure: ScreeningFigure;
+  verdict: ScreeningVerdict;
+  detail: string;
+  evidence?: string;
+}): ScreeningOutcome => ({
+  verdict,
+  detail,
+  evidence: evidence === undefined ? '' : truncateEvidence(evidence),
+  figureId: figure.id,
+  figureLabel: figure.label,
+});
+
+// The check has nothing to judge, because the manuscript is not about the
+// material it scores. The reason is written for the author, not for a log.
+export const notApplicable = (reason: string): ScreeningDeclined => ({
+  applies: false,
+  reason,
+});
+
+export const isDeclined = (
+  result: ScreeningResult,
+): result is ScreeningDeclined => 'applies' in result;
 
 // A present statement anywhere outranks a weak one anywhere: an author who
 // deposited the data and also offered them on request has a data statement.

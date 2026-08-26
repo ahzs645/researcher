@@ -463,11 +463,23 @@ three are now wired, and the shape of each fix was a decision in its own right.
     just over the 500-line guideline. The ~250 lines they once duplicated now
     live in `manuscriptSourceExport.ts`; what remains is genuinely per-format.
 12. **Image-based screening is not implemented** — rainbow colour maps
-    (JetFighter), bar graphs of continuous data (Barzooka). They need pixels
-    and a model, and were deliberately skipped.
+    (JetFighter), bar graphs of continuous data (Barzooka). This record
+    previously said both "need pixels and a model", which is half wrong and was
+    the reason both were written off together. Barzooka is a trained
+    convolutional network and should stay out. JetFighter is a *heuristic*: it
+    converts a figure to a perceptually uniform colour space and compares its
+    colour distribution against known bad colormaps. This app already holds
+    every figure as a data URL and already rasterises through a canvas, so the
+    pixels are in hand and no model is needed. It is also the only accessibility
+    check any of the eight projects performs — a rainbow colormap is unreadable
+    to a colourblind reader — which is a better reason to build it than
+    reproducibility was.
 
 ### Not planned
 
 Continuous publishing from git (Manubot's model, wrong for a local-first app),
 JATS as the editing model (would give up the Word round trip), and rendering
-MyST's own LaTeX/Typst templates (needs jtex).
+MyST's own LaTeX/Typst templates — not for the reason first given here. "Needs
+jtex" is wrong: Typst has a wasm compiler that runs in a browser. The real
+reason is editorial — a rendered template is the journal deciding what the
+output looks like, where §0 says the author's document decides.

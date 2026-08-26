@@ -48,7 +48,10 @@ PDF / HTML / JATS / Markdown-bundle / portable-ZIP / submission-package
 exports, submission readiness against a journal profile, and — as of this
 week — inline maths as real equation objects and live Word numbering fields.
 
-The gaps below are the ones that matter.
+The six gaps below were the ones that mattered, and all six have since been
+built. They are kept as written because they record what was missing and why
+it was worth doing. What the eight projects still do that this app does not is
+a separate, later audit: [What they still do that we do not](#what-they-still-do-that-we-do-not).
 
 ---
 
@@ -182,8 +185,13 @@ model; skip those.
   backend.
 - **JATS as the editing model** (Texture). Archival XML is an export target
   here, and making it the document model would give up the Word round trip.
-- **Typst as a third typeset path** (MyST). Real, but the DOCX and PDF paths
-  both work; this buys nothing a journal asks for.
+- **Typst as a third typeset path** (MyST). This was taken after all — LaTeX and
+  Typst source export both ship. What is still declined is rendering a journal's
+  own template through jtex, and the reason first given here ("needs jtex") was
+  wrong: Typst has a wasm compiler that runs in a browser, so local-first is not
+  the obstacle. The obstacle is editorial. A jtex PDF is the journal's template
+  deciding what the output looks like, where this app's promise is that the
+  author's document decides.
 
 ## What happened next
 
@@ -196,16 +204,257 @@ journals**, not 422 templates. The number quoted everywhere is the journals
 those templates reach through their own required journal choice — MDPI alone
 offers 355.
 
-## Recommended order
+## What they still do that we do not
 
-1. Tracked changes + comments on import — a correctness bug in the workflow's
-   most common input.
-2. Retracted-reference check — highest damage caught for the least code.
-3. Author metadata: ORCID, CRediT, ROR, funding — unblocks the JATS export and
-   six readiness items at once.
-4. PMID/arXiv identifiers.
-5. Journal profile import/export.
-6. Statement-level readiness checks.
+An audit against the eight projects in the survey, done by reading the code rather
+than by recalling the survey. Every absence below was checked with a named grep or
+a file read, and every claim about another project was re-confirmed against its
+current documentation in August 2026. Several capabilities that look missing are
+present in a different shape and are not counted as gaps: a figure can already be
+*plotted* from a linked dataset record or a Markdown grid and re-rendered into the
+DOCX at export time (`manuscript/manuscriptChart.ts`, `figure.datasetId`,
+`imageSource: 'DATASET'`), Mermaid diagrams are drawn per export from source
+(`manuscript/manuscriptDiagram.ts`), book-length work is representable as one
+manuscript whose level-1 sections are chapters with chapter-scoped asset numbering
+(`manuscript/manuscriptNumbering.ts`, `chapterBySectionId`) and a thesis cover page
+(`titlePageTemplate`), and a co-author's tracked changes and comments already come
+in from Word under an explicit `ACCEPT`/`REJECT` choice. Those are differences of
+shape, not holes.
+
+What follows is thirteen real differences, grouped by whether they are a deliberate
+no, a different product, or simply unbuilt.
+
+### Blocked by position
+
+- **Executable content — MyST and Quarto.** MyST executes `.ipynb` cells, `code-cell`
+  directives and inline `eval` roles at build time against a Jupyter kernel, and can
+  ship a JupyterLite runtime so the reader re-runs the code in their own browser;
+  Quarto does the same through knitr and Jupyter engines with `fig-cap` on computed
+  figures. Nothing of the kind is here: grepping the module for
+  `notebook|ipynb|jupyter|executable|kernel|pyodide|code.?cell|execute` returns only
+  the word "notebooks" inside a screening regex and "Electronic lab notebook" in seed
+  data. This is blocked by the Word-first round trip rather than by local-first —
+  MyST's JupyterLite path proves in-browser execution is possible without a server,
+  so no-backend is not the obstacle. The obstacle is that a `.docx` has no cell and no
+  output object, so the moment the manuscript goes back to Word the code stops being
+  code and becomes a picture, and the provenance cannot survive the trip out and
+  back. The app already occupies the useful half of that space by regenerating a
+  figure from a dataset record at export, which is re-execution of the only step that
+  has to be re-executed to keep a figure honest.
+
+- **Real-time collaborative editing — Fidus Writer and Kotahi.** Fidus Writer lets
+  collaborators type into one document simultaneously and carries comments and
+  revision tracking as first-class editor features; Kotahi's Wax editor does the same
+  for a journal's editorial team. Absent here, and not by omission: grepping for
+  `websocket|yjs|y-websocket|crdt|prosemirror-collab|awareness|presence|realtime`
+  across the module returns nothing but a bibliography entry containing the phrase
+  "real-time loading compensation". This is blocked by no-backend in the strict
+  sense — a CRDT still needs a relay to exchange updates, and there is no server for
+  one. The app's collaboration channel is the `.docx` itself, which is how these
+  manuscripts actually circulate, and it now reads what comes back on that channel.
+
+- **Continuous publishing and a hosted article website — Manubot and MyST.** Manubot
+  rebuilds the manuscript from git on every push and deploys a versioned webpage with
+  tooltips, a table of contents, figure viewers and public annotations; MyST's web
+  renderer does the equivalent for a MyST project. The survey already recorded this
+  as declined and the decisions record repeats it. It is blocked by no-backend twice
+  over: there is no CI to run the build and nowhere to host the result. The static
+  one-file HTML export is the local-first answer to the same need.
+
+- **Rendering a journal's real page layout through jtex — MyST.** A MyST template is
+  a LaTeX or Typst file that jtex renders into a PDF that looks like the journal's
+  own pages; this app writes its own preamble instead, and each imported profile says
+  so in its notes. Confirmed absent: `jtex|texlive|tectonic|latexmk|wasm.*tex` matches
+  only the three comments that say it is not done. Worth correcting the stated reason,
+  though: "needs jtex" understates it in one direction and overstates it in the other.
+  Typst has a wasm compiler that runs in a browser, so local-first is not what stops
+  this. What stops it is the Word-first position — a jtex PDF is the journal template
+  deciding what the output looks like, where this app's promise is that the author's
+  own document decides. The registry import already takes the half that is compatible
+  with that promise, which is the template's *requirements*.
+
+- **Cross-project external references — MyST.** MyST projects declare other projects
+  under `project.references` in `myst.yml` and then link into them with
+  `[](xref:spec#paragraph)`, resolving through the `myst.xref.json` that every
+  published MyST site exposes; the same protocol reaches Sphinx inventories, and there
+  are sibling `doi:`, `rrid:` and `wiki:` protocols. Grepping for
+  `myst\.xref|xref\.json|intersphinx|objects\.inv|crossProject` returns nothing here.
+  The outbound half is blocked by no-backend: making this paper's figures
+  referenceable means publishing a resolvable `myst.xref.json` at a stable URL, and
+  there is nowhere to publish it. The inbound half — resolving `xref:` to a hyperlink
+  and a label inside an exported document — would technically work, but it is worth
+  very little on its own, because it presumes a corpus of MyST-published targets that
+  the journals this app aims at do not have, and because a reader of the submitted
+  `.docx` cannot follow the link anyway. Citing the other paper by DOI, which the app
+  does, is the interoperable version of the same act.
+
+### Out of scope
+
+- **Editorial and peer-review workflow — Kotahi, and Fidus Writer's sharing model.**
+  Kotahi runs submission intake, configurable open/blind/double-blind review, shared
+  and individual reviewer reports, decision letters, a production queue and DOI
+  deposit, around the same Wax editor. Fidus Writer has document sharing with roles.
+  This is a publisher-side product with a multi-tenant server at its centre, and it
+  is a different thing from an authoring tool. The nearest thing here is submission
+  *tracking* — `ManuscriptSubmissionTrackingPanel`, `manuscriptSubmission.ts` — which
+  records where a manuscript has been sent from the author's side and makes no attempt
+  to run the other side of the transaction.
+
+- **Barzooka's bar-graph detector — the ASWG set.** Barzooka is a deep convolutional
+  network trained on nine graph types that flags bar graphs used for continuous data.
+  Absent here (`jetfighter|barzooka` matches nothing outside documentation), and it
+  should stay absent: unlike its sibling JetFighter it genuinely needs a trained model,
+  and shipping weights plus an inference runtime into a browser app that has no model
+  hosting is a different engineering problem from anything else in this codebase.
+
+### Unbuilt but coherent
+
+- **Footnotes and endnotes — MyST, Quarto, Pandoc Scholar, Fidus Writer, and JATS
+  itself.** All of them carry footnotes as a document object; JATS has `<fn>` and
+  `<fn-group>`. This app has none, at any point in the pipeline. `manuscriptDocxFile.ts`
+  reads `word/document.xml`, `word/styles.xml`, `word/_rels/document.xml.rels` and
+  `word/comments.xml` and never `word/footnotes.xml` or `word/endnotes.xml`; grepping
+  `footnote|endnote` across `manuscript/` returns exactly one hit, an incidental
+  mention in a comment in `manuscriptEditorContent.ts`, and the editor schema has no
+  footnote node. Because the run reader takes text from `<w:t>` and a footnote
+  reference is a `<w:footnoteReference>` element carrying no text, a Word manuscript
+  with footnotes imports with them silently gone — the same class of bug as the
+  tracked-deletion one, in a feature the app's own position makes central. This is the
+  clearest hole in the Word round trip. *Size: a week.* It touches the docx part
+  reader and the run reader in `manuscriptDocImport.ts`, a footnote node in the editor
+  schema and `manuscriptEditorContent.ts` so it survives editing, `FootnoteReferenceRun`
+  plus the `footnotes` option on the `docx` `Document` in `manuscriptDocxExport.ts`
+  (the exporter already builds `docx` objects directly, so this is reachable),
+  `<fn>`/`<fn-group>` in the JATS writer and reader, `\footnote{}` and `#footnote[]`
+  in the LaTeX and Typst writers, and the portable manifest.
+
+- **Subfigures and panel layouts — MyST and Quarto.** MyST creates subfigures by
+  putting several images in a `{figure}` directive body; each gets an implicit label
+  of the parent's label plus a letter, so `#my-figure-a` renders as "Figure 1a", and a
+  `{grid}` directive controls the arrangement. Quarto does it with a div carrying a
+  `#fig-` id, `layout-ncol` or a `layout` array like `[[1,1],[1]]`, and `fig-subcap`
+  for computed figures. Here a figure is a single flat image: grepping
+  `subfigure|sub-figure|layout-ncol|fig-subcap|multipanel|figureGroup` returns nothing,
+  `FigureLike` has one `imageUrl`, and `buildAssetLookup` keys one number per asset
+  record. The consequence is concrete — a two-panel figure has to be pasted together
+  in a graphics program with the letters baked into the pixels, and a sentence saying
+  "as Figure 3b shows" cannot be a resolvable cross-reference or a live Word `REF`
+  field, which is the one thing this app does better than the tools it is measured
+  against. *Size: a week.* It touches a parent/child link on the figure record,
+  letter-suffix numbering in `manuscriptNumbering.ts`, key resolution in
+  `manuscriptCrossReference.ts`, the figure renderer in every exporter (a Word table
+  or grid for the panel row, `<fig-group>` in JATS, `subcaption` in LaTeX, a Typst
+  `grid`), and the figure editor UI.
+
+- **SciScore's rigor criteria — the ASWG set.** SciScore scores a methods section on
+  randomisation of subjects, blinding of investigator or analysis, sex as a biological
+  variable, power analysis for group size, cell-line authentication and contamination
+  checks, and the proportion of key biological resources given an RRID. The
+  implementation here uses SciScore for two checks only: `ScreeningCheckKey` is nine
+  values and the two attributed to SciScore are `ETHICS_APPROVAL` and
+  `INFORMED_CONSENT`, both headed "the non-image half" in their own module comments.
+  Grepping `randomi[sz]|blind(ed|ing)|sample.?size|power.?analysis|sex\s+as|RRID|cell.?line`
+  across `manuscript/` returns nothing. The absent half is the same shape as the
+  present half — sentence matching over sections the screener already receives — so
+  the machinery in `manuscript/screening/` takes it without redesign. *Size: an
+  afternoon per check, a week for the set.* It touches new modules under
+  `manuscript/screening/`, the `ScreeningCheckKey` union and `MANUSCRIPT_SCREENING_CHECKS`
+  in the barrel, the panel, and `buildScreeningReport`. Note that this half of SciScore
+  is biomedical, so for a Copernicus atmospheric-measurement paper it will report
+  honestly that none of it applies.
+
+- **Verifying a trial registration number against the registry — TrialIdentifier.**
+  The ASWG tool checks that a trial is actually registered, not merely that a
+  registration-shaped string appears. Here `manuscript/screening/trialRegistration.ts`
+  matches eight registries by pattern and the screening report prints "Identifiers
+  (recognised, not verified)" in so many words; `clinicaltrials.gov` appears in the
+  codebase only as the display name beside an `NCT\d{8}` regex, never as a request
+  host. The app already has the exact pattern this needs: the retraction scan is a
+  button, returns CLEAN or UNKNOWN rather than collapsing them, and never persists its
+  verdict. *Size: an afternoon.* It touches a fetch module alongside
+  `components/composer/references/manuscriptRetractionFetch.ts`, an in-memory scan
+  state atom modelled on `manuscriptRetractionScanState.ts`, and the screening panel,
+  with the CLEAN/UNKNOWN discipline carried over intact.
+
+- **JetFighter's rainbow-colour-map check — the ASWG set.** This one was written off
+  together with Barzooka as needing "pixels and a model", and that is half wrong.
+  JetFighter converts figure images to a perceptually uniform colour space and compares
+  their colour distribution against known bad colormaps using k-d trees, reporting the
+  per-cent coverage of Jet-like colour: pixels, yes, but a heuristic, not a trained
+  model, with under 1% strict false positives. This app has figure images as data URLs
+  in the browser and already rasterises through a canvas in
+  `manuscript/manuscriptChartImage.ts`, so the pixels are in hand. Nothing implements
+  it. *Size: a week.* It touches a new pixel module (canvas `getImageData` over each
+  figure's data URL, plus a colour-distance metric), and it is the first screening
+  check whose subject is a figure rather than a section — `ScreeningSection`,
+  `ScreeningManuscript` and `ScreeningFinding` in `screeningTypes.ts` are all
+  section-shaped today and would grow a figure axis. Accessibility, not just
+  reproducibility, is the reason it is worth doing: a rainbow colormap is unreadable
+  to a colourblind reader, and it is the only accessibility check any of the eight
+  projects performs.
+
+- **Semantic metadata on the web-facing output — Pandoc Scholar.** Pandoc Scholar's
+  distinguishing feature is a custom writer that emits the article's data as JSON-LD
+  against schema.org, typing the document as a `ScholarlyArticle` and mapping authors,
+  affiliations and dates; it also supports CiTO citation typing through an
+  `@method:key` syntax. This app's HTML export writes a head of five things — charset,
+  viewport, `<title>`, `<meta name="author">` and a truncated `<meta name="description">`
+  (`manuscriptHtmlExport.ts` around line 472) — and grepping the whole module for
+  `schema\.org|json-?ld|dcterms|citation_title` matches only test fixtures. The irony
+  is checkable: `manuscriptReferenceIdentifiers.ts` *reads* Highwire `citation_*` tags
+  and Dublin Core `DC.*` tags when resolving a reference from a URL, so the app knows
+  that vocabulary and simply never speaks it. The practical loss is that an HTML export
+  circulated as a preprint cannot be picked up by Zotero, Google Scholar or anything
+  else that reads a page's metadata, even though the structured contributor data —
+  ORCID, CRediT, ROR, funding — is already stored and already reaches the JATS writer.
+  *Size: an afternoon to a day.* It touches only the head builder in
+  `manuscriptHtmlExport.ts`, reading `bundle.metadata` and the contributor metadata the
+  JATS exporter already consumes, optionally emitting a `.jsonld` sidecar file into the
+  export bundle. CiTO is a separate and much smaller prize and is not worth taking.
+
+- **Cross-references to sections — Quarto and MyST.** Both let a heading be a
+  cross-reference target (`@sec-methods`, `#my-section`) so a sentence can say "see
+  Section 3" and have the number follow the section. Here `CROSS_REF_PATTERN` resolves
+  `[#key]` only through `resolveAssetKey`, whose lookup is `buildAssetLookup` over
+  numbered assets, and whose prefix strip list is `fig|figure|tab|table|scheme|box|eq|equation`
+  — no `sec`. Grepping `\[#sec` returns nothing. Section *numbers* do exist as a
+  journal style (`sectionNumbering`, rendered by `manuscriptBlocks.ts` and the LaTeX
+  and Typst writers), so the numbers a reference would print are already computed;
+  there is just no way to point at one. *Size: a week.* It touches a stable ref key on
+  the section record, a section counter in `manuscriptNumbering.ts` reconciled with
+  the heading numbers `manuscriptBlocks.ts` already renders, key resolution in
+  `manuscriptCrossReference.ts`, and a `SEQ`/`REF` pair or a bookmark link in each
+  exporter — the same treatment assets already get.
+
+- **Writing comments back into the Word file — Fidus Writer, Kotahi, and Pandoc's
+  `--track-changes=all`.** Pandoc can read a `.docx`'s comments as marked spans, and
+  both editors treat a comment as a durable object with a reply thread. This app reads
+  `word/comments.xml` on import and flattens each comment into the notes field of the
+  section it anchors to, which is a deliberate and good choice for reading them; but
+  the export side has no comment path at all — `word/comments.xml` appears once in the
+  codebase, in the reader. So a manuscript can come in from a co-author with comments
+  and cannot go back out with a reply, which breaks the round trip in the one place
+  the round trip is the product. One honest complication: because the import flattens
+  a comment to a section note, the character anchor is already lost, so a true round
+  trip needs the anchor preserved on the way in as well as written on the way out.
+  Multi-user threading stays blocked for the reasons above; a single author annotating
+  their own draft and handing it back does not. *Size: a week.* It touches the comment
+  reader in `manuscriptDocxFile.ts` and `manuscriptDocImport.ts` to keep an anchor, a
+  comment anchor representation in section content and the editor schema, a comments
+  part plus `CommentRangeStart`/`CommentRangeEnd` in `manuscriptDocxExport.ts`, and
+  the portable manifest.
+
+**Not counted as gaps.** Beyond the shape differences named at the top, three
+candidates were checked and dropped as padding rather than findings: EPUB and ODT
+output, which Fidus Writer and Pandoc Scholar emit and no journal asks for; MyST's
+glossary, abbreviation and index pages, which an author here can approximate with an
+ordinary back-matter section; and a workspace-wide shared reference library, which
+already exists in a different shape — `researchRelations.ts` declares a project-level
+reference relation whose own comment calls it "a shared reference library (refs
+reusable across manuscripts)". Structured author metadata reaches the JATS export but
+not the Markdown export's YAML front matter, where `author` is still a list of plain
+strings — that is a one-line fidelity detail rather than a capability the other
+projects have and this one does not.
 
 ## Sources
 

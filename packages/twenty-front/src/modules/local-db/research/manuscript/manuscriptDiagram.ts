@@ -1,6 +1,7 @@
 import { isNonEmptyString } from '@sniptt/guards';
 
 import { type ManuscriptBundle } from './manuscriptAssembly';
+import { type NumberedFigure } from './manuscriptTypes';
 
 // Mermaid diagrams as a first-class way of putting a picture in a paper.
 //
@@ -199,17 +200,20 @@ export const prepareManuscriptDiagramImages = async (
   }
   if (pngBySource.size === 0) return bundle;
 
-  const withDiagramImage = <
-    T extends { diagramSource?: string | null; imageUrl?: string | null },
-  >(
-    figure: T,
-  ): T => {
-    if (isNonEmptyString(figure.imageUrl)) return figure;
-    if (!isNonEmptyString(figure.diagramSource)) return figure;
-    const png = pngBySource.get(figure.diagramSource.trim());
+  const withDiagramImage = (figure: NumberedFigure): NumberedFigure => {
+    // A figure's panels are drawn from the same nested copies every renderer
+    // reads, so they are rasterized here too — updating only the flat list
+    // would leave a panelled figure showing Mermaid source in the export.
+    const withPanels =
+      figure.panels === undefined
+        ? figure
+        : { ...figure, panels: figure.panels.map(withDiagramImage) };
+    if (isNonEmptyString(withPanels.imageUrl)) return withPanels;
+    if (!isNonEmptyString(withPanels.diagramSource)) return withPanels;
+    const png = pngBySource.get(withPanels.diagramSource.trim());
     return png === undefined
-      ? figure
-      : { ...figure, imageUrl: png, imageSource: 'DIAGRAM' };
+      ? withPanels
+      : { ...withPanels, imageUrl: png, imageSource: 'DIAGRAM' };
   };
 
   return {

@@ -325,3 +325,67 @@ describe('screening in a submission package', () => {
     ).toBe(false);
   });
 });
+
+describe('a panelled figure in a submission package', () => {
+  const PIXEL =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  it('names each panel’s artwork after the reference that identifies it', () => {
+    const figures = manuscriptSubmissionFigures(
+      buildManuscriptBundle({
+        manuscript: { id: 'paper', name: 'Panelled paper' },
+        style: {},
+        sections: [
+          {
+            id: 'res',
+            name: 'Results',
+            placement: 'MAIN',
+            includeInExport: true,
+            content: 'Body.',
+          },
+        ],
+        figures: [
+          {
+            id: 'plume',
+            refKey: 'fig:plume',
+            name: 'Plume',
+            assetKind: 'FIGURE',
+            placement: 'MAIN',
+            orderIndex: 0,
+            imageUrl: PIXEL,
+          },
+          {
+            id: 'plume-left',
+            refKey: 'fig:plume-left',
+            name: 'Left',
+            assetKind: 'FIGURE',
+            placement: 'MAIN',
+            orderIndex: 0,
+            parentFigureId: 'plume',
+            imageUrl: PIXEL,
+          },
+          {
+            id: 'plume-right',
+            refKey: 'fig:plume-right',
+            name: 'Right',
+            assetKind: 'FIGURE',
+            placement: 'MAIN',
+            orderIndex: 1,
+            parentFigureId: 'plume',
+            imageUrl: PIXEL,
+          },
+        ],
+        references: [],
+      }),
+    );
+
+    // A panel prints "(a)" beside itself, and two figures' panels would both
+    // slug that to the same filename — so a panel's artwork is named by the
+    // reference that identifies it instead.
+    expect(Object.keys(figures.files).sort()).toEqual([
+      'figures/Figure-1.png',
+      'figures/Figure-1a.png',
+      'figures/Figure-1b.png',
+    ]);
+  });
+});

@@ -1,10 +1,12 @@
 import { styled } from '@linaria/react';
 import { type KeyboardEvent } from 'react';
+import { type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptFigureExpandedEditor } from '@/local-db/research/components/ManuscriptFigureExpandedEditor';
 import { useManuscriptDiagramSvg } from '@/local-db/research/hooks/useManuscriptDiagramSvg';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
+import { isFigurePanel } from '@/local-db/research/manuscript/manuscriptNumbering';
 import {
   describeImageSource,
   resolveFigureImage,
@@ -22,6 +24,9 @@ type ManuscriptFigureListItemProps = {
   isAdding: boolean;
   isExpanded: boolean;
   tableStyle: ManuscriptTableStyle;
+  // The figures this one could be made a panel of, already filtered to the
+  // ones that would not make a cycle.
+  panelParentOptions: SelectOption<string>[];
   onDelete: () => void;
   onToggle: () => void;
   onSelectSection: (sectionId: string) => void;
@@ -35,6 +40,15 @@ type ManuscriptFigureListItemProps = {
 const StyledItem = styled.div`
   border: 1px solid ${themeCssVariables.border.color.light};
   border-radius: ${themeCssVariables.border.radius.sm};
+  overflow: hidden;
+`;
+
+// A panel is one cell of the figure above it, not an asset of its own, and the
+// list says so by setting it in from the left rather than by hiding it.
+const StyledPanelItem = styled.div`
+  border: 1px solid ${themeCssVariables.border.color.light};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  margin-left: ${themeCssVariables.spacing[6]};
   overflow: hidden;
 `;
 
@@ -154,6 +168,7 @@ export const ManuscriptFigureListItem = ({
   isAdding,
   isExpanded,
   tableStyle,
+  panelParentOptions,
   onDelete,
   onToggle,
   onSelectSection,
@@ -179,8 +194,10 @@ export const ManuscriptFigureListItem = ({
     }
   };
 
+  const Container = isFigurePanel(figure) ? StyledPanelItem : StyledItem;
+
   return (
-    <StyledItem>
+    <Container>
       <StyledRow
         role="button"
         tabIndex={0}
@@ -252,6 +269,7 @@ export const ManuscriptFigureListItem = ({
           peerCount={peerCount}
           isAdding={isAdding}
           tableStyle={tableStyle}
+          panelParentOptions={panelParentOptions}
           onPersist={onPersist}
           onDelete={onDelete}
           onMove={onMove}
@@ -260,6 +278,6 @@ export const ManuscriptFigureListItem = ({
           onChangeReferenceKey={onChangeReferenceKey}
         />
       ) : null}
-    </StyledItem>
+    </Container>
   );
 };

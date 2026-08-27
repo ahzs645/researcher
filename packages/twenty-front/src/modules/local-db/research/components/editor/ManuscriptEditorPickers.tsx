@@ -1,4 +1,5 @@
 import { styled } from '@linaria/react';
+import { isNonEmptyString } from '@sniptt/guards';
 import { useMemo, useState } from 'react';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
@@ -115,7 +116,7 @@ type ManuscriptCrossRefPickerProps = {
 export const ManuscriptCrossRefPicker = ({
   onSelect,
 }: ManuscriptCrossRefPickerProps) => {
-  const { figures } = useManuscriptEditorContext();
+  const { figures, numberedSections } = useManuscriptEditorContext();
   return (
     <StyledList>
       {figures.map((figure) => {
@@ -130,6 +131,21 @@ export const ManuscriptCrossRefPicker = ({
           </StyledItem>
         );
       })}
+      {/* Only a section the author has actually named can be pointed at: a
+          record id would resolve today and mean nothing on another machine. */}
+      {numberedSections
+        .filter((section) => isNonEmptyString(section.refKey?.trim()))
+        .map((section) => (
+          <StyledItem
+            key={section.id}
+            onClick={() => onSelect(section.referenceKey)}
+          >
+            {section.crossRefLabel}
+            <StyledItemMeta>
+              {section.referenceKey} · {section.heading}
+            </StyledItemMeta>
+          </StyledItem>
+        ))}
     </StyledList>
   );
 };

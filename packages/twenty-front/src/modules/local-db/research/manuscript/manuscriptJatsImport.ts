@@ -348,6 +348,50 @@ const harvestAsset = (
     };
   }
 
+  // A <fig-group> is a figure made of panels: the group takes the number and
+  // each child <fig> becomes a panel of it, which is the same shape the
+  // composer stores and the reason the harvest returns a list.
+  if (tag === 'fig-group') {
+    const panels = [...element.children].filter(
+      (node) => node.tagName.toLowerCase() === 'fig',
+    );
+    return {
+      figures: [
+        {
+          ...base,
+          name: label.length > 0 ? label : `Figure ${index + 1}`,
+          assetKind: 'FIGURE',
+          imageSource: 'NONE',
+          panelColumns: panels.length,
+        },
+        ...panels.map((panel, panelIndex): FigureLike => {
+          const panelGraphic = panel.querySelector('graphic');
+          const panelHref =
+            panelGraphic?.getAttribute('xlink:href') ??
+            panelGraphic?.getAttribute('href') ??
+            '';
+          const panelKey = slug(
+            panel.getAttribute('id') ?? '',
+            `${refKey}-${String.fromCharCode(97 + panelIndex)}`,
+          );
+          return {
+            id: panelKey,
+            refKey: panelKey,
+            name: text(child(panel, 'label')) || `Panel ${panelIndex + 1}`,
+            assetKind: 'FIGURE',
+            placement: 'MAIN',
+            orderIndex: panelIndex,
+            sectionId,
+            caption: captionText(panel),
+            parentFigureId: refKey,
+            ...resolvedArtwork(panelHref, artwork),
+          };
+        }),
+      ],
+      marker: `[[asset:${refKey}]]`,
+    };
+  }
+
   const graphic = element.querySelector('graphic');
   const href =
     graphic?.getAttribute('xlink:href') ?? graphic?.getAttribute('href') ?? '';
@@ -410,7 +454,12 @@ const harvestSection = (
       if (markdown.length > 0) body.push(markdown);
       continue;
     }
-    if (tag === 'fig' || tag === 'table-wrap' || tag === 'disp-formula') {
+    if (
+      tag === 'fig' ||
+      tag === 'fig-group' ||
+      tag === 'table-wrap' ||
+      tag === 'disp-formula'
+    ) {
       const harvest = harvestAsset(node, sectionId, counters.asset, artwork);
       if (harvest !== null) {
         counters.asset += 1;
@@ -432,6 +481,9 @@ const harvestSection = (
   const content = body.join('\n\n');
   sections.push({
     id: sectionId,
+    // The <sec id> the source carried is the key a `[#sec:…]` will point at,
+    // so a paper that leaves and comes back keeps the references it had.
+    refKey: sectionId,
     name: title.length > 0 ? title : 'Untitled section',
     sectionType: sectionTypeFor(element.getAttribute('sec-type') ?? '', title),
     placement,

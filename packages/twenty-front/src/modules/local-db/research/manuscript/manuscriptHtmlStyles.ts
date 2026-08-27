@@ -298,6 +298,21 @@ export const buildManuscriptHtmlCss = (style: JournalStyle): string => {
     text-align: left;
   }
   figure.table figcaption { font-style: normal; margin: 0 0 0.4rem; }
+  /* A figure made of panels: the cells lay out as a row or grid, each under
+     its own letter, with one number and one caption for the whole thing. */
+  figure .panel-row {
+    align-items: start;
+    display: grid;
+    gap: 0.8rem;
+  }
+  figure .panel-row figure.panel { margin: 0; }
+  /* A panel's caption sits under the panel, in the journal's own caption size:
+     the figure's caption is the one that carries the number, so a panel must
+     not be set larger than it. */
+  figure .panel-row figure.panel figcaption {
+    margin: 0.3rem 0 0;
+    text-align: left;
+  }
 
   .table-scroll { margin: 0 auto; max-width: 100%; overflow-x: auto; }
   table {

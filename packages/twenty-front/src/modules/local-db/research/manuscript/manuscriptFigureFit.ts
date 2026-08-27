@@ -6,6 +6,7 @@ import {
   PRINTABLE_WIDTH_PX,
 } from './manuscriptPageMetrics';
 import { resolveFigureImage } from './manuscriptImages';
+import { type NumberedFigure } from './manuscriptTypes';
 
 // Fit a figure to the page before either block-based exporter places it.
 //
@@ -77,12 +78,23 @@ export const fitManuscriptFigureImages = async (
       : { ...figure, widthPercent: percent };
   };
 
+  // A panelled figure is drawn from its nested panels, so they are fitted with
+  // the rest — a panel narrowed only in the flat list would be drawn at its
+  // old width and run off the page it was measured to fit.
+  const fittedFigure = (figure: NumberedFigure): NumberedFigure => {
+    const withPanels =
+      figure.panels === undefined
+        ? figure
+        : { ...figure, panels: figure.panels.map(fittedFigure) };
+    return fitted(withPanels);
+  };
+
   return {
     ...bundle,
-    numberedFigures: bundle.numberedFigures.map(fitted),
+    numberedFigures: bundle.numberedFigures.map(fittedFigure),
     nodes: bundle.nodes.map((node) =>
       node.kind === 'figure' || node.kind === 'table'
-        ? { ...node, figure: fitted(node.figure) }
+        ? { ...node, figure: fittedFigure(node.figure) }
         : node,
     ),
     sourceInput: {

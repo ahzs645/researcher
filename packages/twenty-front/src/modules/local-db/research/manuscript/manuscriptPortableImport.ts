@@ -198,6 +198,14 @@ export const preparePortableResearchPaperImport = (
   const sectionOrderByKey = new Map(
     manifest.sections.map((section) => [section.key, section.orderIndex]),
   );
+  // The same handle a version uses to find its base and a figure to find its
+  // section: `orderIndex`, because none of these records exist yet.
+  const figureOrderByKey = new Map(
+    manifest.figures.map((figure, index) => [
+      figure.key,
+      figure.orderIndex ?? index,
+    ]),
+  );
   const variants = resolvePortableSectionVariants(manifest, sectionOrderByKey);
   // The drafts are this manifest's sections, so `orderIndex` identifies the
   // same section on both sides. A package with nothing to drop keeps the
@@ -244,6 +252,13 @@ export const preparePortableResearchPaperImport = (
         ? { widthPercent: figure.widthPercent }
         : {}),
       orderIndex: figure.orderIndex ?? index,
+      ...(figure.parentFigureKey !== undefined &&
+      figureOrderByKey.has(figure.parentFigureKey)
+        ? { parentOrderIndex: figureOrderByKey.get(figure.parentFigureKey) }
+        : {}),
+      ...(figure.panelColumns !== undefined
+        ? { panelColumns: figure.panelColumns }
+        : {}),
     }),
   );
 

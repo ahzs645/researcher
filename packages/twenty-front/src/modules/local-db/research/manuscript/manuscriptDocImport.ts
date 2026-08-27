@@ -26,6 +26,8 @@ import { type AssetKind } from './manuscriptTypes';
 
 export type ImportedSectionDraft = {
   name: string;
+  // The slug an in-text `[#sec:…]` points at, when the source carried one.
+  refKey?: string;
   sectionType: string;
   placement: string;
   content: string;
@@ -93,6 +95,12 @@ export type ImportedFigureDraft = {
   // Off for an asset the source set without a number.
   numbered?: boolean;
   orderIndex: number;
+  // A panel of another figure in this same import, by that figure's
+  // `orderIndex`. The records do not exist yet, so `orderIndex` is the only
+  // handle either end has — the same one a figure already finds its section by.
+  parentOrderIndex?: number;
+  // On a parent: how many panels sit side by side before the layout wraps.
+  panelColumns?: number;
 };
 
 // Heading text → section type + placement. Order matters: the first rule whose

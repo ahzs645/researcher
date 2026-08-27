@@ -3,6 +3,7 @@ import {
   docxDefaultSchemaMappings,
 } from '@blocknote/xl-docx-exporter';
 import { BlockNoteEditor, type PartialBlock } from '@blocknote/core';
+import { isNonEmptyString } from '@sniptt/guards';
 import {
   AlignmentType,
   Bookmark,
@@ -22,7 +23,6 @@ import {
 } from 'docx';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
-import { type NumberedFigure } from './manuscriptTypes';
 import {
   buildBlockNoteDocument,
   EQUATION_LABEL_SEPARATOR,
@@ -30,6 +30,7 @@ import {
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { fitManuscriptFigureImages } from './manuscriptFigureFit';
+import { composeManuscriptFigurePanels } from './manuscriptPanelComposite';
 import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
 import { manuscriptAuthorLineSegments } from './manuscriptContributors';
 import { latexToMathComponents } from './manuscriptDocxMath';
@@ -37,6 +38,7 @@ import {
   assetBookmarkId,
   assetSequenceName,
   readAssetNumberAnchor,
+  SECTION_SEQUENCE_NAME,
   splitAssetNumber,
   stripAssetNumberAnchors,
 } from './manuscriptAssetAnchors';
@@ -52,6 +54,7 @@ import {
   type ManuscriptFootnote,
 } from './manuscriptFootnotes';
 import { hasInlineMath, splitInlineMath } from './manuscriptInlineMath';
+import { hasAuthoredSectionKey } from './manuscriptNumbering';
 import {
   createManuscriptTableMapping,
   type ManuscriptTableStyle,
@@ -210,59 +213,98 @@ const mathAndScriptRuns = (
         ),
   );
 
-// Where an asset's number is printed: a Word SEQ field inside a bookmark. The
-// number Word calculates is cached in the field, so the document reads
-// correctly before anyone updates it, and every reference to it below can
-// point at the bookmark instead of repeating today's digits.
+// One thing in the document that carries a number Word can keep: a figure, a
+// table, an equation, a panel of a figure, a numbered section. They differ
+// only in which counter runs them and, for a panel, in the fact that part of
+// the number is not counted at all.
+type ManuscriptNumberedTarget = {
+  // What the bookmark is named after.
+  refKey: string;
+  // The number as it is printed.
+  number: string;
+  // The counter Word keeps for it.
+  sequenceName: string;
+  // Set on a panel: the figure whose bookmark the number is read out of, and
+  // the number that bookmark actually holds. A panel has no counter — its
+  // letter comes from where it sits in the figure, not from the document — so
+  // "Figure 3b" is the parent's live number with a literal "b" after it.
+  parentRefKey?: string;
+  parentNumber?: string;
+};
+
+// Where a number is printed: a Word SEQ field inside a bookmark. The number
+// Word calculates is cached in the field, so the document reads correctly
+// before anyone updates it, and every reference to it below can point at the
+// bookmark instead of repeating today's digits.
 const assetNumberRuns = (
   printed: string,
-  asset: NumberedFigure,
+  target: ManuscriptNumberedTarget,
   options: ManuscriptRunOptions,
 ): ManuscriptParagraphChild[] => {
-  const number = (asset.number ?? '').trim();
+  const number = target.number.trim();
   const at = number.length === 0 ? -1 : printed.indexOf(number);
   if (at === -1) return mathAndScriptRuns(printed, options);
   const { prefix, counted } = splitAssetNumber(number);
-  const sequence = assetSequenceName(asset.assetKind, asset.placement);
   return [
     ...mathAndScriptRuns(printed.slice(0, at), options),
     new Bookmark({
-      id: assetBookmarkId(asset.refKey ?? asset.id),
+      id: assetBookmarkId(target.refKey),
       children:
         counted === undefined
           ? scriptRuns(number, options)
           : [
               ...(prefix.length > 0 ? scriptRuns(prefix, options) : []),
-              new SimpleField(`SEQ ${sequence} \\* ARABIC`, counted),
+              new SimpleField(`SEQ ${target.sequenceName} \\* ARABIC`, counted),
             ],
     }),
     ...mathAndScriptRuns(printed.slice(at + number.length), options),
   ];
 };
 
-// Where the prose names an asset's number: a REF field pointing at that
-// bookmark, so moving an equation renumbers the sentence that refers to it.
-// Only the number is a field — the journal's own wording around it ("Eq.",
-// "Fig.") is the author's text and stays text.
+// Where the prose names a number: a REF field pointing at that bookmark, so
+// moving an equation renumbers the sentence that refers to it. Only the number
+// is a field — the journal's own wording around it ("Eq.", "Fig.", "Section")
+// is the author's text and stays text.
+//
+// A panel splits in two. `REF` gives back whatever the bookmark holds, and the
+// only bookmark there is holds the figure's number, so "Figure 3b" is written
+// as a live field for the "3" and the character "b" typed after it. That is
+// the whole of the panel-letter decision: the half that renumbers is a field,
+// and the half that never renumbers is text. Reordering the panels in the
+// composer re-letters them on the next export; reordering them inside Word
+// does not, and nothing here pretends otherwise.
 const crossReferenceRuns = (
   label: string,
-  asset: NumberedFigure | undefined,
+  target: ManuscriptNumberedTarget | undefined,
   options: ManuscriptRunOptions,
 ): ManuscriptParagraphChild[] => {
-  const number = (asset?.number ?? '').trim();
+  const number = target?.number.trim() ?? '';
   const at =
-    asset === undefined || number.length === 0 ? -1 : label.indexOf(number);
-  if (asset === undefined || at === -1)
+    target === undefined || number.length === 0 ? -1 : label.indexOf(number);
+  if (target === undefined || at === -1)
     return mathAndScriptRuns(label, options);
-  const bookmark = assetBookmarkId(asset.refKey ?? asset.id);
+  const fieldNumber = target.parentNumber ?? number;
+  const split = number.indexOf(fieldNumber);
+  // A panel whose number does not visibly contain its parent's — a journal
+  // format nobody has asked for yet — has nothing live to point at, so it is
+  // written as plain text rather than as a field that would give back the
+  // wrong string.
+  if (split === -1) return mathAndScriptRuns(label, options);
+  const bookmark = assetBookmarkId(target.parentRefKey ?? target.refKey);
+  const beforeField = number.slice(0, split);
+  const afterField = number.slice(split + fieldNumber.length);
   return [
     ...mathAndScriptRuns(label.slice(0, at), options),
-    new SimpleField(`REF ${bookmark} \\h`, number),
+    ...(beforeField.length > 0 ? scriptRuns(beforeField, options) : []),
+    new SimpleField(`REF ${bookmark} \\h`, fieldNumber),
+    ...(afterField.length > 0 ? scriptRuns(afterField, options) : []),
     ...mathAndScriptRuns(label.slice(at + number.length), options),
   ];
 };
 
-type ManuscriptAssetLookup = (refKey: string) => NumberedFigure | undefined;
+type ManuscriptAssetLookup = (
+  refKey: string,
+) => ManuscriptNumberedTarget | undefined;
 
 // Every asset whose number is actually printed somewhere in the document, read
 // back off the built blocks — including an image block, whose caption is a
@@ -308,8 +350,8 @@ const manuscriptInlineRuns = (
   findAsset?: ManuscriptAssetLookup,
 ): ManuscriptParagraphChild[] => {
   const { refKey, text: printed } = readAssetNumberAnchor(text);
-  const asset = refKey === undefined ? undefined : findAsset?.(refKey);
-  if (asset !== undefined) return assetNumberRuns(printed, asset, options);
+  const target = refKey === undefined ? undefined : findAsset?.(refKey);
+  if (target !== undefined) return assetNumberRuns(printed, target, options);
   return splitCrossReferenceAnchors(printed).flatMap((segment) =>
     segment.kind === 'reference'
       ? crossReferenceRuns(segment.label, findAsset?.(segment.refKey), options)
@@ -648,9 +690,13 @@ export const exportManuscriptToDocxBlob = async (
     // printed number and each in-text reference belongs to.
     crossReferenceAnchors: true,
   });
-  // Diagrams are Mermaid source until export; Word embeds the raster.
+  // Diagrams are Mermaid source until export; Word embeds the raster. Panels
+  // are drawn into one picture in the same breath, because the block model
+  // this and the PDF export share has nowhere to put two images side by side.
   const drawnBundle = await fitManuscriptFigureImages(
-    await prepareManuscriptDiagramImages(formattedBundle),
+    await composeManuscriptFigurePanels(
+      await prepareManuscriptDiagramImages(formattedBundle),
+    ),
   );
   // Numbered before the blocks are built, and before the document options are
   // read: BlockNote spreads `documentOptions` into the `Document` constructor
@@ -659,12 +705,36 @@ export const exportManuscriptToDocxBlob = async (
   const { bundle: numberedBundle, footnotes } =
     numberManuscriptFootnotes(drawnBundle);
   bundle = numberedBundle;
-  const assetsByRefKey = new Map(
-    bundle.numberedFigures.map((figure) => [
-      (figure.refKey ?? figure.id).trim().toLowerCase(),
-      figure,
-    ]),
-  );
+  // Sections first, assets over the top: `resolveCrossReferences` looks an
+  // asset up before a section, so a key that is somehow both has to land on
+  // the same thing here that the reference text was resolved against.
+  const targetsByRefKey = new Map<string, ManuscriptNumberedTarget>();
+  for (const section of bundle.numberedSections) {
+    // A section the journal does not number has nothing for a counter to
+    // keep, so the reference to it is the section's own title — plain text,
+    // and plainly static.
+    if (section.number.length === 0 || !hasAuthoredSectionKey(section)) {
+      continue;
+    }
+    targetsByRefKey.set(section.referenceKey.trim().toLowerCase(), {
+      refKey: section.referenceKey,
+      number: section.number,
+      sequenceName: SECTION_SEQUENCE_NAME,
+    });
+  }
+  for (const figure of bundle.numberedFigures) {
+    targetsByRefKey.set((figure.refKey ?? figure.id).trim().toLowerCase(), {
+      refKey: figure.refKey ?? figure.id,
+      number: figure.number,
+      sequenceName: assetSequenceName(figure.assetKind, figure.placement),
+      ...(isNonEmptyString(figure.parentRefKey)
+        ? {
+            parentRefKey: figure.parentRefKey,
+            parentNumber: figure.parentNumber ?? '',
+          }
+        : {}),
+    });
+  }
   const { editor, blocks } = buildBlockNoteDocument(bundle);
   // A REF field pointing at a bookmark that was never written reads as
   // "Error! Reference source not found" in Word. Only the assets whose number
@@ -672,8 +742,14 @@ export const exportManuscriptToDocxBlob = async (
   // body, say, is never printed and so is never a target.
   const bookmarkedRefKeys = collectAnchoredRefKeys(blocks);
   const findAsset: ManuscriptAssetLookup = (refKey) => {
-    const key = refKey.trim().toLowerCase();
-    return bookmarkedRefKeys.has(key) ? assetsByRefKey.get(key) : undefined;
+    const target = targetsByRefKey.get(refKey.trim().toLowerCase());
+    if (target === undefined) return undefined;
+    // A panel points at its parent's bookmark, so it is the parent that has
+    // to have been written.
+    const anchored = (target.parentRefKey ?? target.refKey)
+      .trim()
+      .toLowerCase();
+    return bookmarkedRefKeys.has(anchored) ? target : undefined;
   };
   const fontFamily = bundle.style.fontFamily?.trim() || 'Times New Roman';
   const bodyFontSize = bundle.style.bodyFontSize ?? 12;

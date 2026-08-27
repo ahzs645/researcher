@@ -32,6 +32,8 @@ type ManuscriptFigureExpandedEditorProps = {
   peerCount: number;
   isAdding: boolean;
   tableStyle: ManuscriptTableStyle;
+  // The figures this one could be a panel of.
+  panelParentOptions: SelectOption<string>[];
   onDelete: () => void;
   onPersist: (values: Record<string, unknown>) => void;
   onMove: (direction: -1 | 1) => void;
@@ -51,6 +53,7 @@ const CHART_KIND_OPTIONS: SelectOption<ChartKind>[] = [
 ];
 
 const UNASSIGNED_SECTION = '__UNASSIGNED__';
+const NOT_A_PANEL = '__NOT_A_PANEL__';
 
 // A chart figure is a FIGURE-kind record whose pixels we rendered from a data
 // grid — those stay re-plottable instead of becoming a dead PNG.
@@ -171,6 +174,7 @@ export const ManuscriptFigureExpandedEditor = ({
   peerCount,
   isAdding,
   tableStyle,
+  panelParentOptions,
   onDelete,
   onPersist,
   onMove,
@@ -196,6 +200,7 @@ export const ManuscriptFigureExpandedEditor = ({
     figure.refKey?.trim() || figure.id,
   );
   const refKeyIsValid = /^[A-Za-z0-9:._-]+$/.test(refKeyDraft.trim());
+  const panelCount = (figure.panels ?? []).length;
   const sectionOptions: SelectOption<string>[] = [
     { value: UNASSIGNED_SECTION, label: 'End of document' },
     ...sections
@@ -272,6 +277,52 @@ export const ManuscriptFigureExpandedEditor = ({
             }
           />
         </StyledSelectField>
+        <StyledSelectField>
+          Panel of
+          <Select
+            dropdownId={`figure-panel-parent-${figure.id}`}
+            fullWidth
+            options={[
+              { value: NOT_A_PANEL, label: 'Not a panel' },
+              ...panelParentOptions,
+            ]}
+            value={figure.parentFigureId ?? NOT_A_PANEL}
+            onChange={(value) =>
+              onPersist({
+                parentFigureId: value === NOT_A_PANEL ? null : value,
+              })
+            }
+          />
+          <StyledHint>
+            A panel takes a letter off the figure it belongs to — Figure 3 with
+            panels 3a and 3b — and the figure sequence skips it.
+          </StyledHint>
+        </StyledSelectField>
+        {panelCount > 0 ? (
+          <StyledField>
+            Panels per row
+            <StyledHint>
+              {panelCount} panel{panelCount === 1 ? '' : 's'}; blank puts them
+              all in one row.
+            </StyledHint>
+            <StyledInput
+              aria-label={`${figure.label} panels per row`}
+              type="number"
+              min={1}
+              max={panelCount}
+              defaultValue={figure.panelColumns ?? ''}
+              onBlur={(event) => {
+                const value = Number(event.target.value);
+                onPersist({
+                  panelColumns:
+                    Number.isFinite(value) && value >= 1
+                      ? Math.min(panelCount, Math.round(value))
+                      : null,
+                });
+              }}
+            />
+          </StyledField>
+        ) : null}
         <StyledSelectField>
           Placement
           <Select

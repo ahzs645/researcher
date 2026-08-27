@@ -7,6 +7,7 @@ import { resolveCslStyleXml } from './manuscriptCiteproc';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { sanitizeUrl } from './manuscriptHtmlMarkdown';
 import { COMMAND_TEXT } from './manuscriptMathGlyphs';
+import { hasAuthoredSectionKey } from './manuscriptNumbering';
 import { PAGE_MARGIN_POINTS } from './manuscriptPageMetrics';
 import {
   collectManuscriptSourceImages,
@@ -17,17 +18,19 @@ import {
   manuscriptSourceFiguresByKey,
   manuscriptSourceLabel,
   manuscriptSourceLabelPrefix,
+  manuscriptSourceSectionsByKey,
   prepareManuscriptSourceBundle,
   renderManuscriptSourceBlocks,
   renderManuscriptSourceInline,
   renderManuscriptSourceNodes,
   UNNUMBERED_HEADING,
   type ManuscriptSourceBlockWriter,
+  type ManuscriptSourceHeadingSection,
   type ManuscriptSourceInlineWriter,
   type ManuscriptSourceNodeWriter,
 } from './manuscriptSourceExport';
 import { parseManuscriptTableGrid } from './manuscriptTableGrid';
-import { type NumberedFigure } from './manuscriptTypes';
+import { type NumberedFigure, type NumberedSection } from './manuscriptTypes';
 
 // The same manuscript as Typst source — a `.typ`, its images, a BibTeX file and
 // the vendored CSL style. Source, not a compiled PDF: like the LaTeX target
@@ -205,12 +208,44 @@ const citationToTypst = (keys: string[], label: string): string => {
 
 const crossReferenceToTypst = (
   refKey: string,
+  printed: string,
   figuresByKey: Map<string, NumberedFigure>,
+  sectionsByKey: Map<string, NumberedSection>,
 ): string => {
   const label = manuscriptSourceLabel(refKey);
+  const figure = figuresByKey.get(refKey);
+  if (figure === undefined) {
+    const section = sectionsByKey.get(refKey);
+    if (section === undefined) return `@${label}`;
+    // Typst refuses to reference a heading it did not number, and a compile
+    // error is a worse answer than a sentence that says "Methods".
+    return section.number.length === 0 || !hasAuthoredSectionKey(section)
+      ? escapeTypst(printed)
+      : `@${manuscriptSourceLabel(section.referenceKey)}`;
+  }
+  // A panel has no label of its own here: Typst has no subfigure, so the
+  // reference is its parent's live number with the letter set after it as
+  // text — the same split the Word export makes, for the same reason.
+  if (
+    isNonEmptyString(figure.parentRefKey) &&
+    isNonEmptyString(figure.parentNumber)
+  ) {
+    const split = figure.number.indexOf(figure.parentNumber);
+    if (split >= 0) {
+      const parent = manuscriptSourceLabel(figure.parentRefKey);
+      const head = figure.number.slice(0, split);
+      const tail = figure.number.slice(split + figure.parentNumber.length);
+      return [
+        head.length > 0 ? `#text[${escapeTypst(head)}]` : '',
+        `#ref(<${parent}>)`,
+        tail.length > 0 ? `#text[${escapeTypst(tail)}]` : '',
+      ].join('');
+    }
+    return escapeTypst(printed);
+  }
   // Typst's own supplement would make an equation reference read "Equation
   // (3)"; the journals this composer targets print just "(3)".
-  return figuresByKey.get(refKey)?.assetKind === 'EQUATION'
+  return figure.assetKind === 'EQUATION'
     ? `#ref(<${label}>, supplement: none)`
     : `@${label}`;
 };
@@ -235,12 +270,14 @@ const inlineImageToTypst = (
 // be emphasised, and escaping it as flat text would lose all three.
 const typstInlineWriter = (
   figuresByKey: Map<string, NumberedFigure>,
+  sectionsByKey: Map<string, NumberedSection>,
   addImage: (dataUrl: string, hint: string) => string | null,
 ): ManuscriptSourceInlineWriter => {
   const writer: ManuscriptSourceInlineWriter = {
     escape: escapeTypst,
     citation: citationToTypst,
-    crossReference: (refKey) => crossReferenceToTypst(refKey, figuresByKey),
+    crossReference: (refKey, label) =>
+      crossReferenceToTypst(refKey, label, figuresByKey, sectionsByKey),
     // Typst counts its own footnotes, so the number the export walk worked out
     // is left out on purpose: the author edits the source and the numbers have
     // to follow, the same reason `@label` is written instead of "Figure 3".
@@ -276,12 +313,22 @@ const headingToTypst = (
   level: number,
   text: string,
   context: TypstContext,
+  section?: ManuscriptSourceHeadingSection,
 ): string => {
   const depth = typstHeadingLevel(level);
   const body = inlineToTypst(text, context);
-  return context.sectionNumbering && level > 1 && !UNNUMBERED_HEADING.test(text)
-    ? `${'='.repeat(depth)} ${body}`
-    : `#heading(level: ${depth}, numbering: none)[${body}]`;
+  const numbered =
+    context.sectionNumbering && level > 1 && !UNNUMBERED_HEADING.test(text);
+  if (!numbered) return `#heading(level: ${depth}, numbering: none)[${body}]`;
+  // Labelled only when Typst will number it, since that is the only case a
+  // reference to it can be written as `@label`.
+  const label =
+    section === undefined ||
+    section.number.length === 0 ||
+    !hasAuthoredSectionKey(section)
+      ? ''
+      : ` <${manuscriptSourceLabel(section.referenceKey)}>`;
+  return `${'='.repeat(depth)} ${body}${label}`;
 };
 
 const tableToTypst = (tableData: string, context: TypstContext): string => {
@@ -383,6 +430,37 @@ const figureBodyToTypst = (
     : `  emph[${escapeTypst(`[${placement.name}: image to be added]`)}],`;
 };
 
+// Typst has no subfigure, so a panelled figure is one `#figure` whose body is
+// a grid of cells. Each cell is the panel's picture over its own letter and
+// words; the letters are literal, because there is no counter here for them to
+// come from — the figure's number, which Typst does count, is the parent's.
+const panelGridToTypst = (
+  figure: NumberedFigure,
+  context: TypstContext,
+): string[] => {
+  const panels = figure.panels ?? [];
+  const columns = Math.max(
+    1,
+    Math.min(panels.length, figure.panelColumns ?? panels.length),
+  );
+  const cells = panels.map((panel) => {
+    const placement = manuscriptSourceFigureImage(panel, context.addImage);
+    const body =
+      placement.kind === 'file'
+        ? `#image(${typstString(placement.filename)}, width: 100%)`
+        : `#emph[${escapeTypst(`[${placement.name}: image to be added]`)}]`;
+    const caption = inlineToTypst(manuscriptSourceCaption(panel), context);
+    return `    [${body}\n\n    *${escapeTypst(panel.label)}* ${caption}],`;
+  });
+  return [
+    '  grid(',
+    `    columns: ${columns},`,
+    '    gutter: 8pt,',
+    ...cells,
+    '  ),',
+  ];
+};
+
 const figureToTypst = (
   figure: NumberedFigure,
   bundle: ManuscriptBundle,
@@ -390,7 +468,9 @@ const figureToTypst = (
 ): string =>
   [
     '#figure(',
-    figureBodyToTypst(figure, context),
+    ...((figure.panels ?? []).length > 0
+      ? panelGridToTypst(figure, context)
+      : [figureBodyToTypst(figure, context)]),
     ...figureArguments(figure, bundle, context),
     `) <${manuscriptSourceLabel(figure.refKey ?? figure.id)}>`,
   ].join('\n');
@@ -436,7 +516,8 @@ const typstNodeWriter = (
   context: TypstContext,
   bibliographyStyle: string | null,
 ): ManuscriptSourceNodeWriter => ({
-  heading: (level, text) => headingToTypst(level, text, context),
+  heading: (level, text, section) =>
+    headingToTypst(level, text, context, section),
   supplementBreak: (prefix) => [
     '#pagebreak()',
     ...supplementCounterResets(prefix),
@@ -535,7 +616,11 @@ export const buildManuscriptTypstFiles = (
   const context: TypstContext = {
     addImage: images.addImage,
     sectionNumbering: bundle.style.sectionNumbering === true,
-    inline: typstInlineWriter(figuresByKey, images.addImage),
+    inline: typstInlineWriter(
+      figuresByKey,
+      manuscriptSourceSectionsByKey(bundle),
+      images.addImage,
+    ),
   };
 
   // Typst reads a CSL file directly, so the vendored style travels with the

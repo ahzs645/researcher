@@ -11,6 +11,7 @@ import {
 } from './manuscriptCitations';
 import { formatManuscriptAuthorLine } from './manuscriptContributors';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { hasAuthoredSectionKey } from './manuscriptNumbering';
 import { numberManuscriptFootnotes } from './manuscriptFootnotes';
 import { renderManuscriptDiagrams } from './manuscriptDiagram';
 import { type ManuscriptTableStyle } from './manuscriptDocxTable';
@@ -50,6 +51,9 @@ const slugFor = (value: string): string =>
 const referenceAnchorId = (key: string): string => `reference-${slugFor(key)}`;
 const assetAnchorId = (figure: NumberedFigure): string =>
   `asset-${slugFor(figure.refKey ?? figure.id)}`;
+
+const sectionAnchorId = (referenceKey: string): string =>
+  `section-${slugFor(referenceKey)}`;
 
 type OutlineEntry = { id: string; level: number; text: string };
 
@@ -134,11 +138,21 @@ const createRenderContext = (
       entry.number ?? index + 1,
     ]),
   );
+  // Which keys name a section rather than an asset, so a resolved reference
+  // links to the heading's anchor instead of a figure that does not exist.
+  const sectionKeys = new Set(
+    bundle.numberedSections
+      .filter(hasAuthoredSectionKey)
+      .map((section) => section.referenceKey),
+  );
 
   return {
     tableClass: `table-${tableStyle.toLowerCase()}`,
-    registerHeading: (level, text) => {
-      const base = `section-${slugFor(text)}`;
+    registerHeading: (level, text, sectionReferenceKey) => {
+      const base =
+        sectionReferenceKey === undefined
+          ? `section-${slugFor(text)}`
+          : sectionAnchorId(sectionReferenceKey);
       let id = base;
       let suffix = 2;
       while (state.headingIds.has(id)) {
@@ -162,11 +176,61 @@ const createRenderContext = (
         );
       }),
     renderCrossReference: (assetKey, label) =>
-      `<a class="crossref" href="#asset-${slugFor(assetKey)}">${escapeHtml(label)}</a>`,
+      `<a class="crossref" href="#${
+        sectionKeys.has(assetKey)
+          ? sectionAnchorId(assetKey)
+          : `asset-${slugFor(assetKey)}`
+      }">${escapeHtml(label)}</a>`,
     renderDisplayMath: (latex) => latexToMathMl(latex, true).html,
     renderInlineMath: (latex) => latexToMathMl(latex, false).html,
     renderMermaid: (source) => diagrams.get(source.trim()) ?? null,
   };
+};
+
+const figureImageHtml = (
+  figure: NumberedFigure,
+  diagrams: ReadonlyMap<string, string>,
+): string => {
+  const diagram = isNonEmptyString(figure.diagramSource)
+    ? (diagrams.get(figure.diagramSource.trim()) ?? null)
+    : null;
+  if (diagram !== null) return diagram;
+  const image = resolveFigureImage(figure);
+  const widthPercent = Math.min(100, Math.max(10, figure.widthPercent ?? 100));
+  return image.kind === 'none'
+    ? `<p class="missing-image">[${escapeHtml(figure.label)}: image to be added]</p>`
+    : `<img src="${escapeHtmlAttribute(sanitizeUrl(image.src))}" alt="${escapeHtmlAttribute(figure.altText ?? figure.name ?? figure.label)}" style="width:${widthPercent}%">`;
+};
+
+// One cell of a panelled figure: its own anchor, so "Figure 1b" is a link that
+// lands on the panel rather than on the figure it belongs to, and its own
+// caption under its letter.
+const panelToHtml = (
+  panel: NumberedFigure,
+  context: ManuscriptHtmlRenderContext,
+  diagrams: ReadonlyMap<string, string>,
+): string => {
+  const caption = [
+    panel.label,
+    isNonEmptyString(panel.caption)
+      ? panel.caption
+      : isNonEmptyString(panel.name)
+        ? panel.name
+        : '',
+  ]
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join(' ');
+  return [
+    `<figure class="panel" id="${assetAnchorId(panel)}">`,
+    figureImageHtml(panel, diagrams),
+    caption.length === 0
+      ? ''
+      : `<figcaption>${manuscriptInlineToHtml(caption, context)}</figcaption>`,
+    '</figure>',
+  ]
+    .filter((part) => part.length > 0)
+    .join('');
 };
 
 const figureToHtml = (
@@ -176,6 +240,27 @@ const figureToHtml = (
   diagrams: ReadonlyMap<string, string>,
 ): string => {
   const caption = `<figcaption>${manuscriptInlineToHtml(captionText(figure), context)}</figcaption>`;
+  const panels = figure.panels ?? [];
+  if (panels.length > 0) {
+    const columns = Math.max(
+      1,
+      Math.min(panels.length, figure.panelColumns ?? panels.length),
+    );
+    const row = [
+      `<div class="panel-row" style="grid-template-columns:repeat(${columns},1fr)">`,
+      ...panels.map((panel) => panelToHtml(panel, context, diagrams)),
+      '</div>',
+    ].join('');
+    return [
+      `<figure id="${assetAnchorId(figure)}">`,
+      captionPosition === 'ABOVE' ? caption : '',
+      row,
+      captionPosition === 'ABOVE' ? '' : caption,
+      '</figure>',
+    ]
+      .filter((part) => part.length > 0)
+      .join('');
+  }
   const diagram = isNonEmptyString(figure.diagramSource)
     ? (diagrams.get(figure.diagramSource.trim()) ?? null)
     : null;
@@ -284,11 +369,26 @@ const nodeToHtml = (
         : /^keywords?$/i.test(heading)
           ? 'keywords'
           : null;
-      const id = context.registerHeading(node.level, node.text);
+      const id = context.registerHeading(
+        node.level,
+        node.text,
+        node.section !== undefined && hasAuthoredSectionKey(node.section)
+          ? node.section.referenceKey
+          : undefined,
+      );
+      // The number the section counter gave this heading, printed in front of
+      // it. Without it a sentence saying "Section 2" pointed at a heading that
+      // showed no number anywhere on the page — the two ends of one reference
+      // disagreeing, which is the failure this counter exists to prevent.
+      const sectionNumber = node.section?.number ?? '';
+      const headingHtml =
+        sectionNumber.length === 0
+          ? manuscriptInlineToHtml(node.text, context)
+          : `${escapeHtml(sectionNumber)}. ${manuscriptInlineToHtml(node.text, context)}`;
       return (
         `<h${node.level} id="${escapeHtmlAttribute(id)}" data-outline-level="${node.level}">` +
         `<span class="heading-level-tag" aria-hidden="true">H${node.level}</span>` +
-        `${manuscriptInlineToHtml(node.text, context)}</h${node.level}>`
+        `${headingHtml}</h${node.level}>`
       );
     }
     case 'prose': {

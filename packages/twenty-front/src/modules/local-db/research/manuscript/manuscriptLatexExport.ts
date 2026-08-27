@@ -5,6 +5,7 @@ import { manuscriptBibtexCitationKey } from './manuscriptBibtexWrite';
 import { citationItemKey } from './manuscriptCitations';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { sanitizeUrl } from './manuscriptHtmlMarkdown';
+import { hasAuthoredSectionKey, isFigurePanel } from './manuscriptNumbering';
 import { PAGE_MARGIN_POINTS } from './manuscriptPageMetrics';
 import {
   collectManuscriptSourceImages,
@@ -15,12 +16,14 @@ import {
   manuscriptSourceFiguresByKey,
   manuscriptSourceLabel,
   manuscriptSourceLabelPrefix,
+  manuscriptSourceSectionsByKey,
   prepareManuscriptSourceBundle,
   renderManuscriptSourceBlocks,
   renderManuscriptSourceInline,
   renderManuscriptSourceNodes,
   UNNUMBERED_HEADING,
   type ManuscriptSourceBlockWriter,
+  type ManuscriptSourceHeadingSection,
   type ManuscriptSourceInlineWriter,
   type ManuscriptSourceNodeWriter,
 } from './manuscriptSourceExport';
@@ -29,7 +32,7 @@ import {
   type ManuscriptTableCell,
   type ManuscriptTableGrid,
 } from './manuscriptTableGrid';
-import { type NumberedFigure } from './manuscriptTypes';
+import { type NumberedFigure, type NumberedSection } from './manuscriptTypes';
 
 // A compilable LaTeX source tree — one `.tex`, a `references.bib` and the
 // figure images — not a compiled PDF. That is the same thing MyST produces
@@ -93,12 +96,41 @@ const citationToLatex = (keys: string[], label: string): string => {
     : `\\cite{${[...new Set(cited)].join(',')}}`;
 };
 
+// A section reference. LaTeX runs the section counter itself, so `\\ref` prints
+// whatever number the compiled document arrives at — the same bargain the
+// asset references make. A section the journal does not number has no counter
+// behind it and no `\\label` to point at, so the reference is written as the
+// section's own title: plain text, and plainly static.
+const sectionReferenceToLatex = (
+  refKey: string,
+  label: string,
+  section: NumberedSection,
+): string => {
+  if (section.number.length === 0 || !hasAuthoredSectionKey(section)) {
+    return escapeLatex(label);
+  }
+  const at = label.indexOf(section.number);
+  if (at < 0) return escapeLatex(label);
+  return (
+    escapeLatex(label.slice(0, at)).replace(/\s+$/, '~') +
+    `\\ref{${manuscriptSourceLabel(refKey)}}` +
+    escapeLatex(label.slice(at + section.number.length))
+  );
+};
+
 const crossReferenceToLatex = (
   refKey: string,
   label: string,
   figuresByKey: Map<string, NumberedFigure>,
+  sectionsByKey: Map<string, NumberedSection>,
 ): string => {
   const figure = figuresByKey.get(refKey);
+  if (figure === undefined) {
+    const section = sectionsByKey.get(refKey);
+    if (section !== undefined) {
+      return sectionReferenceToLatex(refKey, label, section);
+    }
+  }
   const isEquation = figure?.assetKind === 'EQUATION';
   const reference = `\\${isEquation ? 'eqref' : 'ref'}{${manuscriptSourceLabel(refKey)}}`;
   const number = figure?.number ?? '';
@@ -136,13 +168,14 @@ const inlineImageToLatex = (
 // may be emphasised, and none of that would survive being escaped as text.
 const latexInlineWriter = (
   figuresByKey: Map<string, NumberedFigure>,
+  sectionsByKey: Map<string, NumberedSection>,
   addImage: (dataUrl: string, hint: string) => string | null,
 ): ManuscriptSourceInlineWriter => {
   const writer: ManuscriptSourceInlineWriter = {
     escape: escapeLatex,
     citation: citationToLatex,
     crossReference: (refKey, label) =>
-      crossReferenceToLatex(refKey, label, figuresByKey),
+      crossReferenceToLatex(refKey, label, figuresByKey, sectionsByKey),
     // LaTeX runs the footnote counter itself, so the number the export walk
     // worked out is deliberately not written in: after the author edits the
     // source, renumbering is the target's job.
@@ -179,12 +212,23 @@ const headingToLatex = (
   level: number,
   text: string,
   context: LatexContext,
+  section?: ManuscriptSourceHeadingSection,
 ): string => {
   const command =
     SECTION_COMMANDS[Math.min(Math.max(level, 1), 6) - 1] ?? 'section';
   const starred =
     level === 1 || !context.sectionNumbering || UNNUMBERED_HEADING.test(text);
-  return `\\${command}${starred ? '*' : ''}{${inlineToLatex(text, context)}}`;
+  const heading = `\\${command}${starred ? '*' : ''}{${inlineToLatex(text, context)}}`;
+  // Only a numbered section is labelled. A `\\label` after `\\section*` binds to
+  // whatever counter last moved, so a `\\ref` to it would print a figure's
+  // number — a wrong number being worse than none, the reference to an
+  // unnumbered section is written as its title instead.
+  return section === undefined ||
+    starred ||
+    section.number.length === 0 ||
+    !hasAuthoredSectionKey(section)
+    ? heading
+    : `${heading}\n\\label{${manuscriptSourceLabel(section.referenceKey)}}`;
 };
 
 // Anchor cells only carry their own corner, so the covered slots are filled
@@ -317,6 +361,49 @@ const figureBodyToLatex = (
     : `\\textit{[${escapeLatex(placement.name)}: image to be added]}`;
 };
 
+// The panels of one figure, as `subcaption`'s subfigures. This is the one
+// target that needs no help with the letters: `subcaption` runs its own
+// counter inside each figure, prints "(a)" under the panel, and makes
+// `\\ref{fig:x-b}` come out as "1b" — parent number and panel letter, both
+// live, which is exactly what MyST's `#my-figure-a` produces.
+const panelsToLatex = (
+  figure: NumberedFigure,
+  context: LatexContext,
+): string[] => {
+  const panels = figure.panels ?? [];
+  const columns = Math.max(
+    1,
+    Math.min(panels.length, figure.panelColumns ?? panels.length),
+  );
+  // A little less than an even share, so the gutter between two panels does
+  // not push the second one onto the next line.
+  const width = (1 / columns - 0.02).toFixed(3);
+  return panels.flatMap((panel, index) => {
+    const placement = manuscriptSourceFigureImage(panel, context.addImage);
+    const body =
+      placement.kind === 'file'
+        ? `\\includegraphics[width=\\linewidth]{${placement.filename}}`
+        : placement.kind === 'linked'
+          ? `\\textit{[${escapeLatex(placement.name)}: linked image ${escapeLatex(placement.source)}]}`
+          : `\\textit{[${escapeLatex(placement.name)}: image to be added]}`;
+    const caption = inlineToLatex(manuscriptSourceCaption(panel), context);
+    const isRowEnd = (index + 1) % columns === 0 && index + 1 < panels.length;
+    return [
+      `\\begin{subfigure}[t]{${width}\\textwidth}`,
+      '\\centering',
+      body,
+      `\\caption{${caption}}`,
+      `\\label{${manuscriptSourceLabel(panel.refKey ?? panel.id)}}`,
+      '\\end{subfigure}',
+      ...(index + 1 === panels.length
+        ? []
+        : isRowEnd
+          ? ['\\\\[6pt]']
+          : ['\\hfill']),
+    ];
+  });
+};
+
 const figureToLatex = (
   figure: NumberedFigure,
   bundle: ManuscriptBundle,
@@ -324,11 +411,16 @@ const figureToLatex = (
 ): string => {
   const caption = captionBlock(figure, context);
   const above = bundle.style.figureCaptionPosition === 'ABOVE';
+  const panels = figure.panels ?? [];
+  const body =
+    panels.length > 0
+      ? panelsToLatex(figure, context)
+      : [figureBodyToLatex(figure, context)];
   return [
     '\\begin{figure}[htbp]',
     '\\centering',
     ...(above ? caption : []),
-    figureBodyToLatex(figure, context),
+    ...body,
     ...(above ? [] : caption),
     '\\end{figure}',
   ].join('\n');
@@ -400,7 +492,8 @@ const latexNodeWriter = (
   bundle: ManuscriptBundle,
   context: LatexContext,
 ): ManuscriptSourceNodeWriter => ({
-  heading: (level, text) => headingToLatex(level, text, context),
+  heading: (level, text, section) =>
+    headingToLatex(level, text, context, section),
   supplementBreak: (prefix) => [
     '\\clearpage',
     ...supplementCounterResets(prefix),
@@ -504,6 +597,12 @@ const preambleToLatex = (bundle: ManuscriptBundle): string[] => {
     '\\usepackage{booktabs}',
     '\\usepackage{multirow}',
     '\\usepackage{caption}',
+    // Only when the paper actually has panels: an unused package in every
+    // .tex we have ever written is one more thing to go wrong on a machine
+    // whose TeX installation is missing it.
+    ...(bundle.numberedFigures.some(isFigurePanel)
+      ? ['\\usepackage{subcaption}']
+      : []),
     '\\usepackage{setspace}',
     '\\usepackage[normalem]{ulem}',
     '\\usepackage{hyperref}',
@@ -528,10 +627,11 @@ export const buildManuscriptLatexFiles = (
 ): ExportFile[] => {
   const images = collectManuscriptSourceImages();
   const figuresByKey = manuscriptSourceFiguresByKey(bundle);
+  const sectionsByKey = manuscriptSourceSectionsByKey(bundle);
   const context: LatexContext = {
     addImage: images.addImage,
     sectionNumbering: bundle.style.sectionNumbering === true,
-    inline: latexInlineWriter(figuresByKey, images.addImage),
+    inline: latexInlineWriter(figuresByKey, sectionsByKey, images.addImage),
   };
 
   // A blank line between blocks is what LaTeX reads as a paragraph break, so

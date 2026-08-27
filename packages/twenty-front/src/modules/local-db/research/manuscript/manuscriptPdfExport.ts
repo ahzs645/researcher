@@ -19,6 +19,7 @@ import {
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { fitManuscriptFigureImages } from './manuscriptFigureFit';
+import { composeManuscriptFigurePanels } from './manuscriptPanelComposite';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { isImageDataUrl } from './manuscriptImages';
 import { latexToScriptedText } from './manuscriptMathText';
@@ -52,8 +53,10 @@ export const exportManuscriptToPdfBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
   const drawnBundle = await fitManuscriptFigureImages(
-    await prepareManuscriptDiagramImages(
-      await prepareManuscriptBundleWithCsl(bundle),
+    await composeManuscriptFigurePanels(
+      await prepareManuscriptDiagramImages(
+        await prepareManuscriptBundleWithCsl(bundle),
+      ),
     ),
   );
   // react-pdf lays out a flow of text and has no notion of a page's foot, so

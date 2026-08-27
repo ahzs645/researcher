@@ -13,6 +13,7 @@ import {
 } from './manuscriptImages';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { buildJatsArticle } from './manuscriptJatsExport';
+import { isFigurePanel } from './manuscriptNumbering';
 import { type PortableManuscriptSource } from './manuscriptPortableManifest';
 import { addPortableResearchPaperFiles } from './manuscriptPortableZip';
 import { screenManuscript, type ScreeningFinding } from './manuscriptScreening';
@@ -32,6 +33,7 @@ import {
   parseManuscriptSubmissionExtras,
   submissionJournalKey,
 } from './manuscriptSubmissionRequirements';
+import { type NumberedFigure } from './manuscriptTypes';
 
 type Zippable = Record<string, Uint8Array>;
 
@@ -212,19 +214,27 @@ export const manuscriptSubmissionFigures = (
   bundle: ManuscriptBundle,
 ): ManuscriptSubmissionFigures => {
   const result: ManuscriptSubmissionFigures = { files: {}, linked: [] };
+  // What the artwork file is called. A panel's printed label is the letter
+  // alone — "(a)" — which two different figures would both slug to the same
+  // filename, so a panel is named by the reference that identifies it
+  // ("Fig. 1a") instead.
+  const artworkName = (figure: NumberedFigure): string =>
+    isFigurePanel(figure) && figure.crossRefLabel.length > 0
+      ? figure.crossRefLabel
+      : figure.label;
   for (const figure of bundle.numberedFigures) {
     if (figure.assetKind === 'TABLE') continue;
     if (isImageDataUrl(figure.imageUrl)) {
       const decoded = dataUrlToBytes(figure.imageUrl as string);
       if (decoded !== null) {
         result.files[
-          `figures/${figure.label.replace(/[^a-z0-9]+/gi, '-')}.${decoded.extension}`
+          `figures/${artworkName(figure).replace(/[^a-z0-9]+/gi, '-')}.${decoded.extension}`
         ] = decoded.bytes;
       }
       continue;
     }
     if (isHttpUrl(figure.imageUrl)) {
-      result.linked.push(`${figure.label}: ${figure.imageUrl}`);
+      result.linked.push(`${artworkName(figure)}: ${figure.imageUrl}`);
       continue;
     }
     const image = resolveFigureImage(figure);

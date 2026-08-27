@@ -191,6 +191,9 @@ export const useManuscriptImportCommit = ({
                 ? false
                 : section.includeInExport,
             status: section.status ?? 'DRAFTING',
+            // The key an in-text `[#sec:…]` points at, when the source
+            // carried one — without it the references restore as dangling.
+            ...(section.refKey === undefined ? {} : { refKey: section.refKey }),
             ...(section.wordLimit !== undefined
               ? { wordLimit: section.wordLimit }
               : {}),
@@ -243,8 +246,10 @@ export const useManuscriptImportCommit = ({
           });
         }
 
+        const figureIdsByOrder = new Map<number, string>();
+        const panelParentOrderById = new Map<string, number>();
         for (const figure of preparedImport.figures) {
-          const { sectionOrderIndex, ...record } = figure;
+          const { sectionOrderIndex, parentOrderIndex, ...record } = figure;
           const created = await createFigure({
             ...record,
             manuscriptId,
@@ -254,8 +259,13 @@ export const useManuscriptImportCommit = ({
               : {}),
           });
           const createdId = (created as { id?: string } | undefined)?.id;
-          if (isDefined(createdId))
+          if (isDefined(createdId)) {
             currentCreatedRecords.figures.push(createdId);
+            figureIdsByOrder.set(figure.orderIndex, createdId);
+            if (parentOrderIndex !== undefined) {
+              panelParentOrderById.set(createdId, parentOrderIndex);
+            }
+          }
           currentCreatedCounts = {
             ...currentCreatedCounts,
             figures: currentCreatedCounts.figures + 1,
@@ -264,6 +274,21 @@ export const useManuscriptImportCommit = ({
           setCreatedRecords({
             ...currentCreatedRecords,
             figures: [...currentCreatedRecords.figures],
+          });
+        }
+
+        // A panel has to wait for its parent to exist before it can point at
+        // it — the same two-step the section versions above take, and for the
+        // same reason: neither record has an id until it is created.
+        for (const [figureId, parentOrderIndex] of panelParentOrderById) {
+          const parentFigureId = figureIdsByOrder.get(parentOrderIndex);
+          if (!isDefined(parentFigureId) || parentFigureId === figureId) {
+            continue;
+          }
+          await updateOneRecord({
+            objectNameSingular: 'figure',
+            idToUpdate: figureId,
+            updateOneRecordInput: { parentFigureId },
           });
         }
 

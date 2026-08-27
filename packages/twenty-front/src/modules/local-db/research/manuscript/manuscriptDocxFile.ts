@@ -342,6 +342,7 @@ const importedDocumentFromManifest = (
   correspondingAuthor: portablePackage.metadata.correspondingAuthor,
   sections: portablePackage.sections.map((section) => ({
     name: section.name,
+    ...(section.refKey === undefined ? {} : { refKey: section.refKey }),
     sectionType: section.sectionType,
     placement: section.placement,
     content: section.content,

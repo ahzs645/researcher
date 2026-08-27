@@ -1840,6 +1840,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconFileExport',
       },
       {
+        name: 'refKey',
+        label: 'Reference key',
+        type: 'TEXT',
+        icon: 'IconHash',
+        description:
+          'Slug used in cross-refs, e.g. methods → [#sec:methods] renders "Section 3"',
+      },
+      {
         name: 'variantOfId',
         label: 'Alternative version of',
         type: 'TEXT',
@@ -1985,6 +1993,22 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         icon: 'IconListNumbers',
         description:
           'Off for a display equation set without a number; it takes none from the sequence and cannot be cross-referenced',
+      },
+      {
+        name: 'parentFigureId',
+        label: 'Panel of',
+        type: 'TEXT',
+        icon: 'IconLayoutGrid',
+        description:
+          'Id of the figure this is a panel of. The parent takes the number, the panel takes a letter — Figure 3 with panels 3a and 3b.',
+      },
+      {
+        name: 'panelColumns',
+        label: 'Panel columns',
+        type: 'NUMBER',
+        icon: 'IconColumns',
+        description:
+          'How many panels sit side by side before the layout wraps. Unset puts them all in one row.',
       },
       {
         name: 'orderIndex',

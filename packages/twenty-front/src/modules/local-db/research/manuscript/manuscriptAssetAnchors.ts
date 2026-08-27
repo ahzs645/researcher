@@ -42,6 +42,10 @@ export const readAssetNumberAnchor = (
 export const assetBookmarkId = (refKey: string): string =>
   `_Ref${refKey.replace(/[^A-Za-z0-9]/g, '_')}`.slice(0, 40);
 
+// The counter Word keeps for section numbers. Sections run one continuous
+// sequence, so unlike the asset counters there is nothing to key it on.
+export const SECTION_SEQUENCE_NAME = 'Section';
+
 // The name of the counter Word keeps for this asset. Each kind numbers on its
 // own sequence, and a supplement runs a second one so "Figure S1" cannot
 // disturb "Figure 1".
@@ -59,6 +63,11 @@ export const assetSequenceName = (
 // "1.2" carry information a plain counter cannot reproduce, so they stay
 // literal — the bookmark still holds them, so cross-references to them are
 // still links that show the right text, they simply do not renumber.
+//
+// A panel's "3b" is the one case that does not go through here: its letter is
+// not part of any counter, so the reference is built from the *parent's*
+// number — a live REF that gives back "3" — with the letter typed after it as
+// text. See `crossReferenceRuns` in the DOCX export.
 export type AssetNumberParts = {
   prefix: string;
   counted?: string;

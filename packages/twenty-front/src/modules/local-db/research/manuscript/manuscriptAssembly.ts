@@ -18,8 +18,12 @@ import {
 import { splitAssetPlacementMarkers } from './manuscriptAssetPlacement';
 import { figureHasImage, figureToMarkdown } from './manuscriptImages';
 import {
+  attachNumberedPanels,
   buildAssetLookup,
+  isFigurePanel,
+  manuscriptSectionHeading,
   numberAssets,
+  numberManuscriptSections,
   resolveAssetKey,
 } from './manuscriptNumbering';
 import { resolveSectionVariants } from './manuscriptSectionVariants';
@@ -27,6 +31,7 @@ import {
   type FigureLike,
   type JournalStyle,
   type NumberedFigure,
+  type NumberedSection,
   type ReferenceLike,
   type SectionLike,
 } from './manuscriptTypes';
@@ -102,30 +107,6 @@ export const manuscriptSectionsForExport = (
     input.style,
   );
 
-const sectionHeadingLevel = (
-  section: SectionLike,
-  heading: string,
-): 2 | 3 | 4 => {
-  if (
-    section.sectionType === 'ABSTRACT' ||
-    section.sectionType === 'KEYWORDS'
-  ) {
-    return 3;
-  }
-  // The depth the author gave the section in the composer outline is the
-  // authority — the manuscript title is the h1, so a top-level section is h2.
-  // Without it every section exported flat, which is why a subsection was
-  // indistinguishable from the section above it.
-  const outlineLevel = section.level;
-  if (isDefined(outlineLevel) && outlineLevel >= 2) {
-    return Math.round(outlineLevel) >= 3 ? 4 : 3;
-  }
-  const numericPrefix = /^(\d+(?:\.\d+)+)\b/.exec(heading)?.[1];
-  return numericPrefix !== undefined && numericPrefix.split('.').length >= 3
-    ? 3
-    : 2;
-};
-
 export type ManuscriptMeta = {
   id: string;
   name?: string | null;
@@ -177,6 +158,10 @@ export type ManuscriptBundle = {
   bibliography: FormattedBibliographyEntry[];
   citedKeys: string[];
   numberedFigures: NumberedFigure[];
+  // The exported sections with their numbers — the same ones the headings
+  // print, so an exporter that writes its own anchors reads them off here
+  // rather than counting a second time.
+  numberedSections: NumberedSection[];
   // A neutral, render-target-agnostic document model. The Markdown exporter and
   // the BlockNote/DOCX exporter both consume this, so figures become real
   // images and tables become real tables in DOCX (not just Markdown text).
@@ -211,7 +196,18 @@ export type ManuscriptBundleOptions = {
 
 // One unit of the neutral document model.
 export type ManuscriptDocNode =
-  | { kind: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
+  | {
+      kind: 'heading';
+      level: 1 | 2 | 3 | 4 | 5 | 6;
+      text: string;
+      // Set when the heading is a section's own. `number` is the one the
+      // section counter worked out — empty for a section outside the sequence
+      // — and its presence is what tells a renderer the decision is already
+      // made and it must not count this heading itself. `referenceKey` is
+      // what a `[#…]` pointing here resolved through, so a target that can
+      // write an anchor knows what to call it.
+      section?: { id: string; referenceKey: string; number: string };
+    }
   | { kind: 'prose'; markdown: string }
   | { kind: 'figure'; figure: NumberedFigure }
   | { kind: 'table'; figure: NumberedFigure }
@@ -227,6 +223,7 @@ const figureNode = (figure: NumberedFigure): ManuscriptDocNode => {
 const renderSectionBody = (
   section: SectionLike,
   numbered: NumberedFigure[],
+  numberedSections: NumberedSection[],
   warnings: string[],
   withCrossRefAnchors: boolean,
 ): { heading: string; resolved: string; citationKeys: string[] } => {
@@ -235,6 +232,7 @@ const renderSectionBody = (
     content,
     numbered,
     withCrossRefAnchors,
+    numberedSections,
   );
   const sectionName = section.name ?? section.sectionType;
   for (const key of unresolvedKeys) {
@@ -248,10 +246,11 @@ const renderSectionBody = (
     );
   }
   const citationKeys = extractCitationKeys(content);
-  const heading = isNonEmptyString(section.name)
-    ? section.name
-    : (section.sectionType ?? 'Section');
-  return { heading, resolved: text, citationKeys };
+  return {
+    heading: manuscriptSectionHeading(section),
+    resolved: text,
+    citationKeys,
+  };
 };
 
 export const buildManuscriptBundle = (
@@ -270,6 +269,9 @@ export const buildManuscriptBundle = (
   const sections = manuscriptSectionsForExport(input);
 
   const numbered = numberAssets(input.figures, style, sections);
+  // Numbered once, here, off the sections that are actually going out — the
+  // heading nodes carry the result rather than every renderer counting again.
+  const numberedSections = numberManuscriptSections(sections, style);
   const assetLookup = buildAssetLookup(numbered);
   // Cross-refs inside captions and table grids resolve like in-text ones, and
   // their citation keys count toward the bibliography — otherwise a citation
@@ -283,6 +285,7 @@ export const buildManuscriptBundle = (
         value,
         numbered,
         withCrossRefAnchors,
+        numberedSections,
       );
       const where = field === 'caption' ? 'caption' : 'table';
       const source =
@@ -303,6 +306,9 @@ export const buildManuscriptBundle = (
   const unanchoredMain: NumberedFigure[] = [];
   const supplementFigures: NumberedFigure[] = [];
   for (const figure of numberedResolvedText) {
+    // A panel is drawn inside its parent, so it is not a figure the layout
+    // places: taking it out here is what keeps a two-panel figure one figure.
+    if (isFigurePanel(figure)) continue;
     if (isNonEmptyString(figure.sectionId)) {
       const list = figuresBySection.get(figure.sectionId) ?? [];
       list.push(figure);
@@ -328,7 +334,13 @@ export const buildManuscriptBundle = (
 
   // First pass: resolve cross-refs and collect citation keys in document order.
   const rendered = sections.map((section) =>
-    renderSectionBody(section, numbered, warnings, withCrossRefAnchors),
+    renderSectionBody(
+      section,
+      numbered,
+      numberedSections,
+      warnings,
+      withCrossRefAnchors,
+    ),
   );
   const citedKeys: string[] = [];
   const seenKeys = new Set<string>();
@@ -403,6 +415,16 @@ export const buildManuscriptBundle = (
       ? { tableData: renderCitationText(figure.tableData) }
       : {}),
   });
+  // Rendered once for the whole set, then the panels are hung back on: a
+  // parent's nested copy of a panel has to be the copy whose caption went
+  // through the same citation pass as everything else.
+  const renderedById = new Map(
+    attachNumberedPanels(numberedResolvedText.map(renderFigureText)).map(
+      (figure) => [figure.id, figure],
+    ),
+  );
+  const placed = (figure: NumberedFigure): NumberedFigure =>
+    renderedById.get(figure.id) ?? renderFigureText(figure);
 
   sections.forEach((section, index) => {
     const part = rendered[index];
@@ -413,10 +435,16 @@ export const buildManuscriptBundle = (
     const target = isSupplement ? supplementBlocks : mainBlocks;
     const nodeTarget = isSupplement ? supplementNodes : mainNodes;
     target.push(`## ${part.heading}`);
+    const numberedSection = numberedSections[index];
     nodeTarget.push({
       kind: 'heading',
-      level: sectionHeadingLevel(section, part.heading),
+      level: numberedSection.headingLevel,
       text: part.heading,
+      section: {
+        id: section.id,
+        referenceKey: numberedSection.referenceKey,
+        number: numberedSection.number,
+      },
     });
 
     for (const segment of splitAssetPlacementMarkers(withCitations)) {
@@ -425,7 +453,16 @@ export const buildManuscriptBundle = (
         nodeTarget.push({ kind: 'prose', markdown: segment.markdown });
         continue;
       }
-      const figure = resolveAssetKey(segment.refKey, assetLookup);
+      const resolvedAsset = resolveAssetKey(segment.refKey, assetLookup);
+      // A marker that names a panel means "put the figure here": a panel has
+      // no place of its own, so following the key to the parent is the only
+      // reading that puts anything on the page.
+      const figure =
+        resolvedAsset !== undefined && isFigurePanel(resolvedAsset)
+          ? numberedResolvedText.find(
+              (candidate) => candidate.id === resolvedAsset.parentFigureId,
+            )
+          : resolvedAsset;
       if (figure === undefined) {
         warnings.push(
           `Section "${part.heading}" has an unknown asset placement [[asset:${segment.refKey}]]`,
@@ -439,8 +476,8 @@ export const buildManuscriptBundle = (
         continue;
       }
       placedFigureIds.add(figure.id);
-      target.push(figureToMarkdown(renderFigureText(figure)));
-      nodeTarget.push(figureNode(renderFigureText(figure)));
+      target.push(figureToMarkdown(placed(figure)));
+      nodeTarget.push(figureNode(placed(figure)));
     }
 
     // A section assignment remains a convenient coarse anchor. An explicit
@@ -449,8 +486,8 @@ export const buildManuscriptBundle = (
     for (const figure of anchored) {
       if (placedFigureIds.has(figure.id)) continue;
       placedFigureIds.add(figure.id);
-      target.push(figureToMarkdown(renderFigureText(figure)));
-      nodeTarget.push(figureNode(renderFigureText(figure)));
+      target.push(figureToMarkdown(placed(figure)));
+      nodeTarget.push(figureNode(placed(figure)));
     }
 
     // Word-limit checks.
@@ -469,13 +506,13 @@ export const buildManuscriptBundle = (
 
   for (const figure of unanchoredMain) {
     if (placedFigureIds.has(figure.id)) continue;
-    mainBlocks.push(figureToMarkdown(renderFigureText(figure)));
-    mainNodes.push(figureNode(renderFigureText(figure)));
+    mainBlocks.push(figureToMarkdown(placed(figure)));
+    mainNodes.push(figureNode(placed(figure)));
   }
   for (const figure of supplementFigures) {
     if (placedFigureIds.has(figure.id)) continue;
-    supplementBlocks.push(figureToMarkdown(renderFigureText(figure)));
-    supplementNodes.push(figureNode(renderFigureText(figure)));
+    supplementBlocks.push(figureToMarkdown(placed(figure)));
+    supplementNodes.push(figureNode(placed(figure)));
   }
 
   // Bibliography.
@@ -565,12 +602,15 @@ export const buildManuscriptBundle = (
     bibliography,
     citedKeys,
     numberedFigures: numbered,
+    numberedSections,
     nodes,
     warnings,
     stats: {
       wordCount: mainWords,
       sectionCount: sections.filter((s) => s.placement !== 'SUPPLEMENT').length,
-      figureCount: numbered.filter((f) => f.placement !== 'SUPPLEMENT').length,
+      figureCount: numbered.filter(
+        (f) => f.placement !== 'SUPPLEMENT' && !isFigurePanel(f),
+      ).length,
       referenceCount: input.references.length,
       supplementSectionCount: sections.filter(
         (s) => s.placement === 'SUPPLEMENT',

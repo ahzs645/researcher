@@ -5,6 +5,7 @@ import {
   defaultBlockSpecs,
 } from '@blocknote/core';
 import { isNonEmptyString } from '@sniptt/guards';
+import { isNonEmptyArray } from 'twenty-shared/utils';
 
 import { type ManuscriptBundle } from './manuscriptAssembly';
 import { bibliographyHtmlToInlineRuns } from './manuscriptCitations';
@@ -15,6 +16,10 @@ import { parseManuscriptTableGrid } from './manuscriptTableGrid';
 import { titlePageSpacerLineCount } from './manuscriptTitlePage';
 import { PRINTABLE_WIDTH_PX } from './manuscriptPageMetrics';
 import { wrapAssetNumberAnchor } from './manuscriptAssetAnchors';
+import {
+  hasAuthoredSectionKey,
+  UNNUMBERED_HEADING,
+} from './manuscriptNumbering';
 import { stripCrossReferenceAnchors } from './manuscriptCrossReference';
 import { protectInlineMath, restoreInlineMath } from './manuscriptInlineMath';
 import { type NumberedFigure } from './manuscriptTypes';
@@ -70,10 +75,75 @@ const figureCaptionBlock = (figure: NumberedFigure): ExportPartialBlock => ({
   content: anchoredCaptionText(figure),
 });
 
+// What is printed beside one panel: its letter and its own words. The figure's
+// number is not repeated here — the parent's caption carries "Figure 3" once,
+// which is how a multi-panel figure is set.
+const panelCaptionText = (panel: NumberedFigure): string =>
+  [
+    panel.label,
+    isNonEmptyString(panel.caption)
+      ? panel.caption
+      : isNonEmptyString(panel.name)
+        ? panel.name
+        : '',
+  ]
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join(' ');
+
+// A figure made of panels, for the two block-based targets. They share one
+// BlockNote document and its blocks flow down the page — there is no container
+// in that model that can hold two images side by side — so the row is drawn
+// before this point, by `composeManuscriptFigurePanels`, which hands back a
+// single figure. What is left here is what happens when that could not run
+// (no browser, an image that would taint the canvas): the panels are still one
+// figure under one number, set one above the other with their letters.
+const panelsToBlocks = (
+  figure: NumberedFigure,
+  captionPosition: string | null | undefined,
+): ExportPartialBlock[] => {
+  const panelBlocks = (figure.panels ?? []).flatMap(
+    (panel): ExportPartialBlock[] => {
+      const image = resolveFigureImage(panel);
+      if (image.kind === 'none') {
+        return [
+          {
+            type: 'paragraph',
+            props: { textColor: 'figure-caption' },
+            content: panelCaptionText(panel),
+          },
+        ];
+      }
+      const widthPercent = Math.min(
+        100,
+        Math.max(10, panel.widthPercent ?? 100),
+      );
+      return [
+        {
+          type: 'image',
+          props: {
+            url: image.src,
+            name: panel.altText ?? panel.name ?? '',
+            caption: panelCaptionText(panel),
+            previewWidth: Math.round(600 * (widthPercent / 100)),
+          },
+        },
+      ];
+    },
+  );
+  const caption = figureCaptionBlock(figure);
+  return captionPosition === 'ABOVE'
+    ? [caption, ...panelBlocks]
+    : [...panelBlocks, caption];
+};
+
 const figureToBlocks = (
   figure: NumberedFigure,
   captionPosition: string | null | undefined,
 ): ExportPartialBlock[] => {
+  if (isNonEmptyArray(figure.panels)) {
+    return panelsToBlocks(figure, captionPosition);
+  }
   const image = resolveFigureImage(figure);
   if (image.kind !== 'none') {
     const widthPercent = Math.min(
@@ -303,6 +373,19 @@ const affiliationParagraph = (
   ],
 });
 
+// The printed section number, carrying the section's key behind an invisible
+// marker so the DOCX export can set it as a Word field the sentences that
+// refer to it point at — the same treatment a figure's number gets.
+const numberedHeadingPrefix = (
+  node: { section?: { id: string; referenceKey: string } },
+  printedNumber: string,
+): string => {
+  const section = node.section;
+  return section === undefined || !hasAuthoredSectionKey(section)
+    ? `${printedNumber}. `
+    : `${wrapAssetNumberAnchor(section.referenceKey)}${printedNumber}. `;
+};
+
 const bundleToBlocks = (
   editor: ExportEditor,
   bundle: ManuscriptBundle,
@@ -409,9 +492,6 @@ const bundleToBlocks = (
   let bodyPageStarted = !breaksAfterAbstract;
   const bodyAlignment =
     bundle.style.bodyAlignment === 'JUSTIFIED' ? 'justify' : 'left';
-  const unnumberedHeading =
-    /^(abstract|keywords|acknowledge?ments?|author contributions?|funding|competing interests?|conflicts? of interest|data availability|references|supplementary material|appendix(?:\s+[A-Z0-9]+)?(?:[.:]\s*.*)?)$/i;
-
   const figurePageLayout = bundle.style.figurePageLayout ?? 'INLINE';
   const supplementStartsOnNewPage = ['NEW_COVER_PAGE', 'NEW_PAGE'].includes(
     bundle.style.supplementStartLayout ?? '',
@@ -515,12 +595,23 @@ const bundleToBlocks = (
         }
         currentSectionIsAbstract = /^abstract$/i.test(node.text.trim());
         if (currentSectionIsAbstract) abstractSeen = true;
-        if (
+        // The number is not worked out here. A heading the bundle built from
+        // a section arrives carrying the one the section counter assigned, so
+        // that a `[#sec:…]` resolved against that counter and the number
+        // printed on the page cannot be two different opinions. Only a heading
+        // with no section behind it — the generated References title, the
+        // "Notes" list the PDF export appends — is still counted here, exactly
+        // as every heading used to be.
+        const assignedNumber = node.section?.number;
+        const countedNumber =
           bundle.style.sectionNumbering === true &&
           node.level === 2 &&
-          !unnumberedHeading.test(node.text.trim())
-        ) {
-          sectionNumber += 1;
+          !UNNUMBERED_HEADING.test(node.text.trim())
+            ? String(sectionNumber + 1)
+            : '';
+        const printedNumber = assignedNumber ?? countedNumber;
+        if (printedNumber.length > 0) {
+          sectionNumber = Number(printedNumber);
           currentNumberedSection = sectionNumber;
           currentNestedNumber = 0;
         } else if (node.level <= 2) {
@@ -531,11 +622,9 @@ const bundleToBlocks = (
           type: 'heading',
           props: { level: node.level },
           content:
-            bundle.style.sectionNumbering === true &&
-            node.level === 2 &&
-            !unnumberedHeading.test(node.text.trim())
-              ? `${sectionNumber}. ${node.text}`
-              : node.text,
+            printedNumber.length === 0
+              ? node.text
+              : `${numberedHeadingPrefix(node, printedNumber)}${node.text}`,
         });
         break;
       case 'prose':

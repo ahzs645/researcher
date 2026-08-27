@@ -239,10 +239,22 @@ const numberFootnotesInFigure = (
   figure: NumberedFigure,
   collect: (text: string) => ManuscriptFootnote,
 ): NumberedFigure => {
-  const caption = figure.caption ?? '';
+  // A figure's panels are captioned prose too, and they are printed inside the
+  // figure, so their notes belong in the same sequence as everything else —
+  // and in the same walk, since the panels are only reachable from here.
+  const withPanels =
+    figure.panels === undefined
+      ? figure
+      : {
+          ...figure,
+          panels: figure.panels.map((panel) =>
+            numberFootnotesInFigure(panel, collect),
+          ),
+        };
+  const caption = withPanels.caption ?? '';
   return hasManuscriptFootnotes(caption)
-    ? { ...figure, caption: numberFootnotesInText(caption, collect) }
-    : figure;
+    ? { ...withPanels, caption: numberFootnotesInText(caption, collect) }
+    : withPanels;
 };
 
 export const numberManuscriptFootnotes = (

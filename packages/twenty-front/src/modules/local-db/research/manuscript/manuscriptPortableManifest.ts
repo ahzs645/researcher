@@ -1,3 +1,5 @@
+import { isNonEmptyString } from '@sniptt/guards';
+
 import {
   parseManuscriptAffiliations,
   parseManuscriptAuthors,
@@ -23,6 +25,12 @@ export const PORTABLE_MANUSCRIPT_FORMAT = 'researcher-manuscript' as const;
 // gets its notes back through the field that was already there, and a build
 // that has never heard of footnotes shows the token as text instead of
 // refusing the package the way a version bump would make it.
+//
+// Panels and section reference keys arrived later still and did not move it
+// either, for the same reason: `parentFigureKey`, `panelColumns` and a
+// section's `refKey` are optional fields a reader that has never heard of them
+// simply ignores — the figures still restore, as figures of their own, rather
+// than the whole package being refused.
 //
 // Section versions arrived after v2 — and their rules after that — and
 // deliberately did not move it. `variantOfKey`/`variantProfileKey`/
@@ -87,6 +95,9 @@ export type PortableResearchPaperManifest = {
   sections: Array<{
     key: string;
     name: string;
+    // The key an in-text `[#sec:…]` points at. Absent on a section the author
+    // never named, which is most of them.
+    refKey?: string;
     sectionType: string;
     placement: string;
     content: string;
@@ -125,6 +136,13 @@ export type PortableResearchPaperManifest = {
     tableData?: string;
     equationLatex?: string;
     diagramSource?: string;
+    // A panel: the manifest key of the figure it is one cell of. Panels travel
+    // as ordinary figure entries pointing at their parent, so a reader that
+    // does not know about them restores a flat set of figures rather than
+    // nothing at all.
+    parentFigureKey?: string;
+    // On a parent: how many panels sit side by side before the layout wraps.
+    panelColumns?: number;
   }>;
   references: Array<{
     key: string;
@@ -227,6 +245,9 @@ export const buildPortableResearchPaperManifest = (
       `section-${index + 1}`,
     ]),
   );
+  const figureKeyById = new Map(
+    source.figures.map((figure, index) => [figure.id, `figure-${index + 1}`]),
+  );
 
   return {
     format: PORTABLE_MANUSCRIPT_FORMAT,
@@ -250,6 +271,9 @@ export const buildPortableResearchPaperManifest = (
     sections: source.sections.map((section, index) => ({
       key: sectionKeyById.get(section.id) ?? `section-${index + 1}`,
       name: section.name ?? section.sectionType ?? 'Section',
+      ...(isNonEmptyString(section.refKey?.trim())
+        ? { refKey: (section.refKey as string).trim() }
+        : {}),
       sectionType: section.sectionType ?? 'OTHER',
       placement: section.placement ?? 'MAIN',
       content: section.content ?? '',
@@ -305,6 +329,17 @@ export const buildPortableResearchPaperManifest = (
           : {}),
         ...(figure.diagramSource !== null && figure.diagramSource !== undefined
           ? { diagramSource: figure.diagramSource }
+          : {}),
+        ...(isNonEmptyString(figure.parentFigureId?.trim()) &&
+        figureKeyById.has(figure.parentFigureId as string)
+          ? {
+              parentFigureKey: figureKeyById.get(
+                figure.parentFigureId as string,
+              ),
+            }
+          : {}),
+        ...(figure.panelColumns !== null && figure.panelColumns !== undefined
+          ? { panelColumns: figure.panelColumns }
           : {}),
       };
     }),

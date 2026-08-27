@@ -1,11 +1,24 @@
-import { buildAssetLookup, resolveAssetKey } from './manuscriptNumbering';
-import { type NumberedFigure } from './manuscriptTypes';
+import {
+  buildAssetLookup,
+  buildSectionLookup,
+  resolveAssetKey,
+  resolveSectionKey,
+} from './manuscriptNumbering';
+import { type NumberedFigure, type NumberedSection } from './manuscriptTypes';
 
 // Cross-references and citation extraction over a section's Markdown.
 //
 // Authoring syntax (Pandoc-friendly):
 //   [#fig:arpes]   → renders as "Figure 1" (per the journal's crossRefFormat)
+//   [#fig:arpes-b] → a panel of that figure, "Figure 1b"
+//   [#sec:methods] → renders as "Section 3", or the section's own title when
+//                    the journal does not number sections
 //   [@smith2020]   → a citation; the key is collected for the bibliography
+//
+// One token, three kinds of target, one syntax: an author should not have to
+// know which of the paper's numbered things they are pointing at, only what
+// they called it. Assets are looked up first, so nothing that resolved before
+// sections existed resolves anywhere else now.
 //
 // Pure: resolution takes the numbered-asset lookup and returns rewritten text
 // plus any keys that didn't resolve, so the UI can flag dangling references.
@@ -84,16 +97,23 @@ export const resolveCrossReferences = (
   markdown: string,
   numbered: NumberedFigure[],
   withAnchors = false,
+  numberedSections: NumberedSection[] = [],
 ): CrossReferenceResult => {
   const lookup = buildAssetLookup(numbered);
+  const sectionLookup = buildSectionLookup(numberedSections);
   const unresolved = new Set<string>();
   const unnumbered = new Set<string>();
 
   const text = markdown.replace(CROSS_REF_PATTERN, (_match, rawKey: string) => {
     const asset = resolveAssetKey(rawKey, lookup);
     if (asset === undefined) {
-      unresolved.add(rawKey);
-      return `[#${rawKey}]`;
+      const section = resolveSectionKey(rawKey, sectionLookup);
+      if (section === undefined) {
+        unresolved.add(rawKey);
+        return `[#${rawKey}]`;
+      }
+      if (!withAnchors) return section.crossRefLabel;
+      return `${CROSS_REF_ANCHOR_OPEN}${section.referenceKey}${CROSS_REF_ANCHOR_SPLIT}${section.crossRefLabel}${CROSS_REF_ANCHOR_CLOSE}`;
     }
     // The asset exists but is not numbered, so its cross-ref label is empty.
     // Printing that would silently delete the reference from the sentence;

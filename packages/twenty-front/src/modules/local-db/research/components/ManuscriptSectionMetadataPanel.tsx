@@ -1,4 +1,5 @@
 import { styled } from '@linaria/react';
+import { isNonEmptyString } from '@sniptt/guards';
 import { isDefined } from 'twenty-shared/utils';
 import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
@@ -85,6 +86,11 @@ const StyledField = styled.label`
   gap: ${themeCssVariables.spacing[1]};
 `;
 
+const StyledHint = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
 const StyledInput = styled.input`
   background: ${themeCssVariables.background.primary};
   border: 1px solid ${themeCssVariables.border.color.medium};
@@ -161,6 +167,61 @@ export const ManuscriptSectionMetadataPanel = ({
       );
   };
 
+  // Renaming a key has to carry the sentences that used it, exactly as a
+  // figure's does — otherwise every reference to the section turns into a
+  // dangling token the moment the author tidies its name.
+  const changeReferenceKey = (rawKey: string) => {
+    const nextKey = rawKey.trim();
+    const currentKey = section.refKey?.trim() ?? '';
+    if (nextKey === currentKey) return;
+    if (nextKey.length > 0 && !/^[A-Za-z0-9:._-]+$/.test(nextKey)) {
+      enqueueErrorSnackBar({
+        message: 'A reference key can only use letters, digits, : . _ and -',
+      });
+      return;
+    }
+    const taken = sections.some(
+      (candidate) =>
+        candidate.id !== section.id &&
+        (candidate.refKey?.trim() ?? '') === nextKey,
+    );
+    if (nextKey.length > 0 && taken) {
+      enqueueErrorSnackBar({ message: 'That reference key is already in use' });
+      return;
+    }
+    const rewrite = (content: string): string =>
+      currentKey.length === 0 || nextKey.length === 0
+        ? content
+        : content
+            .replaceAll(`[#sec:${currentKey}]`, `[#sec:${nextKey}]`)
+            .replaceAll(`[#${currentKey}]`, `[#${nextKey}]`);
+    const touched =
+      currentKey.length === 0 || nextKey.length === 0
+        ? []
+        : sections.filter(
+            (candidate) =>
+              rewrite(candidate.content ?? '') !== candidate.content,
+          );
+    void Promise.all([
+      updateOneRecord({
+        objectNameSingular: 'manuscriptSection',
+        idToUpdate: section.id,
+        updateOneRecordInput: { refKey: nextKey },
+      }),
+      ...touched.map((candidate) =>
+        updateOneRecord({
+          objectNameSingular: 'manuscriptSection',
+          idToUpdate: candidate.id,
+          updateOneRecordInput: { content: rewrite(candidate.content ?? '') },
+        }),
+      ),
+    ])
+      .then(onChanged)
+      .catch(() =>
+        enqueueErrorSnackBar({ message: 'Could not update reference key' }),
+      );
+  };
+
   const changePlacement = (placement: string) => {
     const placementPeers = sections.filter(
       (candidate) => candidate.placement === placement,
@@ -204,6 +265,20 @@ export const ManuscriptSectionMetadataPanel = ({
               updateSection({ name: event.target.value.trim() })
             }
           />
+        </StyledField>
+        <StyledField>
+          Reference key
+          <StyledInput
+            aria-label="Section reference key"
+            placeholder="methods"
+            defaultValue={section.refKey ?? ''}
+            onBlur={(event) => changeReferenceKey(event.target.value)}
+          />
+          <StyledHint>
+            {isNonEmptyString(section.refKey?.trim())
+              ? `Write [#${section.refKey.trim()}] to print this section's number.`
+              : 'Name the section to point at it: [#sec:methods] prints "Section 3".'}
+          </StyledHint>
         </StyledField>
         <StyledField>
           Word limit

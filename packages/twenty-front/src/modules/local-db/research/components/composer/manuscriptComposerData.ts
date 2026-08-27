@@ -106,6 +106,7 @@ export const MANUSCRIPT_GQL = {
 export const SECTION_GQL = {
   id: true,
   name: true,
+  refKey: true,
   sectionType: true,
   placement: true,
   content: true,
@@ -154,6 +155,8 @@ export const FIGURE_GQL = {
   credit: true,
   widthPercent: true,
   numbered: true,
+  parentFigureId: true,
+  panelColumns: true,
   orderIndex: true,
   tableData: true,
   equationLatex: true,

@@ -29,8 +29,15 @@ export type ManuscriptHtmlRenderContext = {
   renderMermaid?: (source: string) => string | null;
   tableClass: string;
   // Called for every heading found in prose so the exporter can build an
-  // outline. Returns the id to anchor the heading with.
-  registerHeading: (level: number, text: string) => string;
+  // outline. Returns the id to anchor the heading with. A heading the bundle
+  // built from a section passes that section's key, so the id a `[#sec:…]`
+  // link points at and the id the heading actually carries are the same
+  // string rather than two slugs that agree until a title is edited.
+  registerHeading: (
+    level: number,
+    text: string,
+    sectionReferenceKey?: string,
+  ) => string;
 };
 
 const PLACEHOLDER = '\u0000';

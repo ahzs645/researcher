@@ -18,7 +18,7 @@ import { type ExportFile } from './manuscriptExport';
 import { splitManuscriptFootnotes } from './manuscriptFootnotes';
 import { resolveFigureImage } from './manuscriptImages';
 import { manuscriptScriptSegments } from './manuscriptScripts';
-import { type NumberedFigure } from './manuscriptTypes';
+import { type NumberedFigure, type NumberedSection } from './manuscriptTypes';
 
 // What the LaTeX and Typst exporters do the same way. Both take the bundle's
 // Markdown apart with the same scanner, walk the same node stream and write
@@ -31,9 +31,11 @@ import { type NumberedFigure } from './manuscriptTypes';
 export type ManuscriptSourceWrap = { open: string; close: string };
 
 // The bundle's own front/back matter headings are never part of the numbered
-// sequence, whatever the journal says about section numbering.
-export const UNNUMBERED_HEADING =
-  /^(abstract|keywords|acknowledge?ments?|author contributions?|funding|competing interests?|conflicts? of interest|data availability|references|supplementary material|appendix(?:\s+[A-Z0-9]+)?(?:[.:]\s*.*)?)$/i;
+// sequence, whatever the journal says about section numbering. Re-exported
+// rather than restated: the section counter decides what is in the sequence,
+// and a writer that disagreed with it would print a number no reference could
+// have resolved to.
+export { UNNUMBERED_HEADING } from './manuscriptNumbering';
 
 // A cross-reference key, never typeset, so it only has to survive as an
 // identifier in either target's label syntax.
@@ -115,6 +117,17 @@ export const manuscriptSourceFiguresByKey = (
       figure.refKey ?? figure.id,
       figure,
     ]),
+  );
+
+// The sections a cross-reference can land on, under the key its anchor
+// resolved to. Both targets number their own sections, so what they read off
+// here is not the number — it is whether there is one at all, which decides
+// between a live `\\ref`/`@label` and plain text.
+export const manuscriptSourceSectionsByKey = (
+  bundle: Pick<ManuscriptBundle, 'numberedSections'>,
+): Map<string, NumberedSection> =>
+  new Map(
+    bundle.numberedSections.map((section) => [section.referenceKey, section]),
   );
 
 // Both documents name this file themselves — `\bibliography{references}` and
@@ -454,8 +467,20 @@ export const renderManuscriptSourceBlocks = (
   return blocks;
 };
 
+// What a heading node knows about the section it came from — the key to label
+// it with, and whether the target will give that label a number.
+export type ManuscriptSourceHeadingSection = {
+  id: string;
+  referenceKey: string;
+  number: string;
+};
+
 export type ManuscriptSourceNodeWriter = {
-  heading: (level: number, text: string) => string;
+  heading: (
+    level: number,
+    text: string,
+    section?: ManuscriptSourceHeadingSection,
+  ) => string;
   // What a level-1 heading — the supplement — emits ahead of itself: a page
   // break, then the counter resets that restart numbering under the journal's
   // supplement prefix, so the target arrives at "Figure S1" the way the
@@ -512,7 +537,7 @@ export const renderManuscriptSourceNodes = (
             ...writer.supplementBreak(bundle.style.supplementPrefix ?? 'S'),
           );
         }
-        body.push(writer.heading(node.level, heading));
+        body.push(writer.heading(node.level, heading, node.section));
         return;
       }
       case 'prose': {

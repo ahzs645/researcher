@@ -25,6 +25,7 @@ import {
 } from './manuscriptContributors';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
+import { hasAuthoredSectionKey } from './manuscriptNumbering';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import {
   numberManuscriptFootnotes,
@@ -159,6 +160,37 @@ const figureToJats = (figure: NumberedFigure): string => {
       .filter((line) => line.length > 0)
       .join('\n');
   }
+  // A figure made of panels is a <fig-group>: JATS models exactly this — one
+  // labelled, captioned group whose children are the panels, each with its own
+  // id and its own "(a)" label. That id is what a publisher's tooling points a
+  // panel-level <xref> at.
+  const panels = figure.panels ?? [];
+  if (panels.length > 0) {
+    return [
+      `   <fig-group id="${escapeXml(figure.refKey ?? figure.id)}">`,
+      `    <label>${escapeXml(figure.label)}</label>`,
+      caption,
+      ...panels.flatMap((panel) => {
+        const panelHref = figureHref(panel);
+        const panelCaption = isNonEmptyString(panel.caption)
+          ? `<caption><p>${inlineToJats(panel.caption)}</p></caption>`
+          : '';
+        return [
+          `    <fig id="${escapeXml(panel.refKey ?? panel.id)}">`,
+          `     <label>${escapeXml(panel.label)}</label>`,
+          panelCaption,
+          ...(panelHref !== null
+            ? [`     <graphic xlink:href="${escapeXml(panelHref)}"/>`]
+            : []),
+          '    </fig>',
+        ].filter((line) => line.length > 0);
+      }),
+      '   </fig-group>',
+    ]
+      .filter((line) => line.length > 0)
+      .join('\n');
+  }
+
   const href = figureHref(figure);
   return [
     `   <fig id="${escapeXml(figure.refKey ?? figure.id)}">`,
@@ -325,7 +357,19 @@ const nodesToJats = (bundle: ManuscriptBundle): JatsPart => {
       }
       closeTo(node.level);
       openLevels.push(node.level);
-      target().push('   <sec>', `    <title>${escapeXml(node.text)}</title>`);
+      // The section's own key becomes the <sec> id, so the thing a
+      // `[#sec:methods]` names in the composer is the thing an ingest can
+      // point at here.
+      const sectionId =
+        node.section !== undefined && hasAuthoredSectionKey(node.section)
+          ? node.section.referenceKey
+          : '';
+      target().push(
+        sectionId.length === 0
+          ? '   <sec>'
+          : `   <sec id="${escapeXml(sectionId)}">`,
+        `    <title>${escapeXml(node.text)}</title>`,
+      );
       return;
     }
     if (node.kind === 'prose') {

@@ -24,7 +24,10 @@ import {
   citationKeysFromProp,
   citationTokenFromProp,
 } from '@/local-db/research/manuscript/manuscriptEditorContent';
-import { resolveAssetKey } from '@/local-db/research/manuscript/manuscriptNumbering';
+import {
+  resolveAssetKey,
+  resolveSectionKey,
+} from '@/local-db/research/manuscript/manuscriptNumbering';
 
 const StyledInlineAnchor = styled.span`
   display: inline-block;
@@ -224,19 +227,22 @@ type CrossRefNodeProps = {
 };
 
 const CrossRefNode = ({ onSave, refKey }: CrossRefNodeProps) => {
-  const { assetLookup } = useManuscriptEditorContext();
+  const { assetLookup, sectionLookup } = useManuscriptEditorContext();
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [isOpen, setIsOpen] = useState(false);
+  // Assets first, then sections — the order `resolveCrossReferences` uses, so
+  // the chip shows the label the export will print.
   const asset = resolveAssetKey(refKey, assetLookup);
+  const target = asset ?? resolveSectionKey(refKey, sectionLookup);
   return (
     <StyledInlineAnchor ref={anchorRef} contentEditable={false}>
       <StyledChip
         type="button"
-        warning={asset === undefined}
+        warning={target === undefined}
         aria-label={`Edit cross-reference ${refKey}`}
         onClick={() => setIsOpen(true)}
       >
-        {asset?.crossRefLabel ?? `[#${refKey}]`}
+        {target?.crossRefLabel ?? `[#${refKey}]`}
       </StyledChip>
       {isOpen ? (
         <ManuscriptEditorPopover

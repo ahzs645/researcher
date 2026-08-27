@@ -1,5 +1,12 @@
 import { researchDeterministicUuid } from './researchMetadataBuilder';
 import { RESEARCH_GRANT_SOURCE_SEEDS } from './researchGrantSourceData';
+import { parseDecisionLetter } from './manuscript/manuscriptReviewLetter';
+import {
+  reviewPointsFromLetter,
+  serializeReviewPoints,
+  updateReviewPoint,
+  type ReviewPoint,
+} from './manuscript/manuscriptReviewRound';
 import { serializeJournalSubmissionRequirements } from './manuscript/manuscriptSubmissionRequirements';
 
 // Demo seed records for the research objects. Mirrors how the bridge seeds the
@@ -2236,6 +2243,72 @@ const obligationDocumentRecords = (): SeedRecord[] => [
   }),
 ];
 
+// A decision letter in the shape journals send them: two referees, numbered
+// points, and major/minor subheadings. The seeded points are derived from this
+// text rather than written out beside it, so the letter and the points a demo
+// workspace opens with cannot drift apart.
+const TI_DECISION_LETTER = `Dear Dr Reyes,
+
+Your manuscript has been assessed by two referees. We are prepared to consider a
+revised version that responds to the points below.
+
+Reviewer #1 (Remarks to the Author):
+
+The growth protocol is clearly described and the ARPES data are convincing.
+
+1. The introduction spends two pages on qubit architectures that are never
+   returned to. Please shorten it and state the substrate question earlier.
+
+2. Figure 2 is unreadable at print size: the Dirac cone labels are smaller than
+   the axis ticks.
+
+Reviewer #2 (Remarks to the Author):
+
+Major comments
+
+1. The film thickness is reported without an uncertainty. How reproducible is
+   the 12 nm figure across the six growths?
+
+2. No comparison is drawn with the bismuth selenide substrates in the recent
+   literature, which reach comparable mobilities.
+
+Minor comments
+
+- Table 1 is missing units on the mobility column.
+- "sublattice" is misspelt throughout the discussion.
+`;
+
+const tiReviewPoints = (): ReviewPoint[] =>
+  updateReviewPoint(
+    updateReviewPoint(
+      reviewPointsFromLetter(parseDecisionLetter(TI_DECISION_LETTER)),
+      'reviewer-1-1',
+      {
+        response:
+          'The introduction is now two paragraphs. The qubit-architecture survey has been cut to three sentences and the substrate question is stated in the opening paragraph.',
+        sectionId: SECTION('ti-intro'),
+      },
+    ),
+    'reviewer-2-1',
+    {
+      response:
+        'Thickness is now reported as 12.4 ± 0.6 nm across the six growths, with the per-growth values added to the methods table.',
+      sectionId: SECTION('ti-methods'),
+    },
+  );
+
+const reviewRoundRecords = (): SeedRecord[] => [
+  makeRecord('reviewRound', 'ti-qubit-round-1', 0, {
+    name: 'Round 1',
+    manuscriptId: MANUSCRIPT,
+    journal: 'Nature Materials',
+    decision: 'MAJOR_REVISION',
+    decisionDate: '2026-06-18T00:00:00.000Z',
+    letter: TI_DECISION_LETTER,
+    points: serializeReviewPoints(tiReviewPoints()),
+  }),
+];
+
 // Seed map keyed by object `nameSingular`, matching the DataSource seed shape.
 export const getResearchSeedRecords = (): Record<string, SeedRecord[]> => ({
   researchTeam: researchTeamRecords(),
@@ -2260,6 +2333,7 @@ export const getResearchSeedRecords = (): Record<string, SeedRecord[]> => ({
   projectMembership: projectMembershipRecords(),
   obligation: obligationRecords(),
   obligationDocument: obligationDocumentRecords(),
+  reviewRound: reviewRoundRecords(),
 });
 
 // The subset seeded into a BLANK workspace too — formatting scaffolding the user

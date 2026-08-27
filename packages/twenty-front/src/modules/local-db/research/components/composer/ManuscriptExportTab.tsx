@@ -7,9 +7,11 @@ import {
   type JournalRecord,
   type ManuscriptRecord,
 } from '@/local-db/research/components/composer/manuscriptComposerData';
+import { useManuscriptReviewRounds } from '@/local-db/research/components/composer/useManuscriptReviewRounds';
 import { type ManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
 import { type ManuscriptExportStyleOverrides } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { type PortableManuscriptSource } from '@/local-db/research/manuscript/manuscriptPortableManifest';
+import { submissionReviewResponseMarkdown } from '@/local-db/research/manuscript/manuscriptReviewResponse';
 import { type JournalStyle } from '@/local-db/research/manuscript/manuscriptTypes';
 import { type SubmissionCheckTarget } from '@/local-db/research/manuscript/manuscriptSubmission';
 
@@ -45,35 +47,46 @@ export const ManuscriptExportTab = ({
   onSelectJournal,
   onSaveStyleOverrides,
   onNavigateToFix,
-}: ManuscriptExportTabProps) => (
-  <StyledTab>
-    <ManuscriptExportPanel
-      key={`manuscript-export-${manuscript.id}`}
-      manuscriptId={manuscript.id}
-      bundle={bundle}
-      journals={journals.map((journal) => ({
-        id: journal.id,
-        name: journal.name ?? 'Journal',
-      }))}
-      selectedJournalId={selectedJournalId}
-      onSelectJournal={onSelectJournal}
-      initialStyleOverrides={styleOverrides}
-      onSaveStyleOverrides={onSaveStyleOverrides}
-      materials={{
-        coverLetter: manuscript.coverLetter,
-        highlights: manuscript.highlights,
-        competingInterests: manuscript.competingInterests,
-        suggestedReviewers: manuscript.suggestedReviewers,
-        submissionExtras: manuscript.submissionExtras,
-      }}
-      portableSource={portableSource}
-      onNavigateToFix={onNavigateToFix}
-    />
-    <ManuscriptBibliographyPreview
-      citationKeys={bundle.citedKeys}
-      styleId={style.citationStyleId ?? ''}
-      fallback={bundle.bibliography}
-      references={bundle.sourceInput.references}
-    />
-  </StyledTab>
-);
+}: ManuscriptExportTabProps) => {
+  const { rounds } = useManuscriptReviewRounds(manuscript.id);
+
+  return (
+    <StyledTab>
+      <ManuscriptExportPanel
+        key={`manuscript-export-${manuscript.id}`}
+        manuscriptId={manuscript.id}
+        bundle={bundle}
+        journals={journals.map((journal) => ({
+          id: journal.id,
+          name: journal.name ?? 'Journal',
+        }))}
+        selectedJournalId={selectedJournalId}
+        onSelectJournal={onSelectJournal}
+        initialStyleOverrides={styleOverrides}
+        onSaveStyleOverrides={onSaveStyleOverrides}
+        materials={{
+          coverLetter: manuscript.coverLetter,
+          highlights: manuscript.highlights,
+          competingInterests: manuscript.competingInterests,
+          suggestedReviewers: manuscript.suggestedReviewers,
+          submissionExtras: manuscript.submissionExtras,
+          // A resubmission's point-by-point response, so the package a journal
+          // receives carries the answers the author already wrote here.
+          responseToReviewers: submissionReviewResponseMarkdown(
+            rounds,
+            bundle.sourceInput.sections,
+            bundle.metadata.title,
+          ),
+        }}
+        portableSource={portableSource}
+        onNavigateToFix={onNavigateToFix}
+      />
+      <ManuscriptBibliographyPreview
+        citationKeys={bundle.citedKeys}
+        styleId={style.citationStyleId ?? ''}
+        fallback={bundle.bibliography}
+        references={bundle.sourceInput.references}
+      />
+    </StyledTab>
+  );
+};

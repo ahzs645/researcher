@@ -122,6 +122,7 @@ const MECA_TYPE_BY_FILENAME = (filename: string, base: string): string => {
   if (filename.startsWith('figures/')) return 'figure';
   if (filename.startsWith('portable-assets/')) return 'figure';
   if (filename === 'cover-letter.docx') return 'cover-letter';
+  if (filename === 'response-to-reviewers.docx') return 'response-to-reviewer';
   if (filename === 'metadata.json') return 'metadata';
   if (filename === 'references.json') return 'metadata';
   if (filename === 'research-paper.json') return 'metadata';
@@ -374,6 +375,15 @@ export const createSubmissionPackage = async (
     'suggested-reviewers.docx',
     'Suggested reviewers',
     materials.suggestedReviewers,
+  );
+  // A resubmission is expected to carry the point-by-point response, so it
+  // ships in the package next to the cover letter rather than as a file the
+  // author has to remember to attach in the portal.
+  await addDocx(
+    files,
+    'response-to-reviewers.docx',
+    'Response to reviewers',
+    materials.responseToReviewers,
   );
   addFigures(files, bundle);
   if (portableSource !== undefined) {

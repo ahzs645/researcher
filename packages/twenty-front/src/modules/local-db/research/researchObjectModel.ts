@@ -2646,4 +2646,61 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
     ],
     defaultColumns: ['obligation', 'documentKind', 'fileType', 'uploadedAt'],
   },
+  {
+    nameSingular: 'reviewRound',
+    namePlural: 'reviewRounds',
+    labelSingular: 'Review round',
+    labelPlural: 'Review rounds',
+    navSection: 'WORK',
+    icon: 'IconMessage',
+    description:
+      "A journal's decision on a submitted manuscript, with the reviewer points to answer",
+    navColor: 'purple',
+    nameFieldLabel: 'Round',
+    nameFieldIcon: 'IconMessage',
+    fields: [
+      {
+        name: 'journal',
+        label: 'Journal',
+        type: 'TEXT',
+        icon: 'IconBuildingBank',
+        description:
+          'The journal that sent this decision — a manuscript can be reviewed by more than one',
+      },
+      {
+        name: 'decision',
+        label: 'Decision',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'MAJOR_REVISION', label: 'Major revision', color: 'orange' },
+          { value: 'MINOR_REVISION', label: 'Minor revision', color: 'yellow' },
+          { value: 'REJECT', label: 'Reject', color: 'red' },
+          { value: 'ACCEPT', label: 'Accept', color: 'green' },
+        ],
+      },
+      {
+        name: 'decisionDate',
+        label: 'Decision date',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      {
+        name: 'letter',
+        label: 'Decision letter',
+        type: 'TEXT',
+        icon: TEXT_ICON,
+        description: 'The letter as received, kept so points can be re-parsed',
+      },
+      {
+        name: 'points',
+        label: 'Reviewer points',
+        type: 'TEXT',
+        icon: 'IconListNumbers',
+        description:
+          'Ordered JSON: each parsed reviewer point with the response and the section it changed',
+      },
+    ],
+    defaultColumns: ['manuscript', 'journal', 'decision', 'decisionDate'],
+  },
 ];

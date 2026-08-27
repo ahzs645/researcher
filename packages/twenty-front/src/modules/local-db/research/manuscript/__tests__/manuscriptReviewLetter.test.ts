@@ -294,4 +294,24 @@ describe('decisionLetterTextFromSections', () => {
       ].join('\n'),
     );
   });
+
+  it('leaves out the heading the importer invents for opening text', () => {
+    expect(
+      decisionLetterTextFromSections([
+        {
+          name: 'Title page',
+          content: 'Two referees have assessed your paper.',
+        },
+        { name: 'Reviewer 1', content: '1. Shorten the introduction.' },
+      ]),
+    ).toBe(
+      [
+        'Two referees have assessed your paper.',
+        '',
+        'Reviewer 1',
+        '',
+        '1. Shorten the introduction.',
+      ].join('\n'),
+    );
+  });
 });

@@ -11,6 +11,9 @@ export type SubmissionMaterials = {
   competingInterests?: string | null;
   suggestedReviewers?: string | null;
   submissionExtras?: string | null;
+  // The response-to-reviewers document as Markdown, built from the review
+  // round the author has been answering. Absent until a round has answers.
+  responseToReviewers?: string | null;
 };
 
 export type SubmissionCheckSeverity = 'ERROR' | 'WARNING' | 'READY';

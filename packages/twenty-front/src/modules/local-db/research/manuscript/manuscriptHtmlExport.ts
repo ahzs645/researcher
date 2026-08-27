@@ -11,12 +11,14 @@ import {
 } from './manuscriptCitations';
 import { formatManuscriptAuthorLine } from './manuscriptContributors';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { numberManuscriptFootnotes } from './manuscriptFootnotes';
 import { renderManuscriptDiagrams } from './manuscriptDiagram';
 import { type ManuscriptTableStyle } from './manuscriptDocxTable';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import {
   escapeHtml,
   escapeHtmlAttribute,
+  manuscriptFootnotesToHtml,
   manuscriptInlineToHtml,
   manuscriptMarkdownToHtml,
   sanitizeUrl,
@@ -440,9 +442,14 @@ const warningsHtml = (warnings: string[]): string =>
 export const exportManuscriptToHtml = async (
   bundle: ManuscriptBundle,
 ): Promise<string> => {
-  const prepared = await prepareManuscriptBundleWithCsl(bundle, {
-    citationAnchors: true,
-  });
+  // Number the notes before anything renders: the markers the body writes and
+  // the list at the end have to agree, and only the numbering walk knows the
+  // printed order.
+  const { bundle: prepared, footnotes } = numberManuscriptFootnotes(
+    await prepareManuscriptBundleWithCsl(bundle, {
+      citationAnchors: true,
+    }),
+  );
   const tableStyle = resolveManuscriptTableStyle(prepared.style.tableStyle);
   const diagrams = await renderManuscriptDiagrams(prepared);
   const state: HtmlRenderState = {
@@ -489,6 +496,7 @@ export const exportManuscriptToHtml = async (
     outlineHtml(state.outline),
     bodyHtml,
     bibliographyHtml,
+    manuscriptFootnotesToHtml(footnotes, context),
     warningsHtml(prepared.warnings),
     '</main>',
     '</body>',

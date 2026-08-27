@@ -15,6 +15,7 @@
 
 import { isNonEmptyString } from '@sniptt/guards';
 
+import { wrapManuscriptFootnote } from './manuscriptFootnotes';
 import {
   type PortableManuscriptSource,
   type PortableManuscriptMetadata,
@@ -99,6 +100,11 @@ const inlineToMarkdown = (node: Node): string => {
       return `^${inner}^`;
     case 'inline-formula':
       return `$${text(element.querySelector('tex-math')) || inner}$`;
+    // A footnote written where it belongs rather than gathered into a
+    // <fn-group>. Its <label> is the publisher's printed number, which this
+    // app works out for itself, so only the note's prose travels.
+    case 'fn':
+      return wrapManuscriptFootnote(footnoteMarkdown(element));
     case 'xref': {
       const target = element.getAttribute('rid') ?? '';
       // A bibliographic xref names a reference; every other kind names an
@@ -121,6 +127,52 @@ const paragraphMarkdown = (element: Element): string =>
     .join('')
     .replace(/\s+/g, ' ')
     .trim();
+
+const isLabelElement = (node: Node): boolean =>
+  node.nodeType === 1 && (node as Element).tagName.toLowerCase() === 'label';
+
+const footnoteMarkdown = (note: Element): string =>
+  [...note.childNodes]
+    .filter((node) => !isLabelElement(node))
+    .map(inlineToMarkdown)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+// JATS puts a footnote's text in an <fn>, usually collected into a <fn-group>
+// in the back matter, and marks the place it belongs to with an
+// <xref ref-type="fn">. The composer has nowhere to keep a note that is not in
+// the sentence it belongs to, so each anchor is resolved into the inline token
+// before anything harvests a section — otherwise the notes would be left
+// sitting in the back matter as text nobody reads back.
+const inlineJatsFootnotes = (article: Element): void => {
+  const noteById = new Map<string, string>();
+  for (const note of article.querySelectorAll('fn')) {
+    const id = note.getAttribute('id');
+    // An <author-notes> <fn> is a note *about a person* — "deceased", "these
+    // authors contributed equally" — and the front matter already reads that
+    // block. Pulling one into the prose would put it in a sentence it has
+    // nothing to do with.
+    if (id === null || note.closest('author-notes') !== null) continue;
+    const markdown = footnoteMarkdown(note);
+    if (markdown.length > 0) noteById.set(id, markdown);
+  }
+  for (const anchor of article.querySelectorAll('xref[ref-type="fn"]')) {
+    const markdown = noteById.get(anchor.getAttribute('rid') ?? '');
+    // An anchor whose note is missing stays an <xref>, and the generic handler
+    // reads it as a cross-reference — the same guess it made before.
+    if (markdown === undefined) continue;
+    anchor.replaceWith(
+      article.ownerDocument.createTextNode(wrapManuscriptFootnote(markdown)),
+    );
+  }
+  // The group has served its purpose; leaving it would let a hand-authored
+  // article that puts its <fn-group> inside a <sec> import the notes a second
+  // time as body prose.
+  for (const group of article.querySelectorAll('fn-group')) {
+    if (group.closest('author-notes') === null) group.remove();
+  }
+};
 
 // ── Assets ──────────────────────────────────────────────────────────────────
 
@@ -557,6 +609,7 @@ export const parseJatsArticle = (
   if (article === null) {
     throw new Error('No <article> element in this file: it is not JATS');
   }
+  inlineJatsFootnotes(article);
 
   const front = article.querySelector('front');
   const body = article.querySelector('body');

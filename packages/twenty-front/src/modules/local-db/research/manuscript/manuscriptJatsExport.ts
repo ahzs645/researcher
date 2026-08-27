@@ -27,6 +27,11 @@ import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import {
+  numberManuscriptFootnotes,
+  splitManuscriptFootnotes,
+  type ManuscriptFootnote,
+} from './manuscriptFootnotes';
+import {
   parseManuscriptTableGrid,
   type ManuscriptTableCell,
 } from './manuscriptTableGrid';
@@ -46,7 +51,7 @@ const escapeXml = (value: string): string =>
 
 // Inline Markdown → JATS inline elements. Citations/cross-refs are already
 // rendered to their final labels by the bundle, so they stay plain text.
-const inlineToJats = (markdown: string): string => {
+const inlineMarkupToJats = (markdown: string): string => {
   let out = escapeXml(markdown);
   out = out.replace(/\*\*([^*]+)\*\*/g, '<bold>$1</bold>');
   out = out.replace(/\*([^*]+)\*/g, '<italic>$1</italic>');
@@ -61,6 +66,26 @@ const inlineToJats = (markdown: string): string => {
   );
   return out;
 };
+
+// A footnote is the one inline construct that is not spelled out where it
+// stands: the anchor is an <xref> and the note itself goes to a <fn-group> in
+// the back matter, which is what a publisher's ingest expects to find. A note
+// that never went through the numbering step has no id to point at, so it is
+// written inline as a bare <fn> — legal inside a <p>, and the alternative
+// would be to drop it.
+const footnoteToJats = (number: number | undefined, text: string): string =>
+  number === undefined
+    ? `<fn><p>${inlineMarkupToJats(text)}</p></fn>`
+    : `<xref ref-type="fn" rid="fn${number}">${number}</xref>`;
+
+const inlineToJats = (markdown: string): string =>
+  splitManuscriptFootnotes(markdown)
+    .map((segment) =>
+      segment.kind === 'text'
+        ? inlineMarkupToJats(segment.value)
+        : footnoteToJats(segment.number, segment.text),
+    )
+    .join('');
 
 const proseToJats = (markdown: string): string =>
   markdown
@@ -227,6 +252,25 @@ const cslItemToRefJats = (item: Record<string, unknown>): string => {
   return lines.join('\n');
 };
 
+// The back matter's notes, one <fn> per anchor, carrying the printed number as
+// its <label> so a reader that does not renumber still shows what the body's
+// <xref> says.
+const footnoteGroupToJats = (
+  footnotes: readonly ManuscriptFootnote[],
+): string[] =>
+  footnotes.length === 0
+    ? []
+    : [
+        '   <fn-group>',
+        ...footnotes.flatMap((footnote) => [
+          `    <fn id="fn${footnote.number}">`,
+          `     <label>${footnote.number}</label>`,
+          `     <p>${inlineToJats(footnote.text)}</p>`,
+          '    </fn>',
+        ]),
+        '   </fn-group>',
+      ];
+
 const SUPPLEMENT_HEADING = 'Supplementary Material';
 
 type JatsPart = { body: string[]; back: string[]; supplement: string[] };
@@ -260,13 +304,12 @@ const nodesToJats = (bundle: ManuscriptBundle): JatsPart => {
     if (node.kind === 'bibliography') {
       closeTo(0);
       inBack = true;
-      part.back.push(
-        '  <back>',
-        '   <ref-list>',
-        '    <title>References</title>',
-      );
+      // The <back> wrapper is added by the caller: the reference list is no
+      // longer the only thing that lives in it, and a paper with footnotes but
+      // no references still needs one.
+      part.back.push('   <ref-list>', '    <title>References</title>');
       part.back.push(...bundle.cslJson.map(cslItemToRefJats));
-      part.back.push('   </ref-list>', '  </back>');
+      part.back.push('   </ref-list>');
       return;
     }
     if (inBack && !inSupplement) return;
@@ -522,10 +565,13 @@ export const buildJatsArticle = (
     bundle.sourceInput.manuscript,
   ),
 ): string => {
-  const { metadata } = bundle;
-  const part = nodesToJats(bundle);
-  const contributors = contributorFrontMatter(bundle, contributorMetadata);
-  const doi = bundle.sourceInput.manuscript.doi;
+  // Numbered first, so every <xref ref-type="fn"> below points at an <fn> that
+  // is actually written, and the numbers run in the order the article reads.
+  const { bundle: numbered, footnotes } = numberManuscriptFootnotes(bundle);
+  const { metadata } = numbered;
+  const part = nodesToJats(numbered);
+  const contributors = contributorFrontMatter(numbered, contributorMetadata);
+  const doi = numbered.sourceInput.manuscript.doi;
 
   const front = [
     '  <front>',
@@ -585,6 +631,10 @@ export const buildJatsArticle = (
         ]
       : [];
 
+  const backContent = [...part.back, ...footnoteGroupToJats(footnotes)];
+  const back =
+    backContent.length > 0 ? ['  <back>', ...backContent, '  </back>'] : [];
+
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Archiving and Interchange DTD v1.3 20210610//EN" "JATS-archivearticle1-3.dtd">',
@@ -593,7 +643,7 @@ export const buildJatsArticle = (
     '  <body>',
     ...part.body,
     '  </body>',
-    ...part.back,
+    ...back,
     ...supplement,
     '</article>',
     '',

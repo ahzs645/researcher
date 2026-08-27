@@ -143,6 +143,7 @@ const testInlineWriter: ManuscriptSourceInlineWriter = {
   escape: (value) => value.replace(/[<>]/g, '!'),
   citation: (keys, label) => `CITE(${keys.join('+')}|${label})`,
   crossReference: (refKey, label) => `REF(${refKey}|${label})`,
+  footnote: (text, number) => `NOTE(${number ?? '-'}|${text})`,
   displayMath: (math) => `DISPLAY(${math})`,
   inlineMath: (math) => `INLINE(${math})`,
   code: (code) => `CODE(${code})`,

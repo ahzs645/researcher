@@ -3,6 +3,10 @@ import {
   citationAnchorKeys,
 } from './manuscriptCitations';
 import { CROSS_REF_ANCHOR_PATTERN } from './manuscriptCrossReference';
+import {
+  splitManuscriptFootnotes,
+  type ManuscriptFootnote,
+} from './manuscriptFootnotes';
 import { manuscriptScriptSegments } from './manuscriptScripts';
 import { parseManuscriptTableGrid } from './manuscriptTableGrid';
 
@@ -77,6 +81,52 @@ export const sanitizeUrl = (url: string): string => {
     : '#';
 };
 
+// ── Footnotes ───────────────────────────────────────────────────────────────
+// A single HTML file has no page to set a note at the foot of, so the honest
+// answer is the one every web edition of a journal gives: a superscript marker
+// where the note is anchored, linked to a numbered list at the end of the
+// document, with a link back. `manuscriptFootnotesToHtml` writes that list.
+//
+// A note that reaches here without a number never went through the export's
+// numbering walk. There is nothing to link it to, so its text is printed where
+// it stands rather than dropped — visible, and impossible to mistake for the
+// finished rendering.
+export const footnoteAnchorId = (number: number): string =>
+  `footnote-${number}`;
+
+const footnoteReferenceId = (number: number): string =>
+  `footnote-ref-${number}`;
+
+const footnoteMarkerHtml = (
+  number: number | undefined,
+  text: string,
+): string =>
+  number === undefined
+    ? `<span class="footnote-inline">(${escapeHtml(text)})</span>`
+    : `<sup class="footnote-ref" id="${footnoteReferenceId(number)}">` +
+      `<a href="#${footnoteAnchorId(number)}">${number}</a></sup>`;
+
+export const manuscriptFootnotesToHtml = (
+  footnotes: readonly ManuscriptFootnote[],
+  context: ManuscriptHtmlRenderContext,
+): string =>
+  footnotes.length === 0
+    ? ''
+    : [
+        '<section class="footnotes">',
+        '<h2>Notes</h2>',
+        '<ol>',
+        ...footnotes.map(
+          (footnote) =>
+            `<li id="${footnoteAnchorId(footnote.number)}">` +
+            `${manuscriptInlineToHtml(footnote.text, context)} ` +
+            `<a class="footnote-backref" href="#${footnoteReferenceId(footnote.number)}" ` +
+            'title="Back to text">↩</a></li>',
+        ),
+        '</ol>',
+        '</section>',
+      ].join('');
+
 const scriptMarkersToHtml = (value: string): string =>
   manuscriptScriptSegments(value)
     .map((segment) =>
@@ -96,7 +146,16 @@ export const manuscriptInlineToHtml = (
   const protect = (html: string): string =>
     `${PLACEHOLDER}${protectedHtml.push(html) - 1}${PLACEHOLDER}`;
 
-  let working = text
+  // Footnotes come out before anything else has looked at the string: a note
+  // carries Markdown of its own, so its marker is rendered here and its text
+  // goes to the notes list to be rendered by a second pass over this function.
+  let working = splitManuscriptFootnotes(text)
+    .map((segment) =>
+      segment.kind === 'text'
+        ? segment.value
+        : protect(footnoteMarkerHtml(segment.number, segment.text)),
+    )
+    .join('')
     // Citations first: their label may itself contain brackets and parentheses
     // that the link and emphasis rules would otherwise claim.
     .replace(CITATION_ANCHOR_PATTERN, (_match, keys: string, label: string) =>

@@ -87,6 +87,7 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8"?><w:styles ${DOCUMENT_N
 const wordPackageBytes = (
   bodyDocumentXml: string,
   commentsXml?: string,
+  footnotesXml?: string,
 ): Uint8Array =>
   zipSync({
     'word/document.xml': strToU8(bodyDocumentXml),
@@ -94,7 +95,19 @@ const wordPackageBytes = (
     ...(commentsXml === undefined
       ? {}
       : { 'word/comments.xml': strToU8(commentsXml) }),
+    ...(footnotesXml === undefined
+      ? {}
+      : { 'word/footnotes.xml': strToU8(footnotesXml) }),
   });
+
+// A footnote's text is in `word/footnotes.xml` and nowhere else; the body run
+// that anchors it carries no text at all. Word's own separator entries live in
+// the same part and are not the author's notes.
+const FOOTNOTES_XML = `<?xml version="1.0" encoding="UTF-8"?><w:footnotes ${DOCUMENT_NAMESPACE}><w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:id="2"><w:p><w:r><w:t>Aligned against UTC.</w:t></w:r></w:p></w:footnote></w:footnotes>`;
+
+const NOTED_PARAGRAPH = `<w:p><w:r><w:t xml:space="preserve">The window is loosely aligned</w:t></w:r><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="2"/></w:r><w:r><w:t>.</w:t></w:r></w:p>`;
+
+const NOTED_DOCUMENT_XML = documentXml(NOTED_PARAGRAPH);
 
 const wordFile = (bytes: Uint8Array, name = 'reviewed.docx'): File =>
   new File([new Uint8Array(bytes).buffer], name);
@@ -184,6 +197,37 @@ describe('readImportedDocumentFile', () => {
     expect(document.sections[0].content).toContain(
       'The window is loosely aligned.',
     );
+  });
+});
+
+describe('footnotes in a .docx package', () => {
+  it('reads word/footnotes.xml and puts each note where its anchor sat', async () => {
+    const { readImportedDocumentFile } = await loadDocxFileReader();
+
+    const document = await readImportedDocumentFile(
+      wordFile(
+        wordPackageBytes(NOTED_DOCUMENT_XML, undefined, FOOTNOTES_XML),
+        'noted.docx',
+      ),
+    );
+
+    expect(document.sections[0].content).toContain(
+      'The window is loosely aligned^[Aligned against UTC.].',
+    );
+    expect(document.sections[0].content).not.toContain('separator');
+  });
+
+  it('reads a package with no footnotes part exactly as it did before', async () => {
+    const { readImportedDocumentFile } = await loadDocxFileReader();
+
+    const document = await readImportedDocumentFile(
+      wordFile(wordPackageBytes(CLEAN_DOCUMENT_XML), 'clean.docx'),
+    );
+
+    expect(document.sections[0].content).toContain(
+      'The window is loosely aligned.',
+    );
+    expect(document.sections[0].content).not.toContain('^[');
   });
 });
 

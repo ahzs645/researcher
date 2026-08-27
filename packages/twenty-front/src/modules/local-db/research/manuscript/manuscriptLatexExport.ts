@@ -130,26 +130,38 @@ const inlineImageToLatex = (
 
 // How LaTeX spells every inline construct. Maths is handed over verbatim —
 // the source is already TeX.
+//
+// The writer names itself so a footnote's own Markdown can be rendered by the
+// same rules as the sentence it hangs off: a note may cite, may carry maths,
+// may be emphasised, and none of that would survive being escaped as text.
 const latexInlineWriter = (
   figuresByKey: Map<string, NumberedFigure>,
   addImage: (dataUrl: string, hint: string) => string | null,
-): ManuscriptSourceInlineWriter => ({
-  escape: escapeLatex,
-  citation: citationToLatex,
-  crossReference: (refKey, label) =>
-    crossReferenceToLatex(refKey, label, figuresByKey),
-  displayMath: (math) => `\\[${math}\\]`,
-  inlineMath: (math) => `$${math}$`,
-  code: (code) => `\\texttt{${escapeLatex(code)}}`,
-  image: (source, alt) => inlineImageToLatex(source, alt, addImage),
-  link: (href) => ({ open: `\\href{${escapeLatexUrl(href)}}{`, close: '}' }),
-  lineBreak: '\\\\',
-  superscript: { open: '\\textsuperscript{', close: '}' },
-  subscript: { open: '\\textsubscript{', close: '}' },
-  bold: { open: '\\textbf{', close: '}' },
-  emphasis: { open: '\\emph{', close: '}' },
-  strikethrough: { open: '\\sout{', close: '}' },
-});
+): ManuscriptSourceInlineWriter => {
+  const writer: ManuscriptSourceInlineWriter = {
+    escape: escapeLatex,
+    citation: citationToLatex,
+    crossReference: (refKey, label) =>
+      crossReferenceToLatex(refKey, label, figuresByKey),
+    // LaTeX runs the footnote counter itself, so the number the export walk
+    // worked out is deliberately not written in: after the author edits the
+    // source, renumbering is the target's job.
+    footnote: (text) =>
+      `\\footnote{${renderManuscriptSourceInline(text, writer)}}`,
+    displayMath: (math) => `\\[${math}\\]`,
+    inlineMath: (math) => `$${math}$`,
+    code: (code) => `\\texttt{${escapeLatex(code)}}`,
+    image: (source, alt) => inlineImageToLatex(source, alt, addImage),
+    link: (href) => ({ open: `\\href{${escapeLatexUrl(href)}}{`, close: '}' }),
+    lineBreak: '\\\\',
+    superscript: { open: '\\textsuperscript{', close: '}' },
+    subscript: { open: '\\textsubscript{', close: '}' },
+    bold: { open: '\\textbf{', close: '}' },
+    emphasis: { open: '\\emph{', close: '}' },
+    strikethrough: { open: '\\sout{', close: '}' },
+  };
+  return writer;
+};
 
 const inlineToLatex = (value: string, context: LatexContext): string =>
   renderManuscriptSourceInline(value, context.inline);

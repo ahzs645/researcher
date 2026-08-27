@@ -221,14 +221,20 @@ const readImportedWordSource = async (
   trackedChanges: TrackedChangeResolution = 'ACCEPT',
 ): Promise<ImportedWordSource> => {
   const documentXml = await extractDocxDocumentXml(buffer);
-  const [stylesXml, relationshipsXml, commentsXml] = await Promise.all([
-    readOptionalXmlEntry(buffer, 'word/styles.xml'),
-    readOptionalXmlEntry(buffer, 'word/_rels/document.xml.rels'),
-    // A reviewer's comments live in their own package entry: the body carries
-    // only the anchors. Reading it here — rather than only in the wizard's own
-    // reader — is what stops this path counting comments it cannot quote.
-    readOptionalXmlEntry(buffer, 'word/comments.xml'),
-  ]);
+  const [stylesXml, relationshipsXml, commentsXml, footnotesXml, endnotesXml] =
+    await Promise.all([
+      readOptionalXmlEntry(buffer, 'word/styles.xml'),
+      readOptionalXmlEntry(buffer, 'word/_rels/document.xml.rels'),
+      // A reviewer's comments live in their own package entry: the body carries
+      // only the anchors. Reading it here — rather than only in the wizard's own
+      // reader — is what stops this path counting comments it cannot quote.
+      readOptionalXmlEntry(buffer, 'word/comments.xml'),
+      // Same story, and the one that was costing the most: a footnote's text is
+      // only ever in these two parts. The body has the anchor and nothing else,
+      // so a reader that never opened them dropped every note in the paper.
+      readOptionalXmlEntry(buffer, 'word/footnotes.xml'),
+      readOptionalXmlEntry(buffer, 'word/endnotes.xml'),
+    ]);
   const imageByRelationshipId = await loadDocxImages(
     buffer,
     documentXml,
@@ -242,6 +248,8 @@ const readImportedWordSource = async (
       imageByRelationshipId,
       trackedChanges,
       ...(commentsXml.length > 0 ? { commentsXml } : {}),
+      ...(footnotesXml.length > 0 ? { footnotesXml } : {}),
+      ...(endnotesXml.length > 0 ? { endnotesXml } : {}),
     },
     hasTiff: Object.values(imageByRelationshipId).some((image) =>
       image.dataUrl.startsWith('data:image/tiff'),

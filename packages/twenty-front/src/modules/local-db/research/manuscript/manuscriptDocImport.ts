@@ -8,6 +8,7 @@
 
 import { countWords } from './manuscriptAssembly';
 import { assetPlacementMarker } from './manuscriptAssetPlacement';
+import { wrapManuscriptFootnote } from './manuscriptFootnotes';
 import { COMMAND_TEXT } from './manuscriptMathGlyphs';
 import { unicodeMathToLatex } from './manuscriptMathUnicode';
 import {
@@ -951,6 +952,76 @@ export const importedCommentsNote = (comments: ImportedComment[]): string =>
     })
     .join('\n');
 
+// ── Footnotes and endnotes ─────────────────────────────────────────────────
+// A note's text is not in the body at all. `word/document.xml` carries only
+// `<w:footnoteReference w:id="3"/>` — a run with no `<w:t>` in it, so the run
+// reader quite correctly contributed nothing — while the prose lives in
+// `word/footnotes.xml` under a `<w:footnote w:id="3">` with the same id.
+// Reading the body alone is how every footnote of every imported paper was
+// dropped without a word being said about it.
+//
+// Word keeps its own furniture in those same parts: the rule drawn above the
+// notes and its continued-on-the-next-page twin are `<w:footnote>` elements
+// carrying a `w:type` (ids -1 and 0). They are not the author's notes and must
+// never arrive as content.
+
+const NOTE_ELEMENT =
+  /<w:(footnote|endnote)\b((?:[^>"]|"[^"]*")*?)>([\s\S]*?)<\/w:\1>/g;
+
+// The body's anchor. Word writes it self-closing; the paired spelling is legal
+// and leaves only its closing tag behind, which carries no text either way.
+const NOTE_REFERENCE_TAG =
+  /<w:(footnote|endnote)Reference\b((?:[^>"]|"[^"]*")*?)\/?>/g;
+
+const XML_TEXT_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+};
+
+const encodeXmlText = (value: string): string =>
+  value.replace(/[&<>]/g, (character) => XML_TEXT_ESCAPES[character]);
+
+// Note id → the note's text, for one of the two parts. A note with nothing in
+// it is left out: an empty `^[]` in the prose would be a marker pointing at
+// nothing, which is worse than the note the author never wrote.
+export const parseWordNotes = (notesXml: string): Record<string, string> => {
+  const notes: Record<string, string> = {};
+  for (const match of notesXml.matchAll(NOTE_ELEMENT)) {
+    const noteId = attributeValue(match[2], 'w:id');
+    if (noteId === undefined) continue;
+    if (attributeValue(match[2], 'w:type') !== undefined) continue;
+    const text = collapseWhitespace(wordRunsText(match[3]));
+    if (text.length === 0) continue;
+    notes[noteId] = text;
+  }
+  return notes;
+};
+
+// Put each note's text where its anchor sits, as a `<w:t>` run, so every pass
+// that follows — headings, tables, the block splitter — reads it in document
+// order with no idea that footnotes exist. An anchor whose note is missing
+// (a stripped package, a part the caller did not read) is left exactly as it
+// was, which is the behaviour every import had before this.
+export const inlineWordNoteReferences = (
+  bodyXml: string,
+  notesById: Record<string, string>,
+  endnotesById: Record<string, string> = {},
+): string =>
+  bodyXml.replace(
+    NOTE_REFERENCE_TAG,
+    (tag, kind: string, attributes: string) => {
+      const noteId = attributeValue(attributes, 'w:id');
+      const text =
+        noteId === undefined
+          ? undefined
+          : (kind === 'endnote' ? endnotesById : notesById)[noteId];
+      return text === undefined
+        ? tag
+        : `<w:t>${encodeXmlText(wrapManuscriptFootnote(text))}</w:t>`;
+    },
+  );
+
 export type WordStyleDefinition = {
   name: string;
   headingLevel: number;
@@ -964,6 +1035,10 @@ export type WordImportOptions = {
   trackedChanges?: TrackedChangeResolution;
   // `word/comments.xml` from the same .docx package, when the caller read it.
   commentsXml?: string;
+  // `word/footnotes.xml` and `word/endnotes.xml` from that same package. The
+  // body holds only the anchors, so without these the notes cannot arrive.
+  footnotesXml?: string;
+  endnotesXml?: string;
 };
 
 export type WordMarkdownBlock = {
@@ -1960,9 +2035,22 @@ export const parseWordMlToMarkdownBlocks = (
   // Resolve revisions before anything reads a run: every downstream pass —
   // headings, tables, math, images — then sees one settled document rather than
   // a mix of both versions.
-  const body = resolveWordTrackedChanges(
+  const resolution = options.trackedChanges ?? 'ACCEPT';
+  const resolvedBody = resolveWordTrackedChanges(
     /<w:body\b[\s\S]*?<\/w:body>/.exec(documentXml)?.[0] ?? documentXml,
-    options.trackedChanges ?? 'ACCEPT',
+    resolution,
+  );
+  // Notes are resolved the same way the body was: a reviewer who edited a
+  // footnote with track changes on gets the version the author chose, not both
+  // halves of it run together.
+  const body = inlineWordNoteReferences(
+    resolvedBody,
+    parseWordNotes(
+      resolveWordTrackedChanges(options.footnotesXml ?? '', resolution),
+    ),
+    parseWordNotes(
+      resolveWordTrackedChanges(options.endnotesXml ?? '', resolution),
+    ),
   );
   const tokens = tokenizeWordBody(body);
   const out: WordMarkdownBlock[] = [];

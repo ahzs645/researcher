@@ -230,28 +230,39 @@ const inlineImageToTypst = (
 
 // How Typst spells every inline construct. Maths goes through the translator:
 // the bundle stores it as LaTeX and Typst is not TeX.
+// The writer names itself so a footnote's own Markdown goes through the same
+// rules as the sentence it hangs off — a note may cite, may carry maths, may
+// be emphasised, and escaping it as flat text would lose all three.
 const typstInlineWriter = (
   figuresByKey: Map<string, NumberedFigure>,
   addImage: (dataUrl: string, hint: string) => string | null,
-): ManuscriptSourceInlineWriter => ({
-  escape: escapeTypst,
-  citation: citationToTypst,
-  crossReference: (refKey) => crossReferenceToTypst(refKey, figuresByKey),
-  displayMath: (math) => `$ ${latexToTypstMath(math)} $`,
-  inlineMath: (math) => `$${latexToTypstMath(math)}$`,
-  code: (code) => `\`${code.replace(/`/g, '')}\``,
-  image: (source, alt) => inlineImageToTypst(source, alt, addImage),
-  link: (href) => ({
-    open: `#link(${typstString(sanitizeUrl(href))})[`,
-    close: ']',
-  }),
-  lineBreak: '#linebreak()',
-  superscript: { open: '#super[', close: ']' },
-  subscript: { open: '#sub[', close: ']' },
-  bold: { open: '*', close: '*' },
-  emphasis: { open: '_', close: '_' },
-  strikethrough: { open: '#strike[', close: ']' },
-});
+): ManuscriptSourceInlineWriter => {
+  const writer: ManuscriptSourceInlineWriter = {
+    escape: escapeTypst,
+    citation: citationToTypst,
+    crossReference: (refKey) => crossReferenceToTypst(refKey, figuresByKey),
+    // Typst counts its own footnotes, so the number the export walk worked out
+    // is left out on purpose: the author edits the source and the numbers have
+    // to follow, the same reason `@label` is written instead of "Figure 3".
+    footnote: (text) =>
+      `#footnote[${renderManuscriptSourceInline(text, writer)}]`,
+    displayMath: (math) => `$ ${latexToTypstMath(math)} $`,
+    inlineMath: (math) => `$${latexToTypstMath(math)}$`,
+    code: (code) => `\`${code.replace(/`/g, '')}\``,
+    image: (source, alt) => inlineImageToTypst(source, alt, addImage),
+    link: (href) => ({
+      open: `#link(${typstString(sanitizeUrl(href))})[`,
+      close: ']',
+    }),
+    lineBreak: '#linebreak()',
+    superscript: { open: '#super[', close: ']' },
+    subscript: { open: '#sub[', close: ']' },
+    bold: { open: '*', close: '*' },
+    emphasis: { open: '_', close: '_' },
+    strikethrough: { open: '#strike[', close: ']' },
+  };
+  return writer;
+};
 
 const inlineToTypst = (value: string, context: TypstContext): string =>
   renderManuscriptSourceInline(value, context.inline);

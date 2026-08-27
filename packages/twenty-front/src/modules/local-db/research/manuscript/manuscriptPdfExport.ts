@@ -24,6 +24,11 @@ import { isImageDataUrl } from './manuscriptImages';
 import { latexToScriptedText } from './manuscriptMathText';
 import { stripAssetNumberAnchors } from './manuscriptAssetAnchors';
 import { stripCrossReferenceAnchors } from './manuscriptCrossReference';
+import {
+  manuscriptFootnoteMarkersToScripts,
+  manuscriptFootnoteNotesNodes,
+  numberManuscriptFootnotes,
+} from './manuscriptFootnotes';
 import { hasInlineMath, linearizeInlineMath } from './manuscriptInlineMath';
 import {
   A4_HEIGHT_POINTS,
@@ -46,11 +51,26 @@ import {
 export const exportManuscriptToPdfBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
-  bundle = await fitManuscriptFigureImages(
+  const drawnBundle = await fitManuscriptFigureImages(
     await prepareManuscriptDiagramImages(
       await prepareManuscriptBundleWithCsl(bundle),
     ),
   );
+  // react-pdf lays out a flow of text and has no notion of a page's foot, so
+  // there is nowhere to set a real footnote: anything drawn there would have to
+  // be positioned by guessing where the page was going to break. The honest
+  // answer is the one a printed book falls back on when its notes will not fit
+  // the page — a superscript marker in the sentence and a numbered "Notes"
+  // list at the end of the document.
+  const { bundle: numberedBundle, footnotes } =
+    numberManuscriptFootnotes(drawnBundle);
+  bundle = {
+    ...numberedBundle,
+    nodes: [
+      ...numberedBundle.nodes,
+      ...manuscriptFootnoteNotesNodes(footnotes),
+    ],
+  };
   const { editor, blocks } = buildBlockNoteDocument(bundle);
   // Times-Roman is one of PDF's built-in fonts, and built-in means WinAnsi:
   // no ≤, no ≥, no ∑, none of the Unicode sub- and superscripts the equation
@@ -273,8 +293,13 @@ export const exportManuscriptToPdfBlob = async (
     // than printed with its delimiters.
     // The numbering anchors are the DOCX export's, marking which asset each
     // printed number belongs to. react-pdf draws text: it prints the number.
+    // A footnote anchor becomes the superscript number the notes list at the
+    // end of the document is keyed by; the script machinery below then raises
+    // it the way it raises an imported "PM2.5".
     const plain = stripAssetNumberAnchors(
-      stripCrossReferenceAnchors(styledText.text),
+      stripCrossReferenceAnchors(
+        manuscriptFootnoteMarkersToScripts(styledText.text),
+      ),
     );
     const text = hasInlineMath(plain) ? linearizeInlineMath(plain) : plain;
     if (!hasManuscriptScripts(text)) {

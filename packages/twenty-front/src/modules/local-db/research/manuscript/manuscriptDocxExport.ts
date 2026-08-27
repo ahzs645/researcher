@@ -8,6 +8,7 @@ import {
   Bookmark,
   ExternalHyperlink,
   Footer,
+  FootnoteReferenceRun,
   HeadingLevel,
   LineNumberRestartFormat,
   LineRuleType,
@@ -43,6 +44,13 @@ import {
   hasCrossReferenceAnchors,
   splitCrossReferenceAnchors,
 } from './manuscriptCrossReference';
+import {
+  hasManuscriptFootnotes,
+  numberManuscriptFootnotes,
+  splitManuscriptFootnotes,
+  stripManuscriptFootnotes,
+  type ManuscriptFootnote,
+} from './manuscriptFootnotes';
 import { hasInlineMath, splitInlineMath } from './manuscriptInlineMath';
 import {
   createManuscriptTableMapping,
@@ -160,7 +168,29 @@ const scriptRuns = (text: string, options: ManuscriptRunOptions): TextRun[] =>
       }),
   );
 
-type ManuscriptParagraphChild = TextRun | DocxMath | Bookmark | SimpleField;
+type ManuscriptParagraphChild =
+  | TextRun
+  | DocxMath
+  | Bookmark
+  | SimpleField
+  | FootnoteReferenceRun;
+
+// A footnote is a real Word footnote: the run in the body is only the
+// reference mark, and the note itself is written into `word/footnotes.xml`
+// under the same id by `documentOptions.footnotes`. Word then draws it at the
+// foot of whatever page the mark lands on and renumbers it when the text
+// moves — which is the whole point of handing the author back their own
+// document rather than an approximation of it.
+const footnoteRuns = (
+  number: number | undefined,
+  text: string,
+  options: ManuscriptRunOptions,
+): ManuscriptParagraphChild[] =>
+  number === undefined
+    ? // Never numbered, so there is no note part to point at. Print it in the
+      // sentence instead of losing it.
+      scriptRuns(` (${text})`, options)
+    : [new FootnoteReferenceRun(number)];
 
 // Prose runs, with `$C_j$` becoming a real Word equation rather than three
 // literal characters and a baseline letter. Word sets an inline OMath run on
@@ -170,10 +200,14 @@ const mathAndScriptRuns = (
   text: string,
   options: ManuscriptRunOptions,
 ): ManuscriptParagraphChild[] =>
-  splitInlineMath(text).flatMap((segment) =>
-    segment.kind === 'math'
-      ? [new DocxMath({ children: latexToMathComponents(segment.latex) })]
-      : scriptRuns(segment.value, options),
+  splitManuscriptFootnotes(text).flatMap((footnoteSegment) =>
+    footnoteSegment.kind === 'footnote'
+      ? footnoteRuns(footnoteSegment.number, footnoteSegment.text, options)
+      : splitInlineMath(footnoteSegment.value).flatMap((segment) =>
+          segment.kind === 'math'
+            ? [new DocxMath({ children: latexToMathComponents(segment.latex) })]
+            : scriptRuns(segment.value, options),
+        ),
   );
 
 // Where an asset's number is printed: a Word SEQ field inside a bookmark. The
@@ -265,6 +299,7 @@ const needsManuscriptRuns = (text: string): boolean =>
   hasManuscriptScripts(text) ||
   hasInlineMath(text) ||
   hasCrossReferenceAnchors(text) ||
+  hasManuscriptFootnotes(text) ||
   stripAssetNumberAnchors(text) !== text;
 
 const manuscriptInlineRuns = (
@@ -341,7 +376,9 @@ const createManuscriptDocxMappings = ({
       // the plain text — the markers are only for the caption paragraph below.
       const plainCaption =
         typeof caption === 'string'
-          ? stripAssetNumberAnchors(stripManuscriptScriptMarkers(caption))
+          ? stripManuscriptFootnotes(
+              stripAssetNumberAnchors(stripManuscriptScriptMarkers(caption)),
+            )
           : caption;
       const mappedImage = await docxDefaultSchemaMappings.blockMapping.image(
         typeof caption === 'string' && caption !== plainCaption
@@ -574,6 +611,35 @@ const createManuscriptDocxMappings = ({
   },
 });
 
+// `word/footnotes.xml`, keyed by the number the export walk gave each note —
+// which is the id Word's reference marks point at. docx writes the separator
+// notes (ids -1 and 0) itself and adds the reference mark to the front of the
+// first paragraph, so a note is exactly its own prose.
+//
+// Notes are set two points smaller than the body, the convention every journal
+// template follows.
+const docxFootnoteParts = (
+  footnotes: readonly ManuscriptFootnote[],
+  fontFamily: string,
+  bodyFontSize: number,
+): Record<string, { children: Paragraph[] }> =>
+  Object.fromEntries(
+    footnotes.map((footnote) => [
+      String(footnote.number),
+      {
+        children: [
+          new Paragraph({
+            style: 'FootnoteText',
+            children: mathAndScriptRuns(` ${footnote.text}`, {
+              font: fontFamily,
+              size: Math.max(8, bodyFontSize - 2) * 2,
+            }),
+          }),
+        ],
+      },
+    ]),
+  );
+
 export const exportManuscriptToDocxBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
@@ -583,9 +649,16 @@ export const exportManuscriptToDocxBlob = async (
     crossReferenceAnchors: true,
   });
   // Diagrams are Mermaid source until export; Word embeds the raster.
-  bundle = await fitManuscriptFigureImages(
+  const drawnBundle = await fitManuscriptFigureImages(
     await prepareManuscriptDiagramImages(formattedBundle),
   );
+  // Numbered before the blocks are built, and before the document options are
+  // read: BlockNote spreads `documentOptions` into the `Document` constructor
+  // and only then transforms the blocks, so a note collected while mapping a
+  // paragraph would arrive too late to be written into the package.
+  const { bundle: numberedBundle, footnotes } =
+    numberManuscriptFootnotes(drawnBundle);
+  bundle = numberedBundle;
   const assetsByRefKey = new Map(
     bundle.numberedFigures.map((figure) => [
       (figure.refKey ?? figure.id).trim().toLowerCase(),
@@ -698,6 +771,11 @@ export const exportManuscriptToDocxBlob = async (
       creator: bundle.metadata.authors,
       title: bundle.metadata.title,
       subject: bundle.metadata.journal,
+      ...(footnotes.length > 0
+        ? {
+            footnotes: docxFootnoteParts(footnotes, fontFamily, bodyFontSize),
+          }
+        : {}),
       // Replace BlockNote's Inter-based template instead of appending duplicate
       // Heading/Normal definitions. The journal profile is the style authority
       // unless the author supplied a Word template.

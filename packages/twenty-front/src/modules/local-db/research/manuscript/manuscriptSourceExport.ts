@@ -15,6 +15,7 @@ import { CROSS_REF_ANCHOR_PATTERN } from './manuscriptCrossReference';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { type ExportFile } from './manuscriptExport';
+import { splitManuscriptFootnotes } from './manuscriptFootnotes';
 import { resolveFigureImage } from './manuscriptImages';
 import { manuscriptScriptSegments } from './manuscriptScripts';
 import { type NumberedFigure } from './manuscriptTypes';
@@ -212,6 +213,10 @@ export type ManuscriptSourceInlineWriter = {
   escape: (value: string) => string;
   citation: (keys: string[], label: string) => string;
   crossReference: (refKey: string, label: string) => string;
+  // The note's own Markdown, and the number the export walk gave it. Both
+  // targets count their own footnotes, so the number is only there for a
+  // writer that needs to print it — neither of the two does.
+  footnote: (text: string, number: number | undefined) => string;
   displayMath: (latex: string) => string;
   inlineMath: (latex: string) => string;
   code: (code: string) => string;
@@ -242,7 +247,17 @@ export const renderManuscriptSourceInline = (
   const wrap = ({ open, close }: ManuscriptSourceWrap, inner: string): string =>
     `${park(open)}${inner}${park(close)}`;
 
-  const working = value
+  // Footnotes come out first, before anything else has looked at the string:
+  // a note carries whole Markdown of its own — citations, maths, emphasis —
+  // and the writer renders that by calling back into this function, so the
+  // outer pass must see the finished markup rather than the note's source.
+  const working = splitManuscriptFootnotes(value)
+    .map((segment) =>
+      segment.kind === 'text'
+        ? segment.value
+        : park(writer.footnote(segment.text, segment.number)),
+    )
+    .join('')
     .replace(CITATION_ANCHOR_PATTERN, (_match, keys: string, label: string) =>
       park(writer.citation(citationAnchorKeys(keys), label)),
     )

@@ -15,6 +15,15 @@ export const PORTABLE_MANUSCRIPT_FORMAT = 'researcher-manuscript' as const;
 // restore brings its format back with it instead of falling back to whatever
 // profile the workspace happens to default to. v1 packages still import.
 //
+// Footnotes arrived after v2 and did not move it either, and needed no field
+// of their own: a note lives inside the sentence it is anchored to, as the
+// inline `^[…]` token `manuscriptFootnotes` defines, so `section.content`
+// already carries it word for word. That is the point of putting the note in
+// the prose rather than in a table beside it — a paper exported and reimported
+// gets its notes back through the field that was already there, and a build
+// that has never heard of footnotes shows the token as text instead of
+// refusing the package the way a version bump would make it.
+//
 // Section versions arrived after v2 — and their rules after that — and
 // deliberately did not move it. `variantOfKey`/`variantProfileKey`/
 // `variantRules` are optional fields on a section entry: a package written

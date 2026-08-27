@@ -10,6 +10,9 @@ import {
   ManuscriptTrialVerificationCheck,
 } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementRow';
 import { ManuscriptSubmissionRequirementPicker } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementPicker';
+import { type FigureColorSample } from '@/local-db/research/manuscript/manuscriptFigureColor';
+import { decodeFigureColorSamples } from '@/local-db/research/manuscript/manuscriptFigurePixels';
+import { isImageDataUrl } from '@/local-db/research/manuscript/manuscriptImages';
 import {
   runManuscriptScreening,
   summarizeScreeningFindings,
@@ -114,6 +117,56 @@ export const ManuscriptSubmissionRequirementsPanel = ({
 }: ManuscriptSubmissionRequirementsPanelProps) => {
   const { enqueueDialog } = useDialogManager();
   const { enqueueErrorSnackBar } = useSnackBar();
+  // The rainbow-colour-map check reads pixels, and decoding an image is
+  // asynchronous where screening is not. Rather than make the other seventeen
+  // checks wait on a canvas, the figures are decoded here and the result is
+  // handed to the synchronous run — see `manuscriptFigurePixels.ts`. Until
+  // that finishes the colour check declines, which is the honest answer:
+  // nothing has been read yet. The samples and the signature of the figures
+  // they were taken from live in one piece of state, so a half-updated pair
+  // can never be read as a complete one.
+  const [decodedFigures, setDecodedFigures] = useState<{
+    signature: string;
+    samples: Record<string, FigureColorSample>;
+  }>({ signature: '', samples: {} });
+  // Length and tail rather than the data URL itself: these are megabyte
+  // strings and this runs on every render, but an edited image changes both.
+  const figureSignature = useMemo(
+    () =>
+      (figures ?? [])
+        .filter((figure) => isImageDataUrl(figure.imageUrl))
+        .map(
+          (figure) =>
+            `${figure.id}:${(figure.imageUrl ?? '').length}:${(
+              figure.imageUrl ?? ''
+            ).slice(-16)}`,
+        )
+        .join('|'),
+    [figures],
+  );
+
+  useEffect(() => {
+    // Nothing to decode is already decoded — an empty signature matches the
+    // initial state, so a manuscript with no images never schedules work and
+    // never re-renders for it.
+    if (figureSignature === '' || figureSignature === decodedFigures.signature)
+      return () => {};
+
+    let isStale = false;
+    void decodeFigureColorSamples(
+      (figures ?? [])
+        .filter((figure) => isImageDataUrl(figure.imageUrl))
+        .map(({ id, imageUrl }) => ({ id, imageUrl })),
+    ).then((samples) => {
+      if (isStale) return;
+      setDecodedFigures({ signature: figureSignature, samples });
+    });
+
+    return () => {
+      isStale = true;
+    };
+  }, [figures, figureSignature, decodedFigures.signature]);
+
   // Screening reads the manuscript itself, so it does not depend on a target
   // journal and is rendered whether or not one is picked.
   const screeningRun = useMemo(
@@ -122,8 +175,20 @@ export const ManuscriptSubmissionRequirementsPanel = ({
         sections: manuscript.sections,
         competingInterests: manuscript.competingInterests,
         figures,
+        // Withheld while a decode is in flight or out of date, so the colour
+        // check declines rather than reporting figures nobody has read yet.
+        figurePixels:
+          decodedFigures.signature === figureSignature
+            ? decodedFigures.samples
+            : undefined,
       }),
-    [manuscript.sections, manuscript.competingInterests, figures],
+    [
+      manuscript.sections,
+      manuscript.competingInterests,
+      figures,
+      decodedFigures,
+      figureSignature,
+    ],
   );
   const screeningFindings = screeningRun.findings;
   const screeningSummary = summarizeScreeningFindings(screeningFindings);
@@ -138,10 +203,10 @@ export const ManuscriptSubmissionRequirementsPanel = ({
       </StyledHeader>
       <StyledScreeningNote>
         What the BIH Charité screening tools look for in a finished paper, run
-        over the manuscript text and its figures. These are screening findings,
-        not journal requirements, and none of them blocks an export — a journal
-        that does not ask for a data statement is not a reason to submit without
-        one.
+        over the manuscript text and over the colours of its figures. These are
+        screening findings, not journal requirements, and none of them blocks an
+        export — a journal that does not ask for a data statement is not a
+        reason to submit without one.
       </StyledScreeningNote>
       {screeningFindings.map((finding) => (
         <ManuscriptScreeningFindingRow

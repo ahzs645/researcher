@@ -31,6 +31,7 @@ import { screenBlinding } from './screening/blinding';
 import { screenCellLineAuthentication } from './screening/cellLineAuthentication';
 import { screenCompetingInterests } from './screening/competingInterestsStatement';
 import { screenEthicsApproval } from './screening/ethicsApproval';
+import { screenFigureColormaps } from './screening/figureColormaps';
 import { screenFigureDocumentation } from './screening/figureDocumentation';
 import { screenFunding } from './screening/fundingStatement';
 import { screenInformedConsent } from './screening/informedConsent';
@@ -173,6 +174,13 @@ export const MANUSCRIPT_SCREENING_CHECKS: ScreeningCheckDefinition[] = [
     label: 'Figure captions and alt text',
     tool: 'composer',
     question: 'Does every figure image carry a caption and alternative text?',
+  },
+  {
+    key: 'FIGURE_COLORMAPS',
+    label: 'Figure colour maps',
+    tool: 'JetFighter',
+    question:
+      'Are the figures free of rainbow colour maps a colourblind reader cannot read?',
   },
 ];
 
@@ -325,8 +333,10 @@ export const collectScreeningSections = (
 // data URL; this check gets the caption and the alt text.
 export const collectScreeningFigures = (
   manuscript: ScreeningManuscript,
-): ScreeningFigure[] =>
-  [...(manuscript.figures ?? [])]
+): ScreeningFigure[] => {
+  const figurePixels = manuscript.figurePixels ?? {};
+
+  return [...(manuscript.figures ?? [])]
     .sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0))
     .map((figure, index) => {
       const name = (figure.name ?? '').trim();
@@ -336,8 +346,13 @@ export const collectScreeningFigures = (
         ? figure.imageUrl.trim()
         : null;
 
+      const pixels = figurePixels[figure.id];
+
       return {
         id: figure.id,
+        // Only present when the caller decoded this figure, so a check that
+        // reads pixels can tell "clean" from "never looked at".
+        ...(pixels === undefined ? {} : { pixels }),
         label: isNonEmptyString(name)
           ? name
           : isNonEmptyString(refKey)
@@ -352,6 +367,7 @@ export const collectScreeningFigures = (
         hasImage: imageUrl !== null || isNonEmptyString(figure.diagramSource),
       };
     });
+};
 
 // The full run: what every check said, and which checks declined to say
 // anything. `screenManuscript` is the findings half of this, kept as it was
@@ -384,6 +400,7 @@ export const runManuscriptScreening = (
     MYCOPLASMA_TESTING: screenMycoplasmaTesting(sections, scope),
     RESOURCE_IDENTIFIERS: screenResourceIdentifiers(sections, scope),
     FIGURE_DOCUMENTATION: screenFigureDocumentation(figures, scope),
+    FIGURE_COLORMAPS: screenFigureColormaps(figures, scope),
   };
 
   const findings: ScreeningFinding[] = [];

@@ -3,6 +3,7 @@
 // its own module so a screener can depend on the vocabulary without depending
 // on the orchestrator that calls it.
 
+import { type FigureColorSample } from '@/local-db/research/manuscript/manuscriptFigureColor';
 import {
   type FigureLike,
   type SectionLike,
@@ -19,8 +20,13 @@ export type ScreeningTool =
   | 'TrialIdentifier'
   | 'rtransparent'
   | 'SciScore'
-  // Not one of the BIH Charité tools. The figure check is ours, and the label
-  // says so rather than borrowing a name that would misdescribe it.
+  // The one image check in the set that is a heuristic rather than a trained
+  // model, so the one that can run in a browser. Barzooka, its sibling, is a
+  // convolutional network and stays out.
+  | 'JetFighter'
+  // Not one of the BIH Charité tools. The caption and alt-text check is ours,
+  // and the label says so rather than borrowing a name that would misdescribe
+  // it.
   | 'composer';
 
 export type ScreeningCheckKey =
@@ -40,7 +46,8 @@ export type ScreeningCheckKey =
   | 'CELL_LINE_AUTHENTICATION'
   | 'MYCOPLASMA_TESTING'
   | 'RESOURCE_IDENTIFIERS'
-  | 'FIGURE_DOCUMENTATION';
+  | 'FIGURE_DOCUMENTATION'
+  | 'FIGURE_COLORMAPS';
 
 export type ScreeningCheckDefinition = {
   key: ScreeningCheckKey;
@@ -81,6 +88,15 @@ export type ScreeningManuscript = {
   // not the same as a manuscript that has none — `screenManuscript` keeps
   // working for the callers that pass sections alone.
   figures?: FigureLike[] | null;
+  // Figure colours, already decoded, keyed by figure id.
+  //
+  // Screening is synchronous and decoding an image is not, and the answer to
+  // that is not to make the other seventeen checks wait on a canvas. The caller
+  // decodes first — `manuscriptFigurePixels.ts` — and hands the result in, so
+  // the pure layer stays pure and every existing caller is untouched. A caller
+  // that supplies nothing here gets a declination from the colour check rather
+  // than a clean bill it never earned.
+  figurePixels?: Record<string, FigureColorSample> | null;
 };
 
 export type ScreeningSection = {
@@ -110,6 +126,9 @@ export type ScreeningFigure = {
   // The data URL (or remote URL) the image lives at, null when the asset
   // carries no picture of its own.
   imageUrl: string | null;
+  // The figure's colours, if the caller decoded them. Undefined means nobody
+  // read this image — never that it was read and found clean.
+  pixels?: FigureColorSample;
   // A Mermaid diagram has no image until export draws it, and is still a
   // picture the reader will see.
   hasImage: boolean;

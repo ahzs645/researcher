@@ -163,6 +163,7 @@ describe('SciScore rigor criteria', () => {
         'MYCOPLASMA_TESTING',
         'RESOURCE_IDENTIFIERS',
         'FIGURE_DOCUMENTATION',
+        'FIGURE_COLORMAPS',
       ]);
       expect(finding(thin, 'RANDOMISATION').verdict).toBe('ABSENT');
       expect(finding(thin, 'BLINDING').verdict).toBe('ABSENT');
@@ -185,6 +186,7 @@ describe('SciScore rigor criteria', () => {
       expect(declinedKeys(AEROSOL)).toEqual([
         ...RIGOR_KEYS,
         'FIGURE_DOCUMENTATION',
+        'FIGURE_COLORMAPS',
       ]);
       expect(
         screenManuscript({ sections: AEROSOL }).map(({ key }) => key),
@@ -230,6 +232,7 @@ describe('SciScore rigor criteria', () => {
       expect(declinedKeys(amtSections)).toEqual([
         ...RIGOR_KEYS,
         'FIGURE_DOCUMENTATION',
+        'FIGURE_COLORMAPS',
       ]);
     });
   });

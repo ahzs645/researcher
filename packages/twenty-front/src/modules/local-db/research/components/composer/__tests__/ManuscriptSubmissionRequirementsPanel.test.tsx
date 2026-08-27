@@ -1,10 +1,28 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { ManuscriptSubmissionRequirementsPanel } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementsPanel';
+import { colormapColorAt } from '@/local-db/research/manuscript/manuscriptColormaps';
+import {
+  readFigureColorSample,
+  type FigureColorSample,
+} from '@/local-db/research/manuscript/manuscriptFigureColor';
 import { type FigureLike } from '@/local-db/research/manuscript/manuscriptTypes';
 import { type SubmissionRequirementManuscript } from '@/local-db/research/manuscript/manuscriptSubmissionRequirements';
 
 const enqueueErrorSnackBar = jest.fn();
+
+// The one asynchronous thing on this panel. jsdom decodes no images, so the
+// real decoder would hang rather than fail; mocking it is what lets both
+// halves of the contract be tested — that decoded pixels reach the
+// synchronous screening run, and that a panel with none declines rather than
+// reporting the figures clean.
+const mockDecodeFigureColorSamples = jest.fn(
+  async (): Promise<Record<string, FigureColorSample>> => ({}),
+);
+jest.mock('@/local-db/research/manuscript/manuscriptFigurePixels', () => ({
+  decodeFigureColorSamples: (...args: unknown[]) =>
+    mockDecodeFigureColorSamples(...(args as [])),
+}));
 
 jest.mock('@/ui/feedback/dialog-manager/hooks/useDialogManager', () => ({
   useDialogManager: () => ({ enqueueDialog: jest.fn() }),
@@ -199,7 +217,10 @@ describe('ManuscriptSubmissionRequirementsPanel screening axes', () => {
     expect(screening).not.toHaveTextContent('Not found Cell line');
   });
 
-  it('names the figure a figure finding is about', () => {
+  // Awaited because a panel holding figures decodes their colours, and the
+  // state that lands when it finishes belongs inside the test rather than
+  // after it.
+  it('names the figure a figure finding is about', async () => {
     renderPanel(AEROSOL_METHODS, [
       {
         id: 'figure-1',
@@ -210,7 +231,9 @@ describe('ManuscriptSubmissionRequirementsPanel screening axes', () => {
       },
     ]);
 
-    expect(screen.getByText('Figure 1 has no caption.')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText('Figure 1 has no caption.')).toBeInTheDocument(),
+    );
   });
 
   describe('verifying a trial registration', () => {
@@ -277,5 +300,92 @@ describe('ManuscriptSubmissionRequirementsPanel screening axes', () => {
         screen.queryByText('Verify with ClinicalTrials.gov'),
       ).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('ManuscriptSubmissionRequirementsPanel figure colours', () => {
+  const AEROSOL_METHODS = {
+    sections: [
+      {
+        id: 'methods',
+        name: 'Methods',
+        sectionType: 'METHODS',
+        content:
+          'Filter samples were collected on quartz fibre filters and analysed by thermal-optical transmittance.',
+      },
+    ],
+  };
+
+  const JET_FIGURE: FigureLike = {
+    id: 'figure-1',
+    name: 'Figure 1',
+    assetKind: 'FIGURE',
+    caption: 'Modelled surface temperature anomaly.',
+    altText: 'A map of temperature anomaly.',
+    imageUrl: 'data:image/png;base64,iVBORw0KGgo=',
+  };
+
+  const jetSample = (): FigureColorSample => {
+    const steps = 256;
+    const pixels = new Uint8ClampedArray(steps * 4);
+    for (let index = 0; index < steps; index += 1) {
+      const [red, green, blue] = colormapColorAt('jet', index / (steps - 1));
+      pixels[index * 4] = red;
+      pixels[index * 4 + 1] = green;
+      pixels[index * 4 + 2] = blue;
+      pixels[index * 4 + 3] = 255;
+    }
+    return readFigureColorSample(pixels);
+  };
+
+  const renderWithFigure = () =>
+    render(
+      <ManuscriptSubmissionRequirementsPanel
+        manuscript={AEROSOL_METHODS}
+        figures={[JET_FIGURE]}
+        isExplicitTarget={false}
+        onConfirmTargetJournal={async () => undefined}
+        onPickTargetJournal={jest.fn()}
+        onSaveValues={async () => undefined}
+        onSaveRequirements={async () => undefined}
+        onKeepJournalValue={async () => undefined}
+      />,
+    );
+
+  afterEach(() => {
+    mockDecodeFigureColorSamples.mockReset();
+    mockDecodeFigureColorSamples.mockResolvedValue({});
+  });
+
+  it('reports the rainbow colour map once the figure has been decoded', async () => {
+    mockDecodeFigureColorSamples.mockResolvedValue({
+      'figure-1': jetSample(),
+    });
+
+    renderWithFigure();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/drawn in the jet rainbow colour map/),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText('Figure colour maps')).toBeInTheDocument();
+  });
+
+  // Screening is synchronous and decoding is not, so there is a moment — and,
+  // for a caller that never decodes, forever — when nothing has been read. It
+  // must not read as an all-clear.
+  it('declines rather than clearing figures nobody has decoded', async () => {
+    renderWithFigure();
+
+    const screening = screen.getByLabelText('Automated screening');
+
+    await waitFor(() =>
+      expect(screening).toHaveTextContent('Not applicable to this manuscript'),
+    );
+    expect(screening).toHaveTextContent('Figure colour maps');
+    expect(
+      screen.queryByText(/uses no rainbow colour map/),
+    ).not.toBeInTheDocument();
   });
 });

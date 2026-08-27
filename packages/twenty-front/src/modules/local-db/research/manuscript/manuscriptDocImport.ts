@@ -8,6 +8,10 @@
 
 import { countWords } from './manuscriptAssembly';
 import { assetPlacementMarker } from './manuscriptAssetPlacement';
+import {
+  manuscriptCommentsNote,
+  type ManuscriptComment,
+} from './manuscriptComments';
 import { wrapManuscriptFootnote } from './manuscriptFootnotes';
 import { COMMAND_TEXT } from './manuscriptMathGlyphs';
 import { unicodeMathToLatex } from './manuscriptMathUnicode';
@@ -41,6 +45,11 @@ export type ImportedSectionDraft = {
   // composer has no in-line comment layer, so they ride along as a draft field
   // and land in the section's notes at commit time instead of being dropped.
   comments?: ImportedComment[];
+  // The section's notes field, whole, when the source had one to give — a
+  // portable package carries it across, comment lines, answers and the
+  // author's own jottings alike. A Word import has no notes to carry, only
+  // comments, and the commit step renders those into this same field.
+  notes?: string;
 };
 
 export type ImportedDocument = {
@@ -536,15 +545,11 @@ export type WordRevisionSummary = {
   commentCount: number;
 };
 
-export type ImportedComment = {
+// The stored shape plus the id the source document gave it. That id is
+// Word's, not ours — it is re-issued on every export — so it lives only for as
+// long as the import does, and never reaches the notes field.
+export type ImportedComment = ManuscriptComment & {
   commentId: string;
-  author: string;
-  initials?: string;
-  date?: string;
-  text: string;
-  // The document text the comment was anchored to. Without it a reviewer's
-  // "why this one?" reads as a note about nothing in particular.
-  anchoredText?: string;
 };
 
 // A comment carries the heading it sat under so it can be re-attached after the
@@ -936,29 +941,12 @@ export const wordRevisionWarnings = (
   return warnings;
 };
 
-const isoDay = (date: string | undefined): string | undefined =>
-  date === undefined ? undefined : /^\d{4}-\d{2}-\d{2}/.exec(date)?.[0];
-
 // The composer stores no comment records, so a section's imported comments are
-// rendered into its existing notes field — one line each, attributed.
+// rendered into its existing notes field — one line each, attributed. That
+// rendering is also how a comment is stored and read back, so the writer lives
+// beside the reader in `manuscriptComments` rather than here.
 export const importedCommentsNote = (comments: ImportedComment[]): string =>
-  comments
-    .map((comment) => {
-      const day = isoDay(comment.date);
-      const who = [
-        comment.author,
-        comment.initials === undefined ? '' : `(${comment.initials})`,
-        day === undefined ? '' : `on ${day}`,
-      ]
-        .filter((part) => part.length > 0)
-        .join(' ');
-      const anchor =
-        comment.anchoredText === undefined
-          ? ''
-          : ` [on "${comment.anchoredText}"]`;
-      return `Imported comment — ${who}${anchor}: ${comment.text}`;
-    })
-    .join('\n');
+  manuscriptCommentsNote(comments);
 
 // ── Footnotes and endnotes ─────────────────────────────────────────────────
 // A note's text is not in the body at all. `word/document.xml` carries only

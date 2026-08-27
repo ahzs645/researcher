@@ -354,6 +354,9 @@ const importedDocumentFromManifest = (
     ...(section.wordLimit !== undefined
       ? { wordLimit: section.wordLimit }
       : {}),
+    // A package's notes come back whole, so the co-author comments in them —
+    // and whatever the author answered — are restored rather than re-derived.
+    ...(section.notes === undefined ? {} : { notes: section.notes }),
   })),
   stats: {
     equationCount: portablePackage.sections.reduce(

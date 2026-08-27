@@ -47,6 +47,10 @@ export type SectionLike = {
   variantProfileKey?: string | null;
   variantRules?: string | null;
   includeInExport?: boolean | null;
+  // Free text about the section, and the field a co-author's comments live in:
+  // one attributed line each, with the author's answer under it. See
+  // `manuscriptComments` for why the rendering is also the store.
+  notes?: string | null;
 };
 
 export type FigureLike = {

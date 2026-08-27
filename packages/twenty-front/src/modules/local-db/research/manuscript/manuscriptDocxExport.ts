@@ -7,10 +7,14 @@ import { isNonEmptyString } from '@sniptt/guards';
 import {
   AlignmentType,
   Bookmark,
+  CommentRangeEnd,
+  CommentRangeStart,
+  CommentReference,
   ExternalHyperlink,
   Footer,
   FootnoteReferenceRun,
   HeadingLevel,
+  type ICommentOptions,
   LineNumberRestartFormat,
   LineRuleType,
   Math as DocxMath,
@@ -42,6 +46,14 @@ import {
   splitAssetNumber,
   stripAssetNumberAnchors,
 } from './manuscriptAssetAnchors';
+import {
+  anchorManuscriptComments,
+  hasManuscriptCommentAnchors,
+  splitManuscriptCommentAnchors,
+  stripManuscriptCommentAnchors,
+  type ManuscriptCommentAnchorSegment,
+  type ManuscriptExportComment,
+} from './manuscriptComments';
 import {
   hasCrossReferenceAnchors,
   splitCrossReferenceAnchors,
@@ -176,7 +188,9 @@ type ManuscriptParagraphChild =
   | DocxMath
   | Bookmark
   | SimpleField
-  | FootnoteReferenceRun;
+  | FootnoteReferenceRun
+  | CommentRangeStart
+  | CommentRangeEnd;
 
 // A footnote is a real Word footnote: the run in the body is only the
 // reference mark, and the note itself is written into `word/footnotes.xml`
@@ -342,9 +356,26 @@ const needsManuscriptRuns = (text: string): boolean =>
   hasInlineMath(text) ||
   hasCrossReferenceAnchors(text) ||
   hasManuscriptFootnotes(text) ||
+  hasManuscriptCommentAnchors(text) ||
   stripAssetNumberAnchors(text) !== text;
 
-const manuscriptInlineRuns = (
+// Where a comment's range opens and closes. Word draws the highlight between
+// the two and hangs the note off the reference mark, which is why the mark is
+// written immediately after the closing tag rather than anywhere the author
+// might see it: it prints nothing at all.
+const commentAnchorRuns = (
+  segment: ManuscriptCommentAnchorSegment,
+): ManuscriptParagraphChild[] => {
+  if (segment.kind === 'commentStart') {
+    return [new CommentRangeStart(segment.commentId)];
+  }
+  return [
+    new CommentRangeEnd(segment.commentId),
+    new TextRun({ children: [new CommentReference(segment.commentId)] }),
+  ];
+};
+
+const anchorlessInlineRuns = (
   text: string,
   options: ManuscriptRunOptions,
   findAsset?: ManuscriptAssetLookup,
@@ -359,6 +390,20 @@ const manuscriptInlineRuns = (
   );
 };
 
+// Comment ranges are settled before anything else in the run: they are the one
+// marker that is not part of a word, so splitting on them first leaves every
+// other reader looking at prose exactly as it would have been.
+const manuscriptInlineRuns = (
+  text: string,
+  options: ManuscriptRunOptions,
+  findAsset?: ManuscriptAssetLookup,
+): ManuscriptParagraphChild[] =>
+  splitManuscriptCommentAnchors(text).flatMap((segment) =>
+    segment.kind === 'text'
+      ? anchorlessInlineRuns(segment.value, options, findAsset)
+      : commentAnchorRuns(segment),
+  );
+
 const manuscriptTextRuns = (
   text: string,
   styles: InlineTextStyles,
@@ -368,13 +413,21 @@ const manuscriptTextRuns = (
 ): ManuscriptParagraphChild[] =>
   // A link's label is text, never an equation, so its dollars stay literal.
   hyperlink
-    ? scriptRuns(text, {
-        bold: styles.bold === true,
-        italics: forceItalics || styles.italic === true,
-        underline: styles.underline === true,
-        strike: styles.strike === true,
-        hyperlink: true,
-      })
+    ? // A comment range can open inside a link's label, and an unclosed range
+      // is a comment Word draws over the rest of the paragraph — so the
+      // markers are split out here too rather than being handed to a run
+      // builder that would print them as characters.
+      splitManuscriptCommentAnchors(text).flatMap((segment) =>
+        segment.kind === 'text'
+          ? scriptRuns(segment.value, {
+              bold: styles.bold === true,
+              italics: forceItalics || styles.italic === true,
+              underline: styles.underline === true,
+              strike: styles.strike === true,
+              hyperlink: true,
+            })
+          : commentAnchorRuns(segment),
+      )
     : manuscriptInlineRuns(
         text,
         {
@@ -418,8 +471,10 @@ const createManuscriptDocxMappings = ({
       // the plain text — the markers are only for the caption paragraph below.
       const plainCaption =
         typeof caption === 'string'
-          ? stripManuscriptFootnotes(
-              stripAssetNumberAnchors(stripManuscriptScriptMarkers(caption)),
+          ? stripManuscriptCommentAnchors(
+              stripManuscriptFootnotes(
+                stripAssetNumberAnchors(stripManuscriptScriptMarkers(caption)),
+              ),
             )
           : caption;
       const mappedImage = await docxDefaultSchemaMappings.blockMapping.image(
@@ -682,6 +737,60 @@ const docxFootnoteParts = (
     ]),
   );
 
+// `word/comments.xml`. A comment that came in from a co-author goes back out
+// as they wrote it — same author, same initials, same day — because the file
+// the author hands on is the file that co-author will open next, and a comment
+// that quietly changed hands on the way through is worse than one that was
+// dropped. The author's own answer is a second comment over the same words:
+// Word's reply threads are a Microsoft extension this writer does not speak,
+// and a reply that cannot be nested is still an answer if it is set beside the
+// question.
+//
+// Word records a comment's date as an instant and the notes field keeps only
+// the day, so a comment that has been through the composer comes back dated to
+// midnight. An unparseable date is left off entirely rather than turned into
+// today's.
+const docxCommentParts = (
+  comments: readonly ManuscriptExportComment[],
+  fontFamily: string,
+  bodyFontSize: number,
+): ICommentOptions[] =>
+  comments.map((comment) => {
+    const date =
+      comment.date === undefined ? undefined : new Date(comment.date);
+    const runOptions = {
+      font: fontFamily,
+      size: Math.max(8, bodyFontSize - 2) * 2,
+    };
+    return {
+      id: comment.commentId,
+      author: comment.author,
+      ...(comment.initials === undefined ? {} : { initials: comment.initials }),
+      ...(date === undefined || Number.isNaN(date.getTime()) ? {} : { date }),
+      children: [
+        new Paragraph({
+          children: scriptRuns(
+            comment.isReply ? `Reply: ${comment.text}` : comment.text,
+            runOptions,
+          ),
+        }),
+        // The words this was written about, when they are no longer in the
+        // section for the range to sit on. Without them the comment reads as a
+        // question about a whole section that was never asked about one.
+        ...(comment.orphanedAnchorText === undefined
+          ? []
+          : [
+              new Paragraph({
+                children: scriptRuns(
+                  `Originally on: “${comment.orphanedAnchorText}” — that text has since been edited.`,
+                  { ...runOptions, italics: true },
+                ),
+              }),
+            ]),
+      ],
+    };
+  });
+
 export const exportManuscriptToDocxBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
@@ -704,7 +813,12 @@ export const exportManuscriptToDocxBlob = async (
   // paragraph would arrive too late to be written into the package.
   const { bundle: numberedBundle, footnotes } =
     numberManuscriptFootnotes(drawnBundle);
-  bundle = numberedBundle;
+  // And for the same reason: the ranges a comment needs have to be in the
+  // prose before the blocks are built, and the comment bodies have to be in
+  // `documentOptions` before docx is constructed.
+  const { bundle: commentedBundle, comments } =
+    anchorManuscriptComments(numberedBundle);
+  bundle = commentedBundle;
   // Sections first, assets over the top: `resolveCrossReferences` looks an
   // asset up before a section, so a key that is somehow both has to land on
   // the same thing here that the reference text was resolved against.
@@ -850,6 +964,13 @@ export const exportManuscriptToDocxBlob = async (
       ...(footnotes.length > 0
         ? {
             footnotes: docxFootnoteParts(footnotes, fontFamily, bodyFontSize),
+          }
+        : {}),
+      ...(comments.length > 0
+        ? {
+            comments: {
+              children: docxCommentParts(comments, fontFamily, bodyFontSize),
+            },
           }
         : {}),
       // Replace BlockNote's Inter-based template instead of appending duplicate

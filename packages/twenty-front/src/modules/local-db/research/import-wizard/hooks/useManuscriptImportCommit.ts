@@ -1,10 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 
-import {
-  importedCommentsNote,
-  type ImportedDocument,
-} from '@/local-db/research/manuscript/manuscriptDocImport';
+import { manuscriptImportedSectionNotes } from '@/local-db/research/manuscript/manuscriptComments';
+import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
 import {
   type ExistingImportReference,
   type PreparedManuscriptImport,
@@ -176,6 +174,7 @@ export const useManuscriptImportCommit = ({
 
         const sectionIdsByOrder = new Map<number, string>();
         for (const section of preparedImport.sections) {
+          const sectionNotes = manuscriptImportedSectionNotes(section);
           const created = await createSection({
             name: section.name,
             manuscriptId,
@@ -198,10 +197,10 @@ export const useManuscriptImportCommit = ({
               ? { wordLimit: section.wordLimit }
               : {}),
             // A reviewer's comments have no record of their own; the section's
-            // notes are where they survive the import.
-            ...(section.comments === undefined || section.comments.length === 0
-              ? {}
-              : { notes: importedCommentsNote(section.comments) }),
+            // notes are where they survive the import — and where an answer to
+            // one is written, which is why a package's notes come back whole
+            // rather than being re-rendered from the comments alone.
+            ...(sectionNotes === undefined ? {} : { notes: sectionNotes }),
           });
           currentCreatedCounts = {
             ...currentCreatedCounts,

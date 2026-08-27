@@ -119,6 +119,9 @@ export const SECTION_GQL = {
   variantOfId: true,
   variantProfileKey: true,
   variantRules: true,
+  // Carries the co-author comments a Word import left here, so the composer
+  // can show them and the DOCX export can write them back out.
+  notes: true,
   manuscript: { id: true },
 };
 

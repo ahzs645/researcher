@@ -32,6 +32,12 @@ export const PORTABLE_MANUSCRIPT_FORMAT = 'researcher-manuscript' as const;
 // simply ignores — the figures still restore, as figures of their own, rather
 // than the whole package being refused.
 //
+// Comments arrived later still and did not move it either. A section's
+// `notes` is one more optional field on a section entry — a package written
+// before comments existed simply has none, and a reader written before they
+// existed carries the field across untouched or ignores it, either of which
+// beats refusing the whole paper.
+//
 // Section versions arrived after v2 — and their rules after that — and
 // deliberately did not move it. `variantOfKey`/`variantProfileKey`/
 // `variantRules` are optional fields on a section entry: a package written
@@ -115,6 +121,10 @@ export type PortableResearchPaperManifest = {
     variantOfKey?: string;
     variantProfileKey?: string;
     variantRules?: string;
+    // The section's notes, which is where a co-author's comments and the
+    // answers written to them live. Absent on a section that has none, so a
+    // paper nobody has commented on travels exactly as it did before.
+    notes?: string;
   }>;
   figures: Array<{
     key: string;
@@ -285,6 +295,7 @@ export const buildPortableResearchPaperManifest = (
         : {}),
       wordCount: section.wordCount ?? 0,
       includeInExport: section.includeInExport !== false,
+      ...(isNonEmptyString(section.notes) ? { notes: section.notes } : {}),
       ...portableSectionVariantFields(section, sectionKeyById),
     })),
     figures: source.figures.map((figure, index) => {

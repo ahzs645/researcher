@@ -5,6 +5,11 @@ import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import {
+  isoCommentDay,
+  manuscriptSectionComments,
+  withManuscriptCommentReply,
+} from '@/local-db/research/manuscript/manuscriptComments';
+import {
   type FigureLike,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
@@ -108,6 +113,47 @@ const StyledActions = styled.div`
   gap: ${themeCssVariables.spacing[2]};
 `;
 
+// The review that came back with the document. Deliberately a list and a text
+// field and nothing else: this is where an author answers a co-author before
+// handing the file back, not a place to hold a conversation.
+const StyledComments = styled.div`
+  border-top: 1px solid ${themeCssVariables.border.color.light};
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
+  padding-top: ${themeCssVariables.spacing[2]};
+`;
+
+const StyledCommentsHeading = styled.span`
+  color: ${themeCssVariables.font.color.secondary};
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.medium};
+`;
+
+const StyledComment = styled.div`
+  border-left: 2px solid ${themeCssVariables.border.color.medium};
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[1]};
+  padding-left: ${themeCssVariables.spacing[2]};
+`;
+
+const StyledCommentAuthor = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
+const StyledCommentQuote = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+  font-style: italic;
+`;
+
+const StyledCommentText = styled.span`
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.sm};
+`;
+
 const StyledCheckbox = styled.label`
   align-items: center;
   color: ${themeCssVariables.font.color.secondary};
@@ -132,6 +178,8 @@ export const ManuscriptSectionMetadataPanel = ({
   );
   const peerIndex = peers.findIndex((candidate) => candidate.id === section.id);
 
+  const comments = manuscriptSectionComments(section.notes);
+
   const updateSection = (values: Record<string, unknown>) => {
     void updateOneRecord({
       objectNameSingular: 'manuscriptSection',
@@ -142,6 +190,19 @@ export const ManuscriptSectionMetadataPanel = ({
       .catch(() =>
         enqueueErrorSnackBar({ message: 'Could not save section metadata' }),
       );
+  };
+
+  // The answer is written back into the same notes field the comment lives in,
+  // so it travels with the paper — into the portable package, and back out to
+  // Word as a comment of its own beside the one it answers.
+  const replyToComment = (commentIndex: number, reply: string) => {
+    const notes = withManuscriptCommentReply(
+      section.notes,
+      commentIndex,
+      reply,
+    );
+    if (notes === (section.notes ?? '')) return;
+    updateSection({ notes });
   };
 
   const moveSection = (direction: -1 | 1) => {
@@ -400,6 +461,46 @@ export const ManuscriptSectionMetadataPanel = ({
           Include in export
         </StyledCheckbox>
       </StyledActions>
+      {comments.length > 0 ? (
+        <StyledComments>
+          <StyledCommentsHeading>
+            {comments.length === 1
+              ? '1 comment from the imported document'
+              : `${comments.length} comments from the imported document`}
+          </StyledCommentsHeading>
+          {comments.map((comment, commentIndex) => (
+            <StyledComment key={`${commentIndex}-${comment.author}`}>
+              <StyledCommentAuthor>
+                {[
+                  comment.author,
+                  isNonEmptyString(comment.initials)
+                    ? `(${comment.initials})`
+                    : '',
+                  isDefined(isoCommentDay(comment.date))
+                    ? `· ${isoCommentDay(comment.date)}`
+                    : '',
+                ]
+                  .filter((part) => part.length > 0)
+                  .join(' ')}
+              </StyledCommentAuthor>
+              {isNonEmptyString(comment.anchoredText) ? (
+                <StyledCommentQuote>
+                  on “{comment.anchoredText}”
+                </StyledCommentQuote>
+              ) : null}
+              <StyledCommentText>{comment.text}</StyledCommentText>
+              <StyledInput
+                aria-label={`Reply to ${comment.author}`}
+                placeholder="Write a reply — it goes back to Word with the comment"
+                defaultValue={comment.reply ?? ''}
+                onBlur={(event) =>
+                  replyToComment(commentIndex, event.target.value)
+                }
+              />
+            </StyledComment>
+          ))}
+        </StyledComments>
+      ) : null}
     </StyledPanel>
   );
 };

@@ -5,6 +5,7 @@ import { type Ref } from 'react';
 
 import { ManuscriptSectionEditor } from '@/local-db/research/components/ManuscriptSectionEditor';
 import { ManuscriptSectionMetadataPanel } from '@/local-db/research/components/ManuscriptSectionMetadataPanel';
+import { manuscriptSectionComments } from '@/local-db/research/manuscript/manuscriptComments';
 import { wordLimitStatus } from '@/local-db/research/manuscript/manuscriptScaffold';
 import {
   type FigureLike,
@@ -85,13 +86,23 @@ export const ManuscriptWriteEditor = ({
   const wordStatus = isDefined(section)
     ? wordLimitStatus(section.wordCount, section.wordLimit)
     : undefined;
+  // A co-author's comment is the one thing in this panel the author did not
+  // write, so the count is on the summary rather than only behind it.
+  const commentCount = isDefined(section)
+    ? manuscriptSectionComments(section.notes).length
+    : 0;
 
   return (
     <StyledEditorColumn>
       {isDefined(section) ? (
         <>
           <StyledDetails>
-            <summary>Details · {section.name ?? 'Untitled section'}</summary>
+            <summary>
+              Details · {section.name ?? 'Untitled section'}
+              {commentCount > 0
+                ? ` · ${commentCount} comment${commentCount === 1 ? '' : 's'}`
+                : ''}
+            </summary>
             <ManuscriptSectionMetadataPanel
               key={`section-metadata-${section.id}`}
               section={section}

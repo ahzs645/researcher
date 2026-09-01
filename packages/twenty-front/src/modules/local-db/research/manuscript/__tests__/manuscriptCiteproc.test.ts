@@ -322,3 +322,30 @@ describe('manuscript citeproc', () => {
     expect(formatted.bibliography[0].text).not.toMatch(/^1\./);
   });
 });
+
+describe('cluster label alignment', () => {
+  it('keeps labels on their own clusters when one is unciteable', () => {
+    // The middle cluster names a key with no reference — citeproc never sees
+    // it, and its own update indexes then run one behind ours.
+    const engine = {
+      knownItemKeys: new Set(['a2020', 'b2021']),
+      itemKeys: ['a2020', 'b2021'],
+      processor: {
+        updateItems: () => undefined,
+        processCitationCluster: (
+          citation: {
+            citationItems: { id: string }[];
+          },
+          preceding: unknown[],
+        ) => [
+          {},
+          [[preceding.length, `<span>${citation.citationItems[0].id}</span>`]],
+        ],
+      },
+    } as unknown as Parameters<typeof formatCslCitations>[0];
+
+    expect(
+      formatCslCitations(engine, [['a2020'], ['missing1999'], ['b2021']]),
+    ).toEqual(['a2020', '[?]', 'b2021']);
+  });
+});

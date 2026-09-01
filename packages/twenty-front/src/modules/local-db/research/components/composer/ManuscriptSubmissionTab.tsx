@@ -10,6 +10,7 @@ import {
   type JournalRecord,
   type ManuscriptRecord,
 } from '@/local-db/research/components/composer/manuscriptComposerData';
+import { ManuscriptReviewRoundsSection } from '@/local-db/research/components/composer/ManuscriptReviewRoundsSection';
 import { ManuscriptSubmissionRequirementsPanel } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementsPanel';
 import {
   ManuscriptSubmissionTrackingPanel,
@@ -84,6 +85,12 @@ export const ManuscriptSubmissionTab = ({
       onSaveValues={onSaveRequirementValues}
       onSaveRequirements={onSaveRequirements}
       onKeepJournalValue={onKeepJournalValue}
+    />
+    <ManuscriptReviewRoundsSection
+      manuscriptId={manuscript.id}
+      manuscriptTitle={manuscript.name ?? 'Untitled manuscript'}
+      defaultJournal={template?.name ?? manuscript.targetVenue ?? ''}
+      sections={sections}
     />
     <H2Title title="Supplement details" />
     <ManuscriptSubmissionDetailsPanel

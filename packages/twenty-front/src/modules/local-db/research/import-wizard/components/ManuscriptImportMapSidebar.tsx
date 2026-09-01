@@ -3,6 +3,7 @@ import katex from 'katex';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { type ManuscriptRevisions } from '@/local-db/research/import-wizard/utils/readManuscriptWordRevisions';
 import {
   collectImportBlockWarnings,
   countImportBlocksNeedingReview,
@@ -10,15 +11,36 @@ import {
   type ImportBlockOverrides,
   type ImportBlockRole,
 } from '@/local-db/research/manuscript/manuscriptImportBlocks';
+import { type TrackedChangeResolution } from '@/local-db/research/manuscript/manuscriptDocImport';
 
 type ManuscriptImportMapSidebarProps = {
   blocks: ImportBlock[];
   overrides: ImportBlockOverrides;
   sourceName: string;
+  revisions?: ManuscriptRevisions;
+  isResolvingTrackedChanges: boolean;
+  onTrackedChangesChange: (resolution: TrackedChangeResolution) => void;
   isPreparing: boolean;
   onBack: () => void;
   onContinue: () => void;
 };
+
+const TRACKED_CHANGE_CHOICES: {
+  resolution: TrackedChangeResolution;
+  label: string;
+  description: string;
+}[] = [
+  {
+    resolution: 'ACCEPT',
+    label: 'Accept changes',
+    description: 'Import inserted text and drop deleted text.',
+  },
+  {
+    resolution: 'REJECT',
+    label: 'Reject changes',
+    description: 'Drop inserted text and restore deleted text.',
+  },
+];
 
 const StyledSidebar = styled.aside`
   background: ${themeCssVariables.background.secondary};
@@ -105,6 +127,28 @@ const StyledCountValue = styled.span`
   font-weight: ${themeCssVariables.font.weight.semiBold};
 `;
 
+const StyledChoice = styled.label<{ isDisabled: boolean }>`
+  align-items: flex-start;
+  color: ${themeCssVariables.font.color.secondary};
+  cursor: ${({ isDisabled }) => (isDisabled ? 'wait' : 'pointer')};
+  display: flex;
+  font-size: ${themeCssVariables.font.size.xs};
+  gap: ${themeCssVariables.spacing[2]};
+  padding: ${themeCssVariables.spacing[1]} 0;
+`;
+
+const StyledChoiceLabel = styled.span`
+  color: ${themeCssVariables.font.color.primary};
+  font-weight: ${themeCssVariables.font.weight.medium};
+`;
+
+const StyledNote = styled.div`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+  line-height: 1.4;
+  margin-top: ${themeCssVariables.spacing[2]};
+`;
+
 const StyledWarnings = styled.ul`
   color: ${themeCssVariables.color.orange};
   display: flex;
@@ -152,6 +196,9 @@ export const ManuscriptImportMapSidebar = ({
   blocks,
   overrides,
   sourceName,
+  revisions,
+  isResolvingTrackedChanges,
+  onTrackedChangesChange,
   isPreparing,
   onBack,
   onContinue,
@@ -193,11 +240,101 @@ export const ManuscriptImportMapSidebar = ({
     ...equationWarnings,
   ];
   const reviewCount = countImportBlocksNeedingReview(blocks, overrides);
+  // A document can carry comments without carrying a single revision, and then
+  // there is nothing to accept or reject.
+  //
+  // Two counts, because they answer different questions. The insertion and
+  // deletion tiles are about text, and a formatting-only document would show
+  // them as a pair of zeros; the accept/reject choice is about every revision,
+  // and a document whose only revisions are formatting still has to be told
+  // which side of them to import.
+  const textChangeCount =
+    (revisions?.summary.insertionCount ?? 0) +
+    (revisions?.summary.deletionCount ?? 0);
+  const trackedChangeCount =
+    textChangeCount + (revisions?.summary.formattingChangeCount ?? 0);
 
   return (
     <StyledSidebar>
       <StyledTitle>Document structure</StyledTitle>
       <StyledSource title={sourceName}>{sourceName}</StyledSource>
+
+      {revisions === undefined ? null : (
+        <StyledSection>
+          <StyledSectionTitle>
+            {trackedChangeCount > 0 ? 'Tracked changes' : 'Comments'}
+          </StyledSectionTitle>
+          <StyledCounts>
+            {textChangeCount === 0 ? null : (
+              <>
+                <StyledCount>
+                  <StyledCountValue>
+                    {revisions.summary.insertionCount}
+                  </StyledCountValue>
+                  Insertions
+                </StyledCount>
+                <StyledCount>
+                  <StyledCountValue>
+                    {revisions.summary.deletionCount}
+                  </StyledCountValue>
+                  Deletions
+                </StyledCount>
+              </>
+            )}
+            {revisions.summary.formattingChangeCount === 0 ? null : (
+              <StyledCount>
+                <StyledCountValue>
+                  {revisions.summary.formattingChangeCount}
+                </StyledCountValue>
+                Formatting
+              </StyledCount>
+            )}
+            {revisions.summary.commentCount === 0 ? null : (
+              <StyledCount>
+                <StyledCountValue>
+                  {revisions.summary.commentCount}
+                </StyledCountValue>
+                Comments
+              </StyledCount>
+            )}
+          </StyledCounts>
+          {trackedChangeCount === 0
+            ? null
+            : TRACKED_CHANGE_CHOICES.map((choice) => (
+                <StyledChoice
+                  key={choice.resolution}
+                  isDisabled={isResolvingTrackedChanges}
+                >
+                  <input
+                    type="radio"
+                    name="manuscript-import-tracked-changes"
+                    value={choice.resolution}
+                    checked={revisions.resolution === choice.resolution}
+                    disabled={isResolvingTrackedChanges}
+                    onChange={() => onTrackedChangesChange(choice.resolution)}
+                  />
+                  <span>
+                    <StyledChoiceLabel>{choice.label}</StyledChoiceLabel>{' '}
+                    {choice.description}
+                  </span>
+                </StyledChoice>
+              ))}
+          {trackedChangeCount === 0 ? null : (
+            <StyledNote>
+              {isResolvingTrackedChanges
+                ? 'Re-reading the document…'
+                : 'Changing this re-reads the document, so the mapping below starts again.'}
+            </StyledNote>
+          )}
+          {revisions.summary.commentCount === 0 ? null : (
+            <StyledNote>
+              {revisions.summary.commentCount === 1
+                ? 'The comment is imported into the notes of the section it sits in.'
+                : `All ${revisions.summary.commentCount} comments are imported into the notes of the sections they sit in.`}
+            </StyledNote>
+          )}
+        </StyledSection>
+      )}
 
       <StyledSection>
         <StyledSectionTitle>Heading outline</StyledSectionTitle>

@@ -1,7 +1,14 @@
+import { isNonEmptyString } from '@sniptt/guards';
+
 import {
   parseManuscriptAffiliations,
   parseManuscriptAuthors,
 } from './manuscriptContributors';
+import {
+  portableReviewRoundEntries,
+  type PortableReviewRound,
+} from './manuscriptPortableReviewRounds';
+import { type ReviewRoundLike } from './manuscriptReviewRound';
 import { type SubmissionMaterials } from './manuscriptSubmission';
 import {
   type FigureLike,
@@ -11,7 +18,54 @@ import {
 } from './manuscriptTypes';
 
 export const PORTABLE_MANUSCRIPT_FORMAT = 'researcher-manuscript' as const;
-export const PORTABLE_MANUSCRIPT_VERSION = 1 as const;
+// v2 adds the journal template the manuscript was written against, so a
+// restore brings its format back with it instead of falling back to whatever
+// profile the workspace happens to default to. v1 packages still import.
+//
+// Footnotes arrived after v2 and did not move it either, and needed no field
+// of their own: a note lives inside the sentence it is anchored to, as the
+// inline `^[…]` token `manuscriptFootnotes` defines, so `section.content`
+// already carries it word for word. That is the point of putting the note in
+// the prose rather than in a table beside it — a paper exported and reimported
+// gets its notes back through the field that was already there, and a build
+// that has never heard of footnotes shows the token as text instead of
+// refusing the package the way a version bump would make it.
+//
+// Panels and section reference keys arrived later still and did not move it
+// either, for the same reason: `parentFigureKey`, `panelColumns` and a
+// section's `refKey` are optional fields a reader that has never heard of them
+// simply ignores — the figures still restore, as figures of their own, rather
+// than the whole package being refused.
+//
+// Comments arrived later still and did not move it either. A section's
+// `notes` is one more optional field on a section entry — a package written
+// before comments existed simply has none, and a reader written before they
+// existed carries the field across untouched or ignores it, either of which
+// beats refusing the whole paper.
+//
+// Section versions arrived after v2 — and their rules after that — and
+// deliberately did not move it. `variantOfKey`/`variantProfileKey`/
+// `variantRules` are optional fields on a section entry: a package written
+// before they existed imports exactly as it did, and a reader written before
+// they existed ignores fields it does not know. A bump
+// to 3 would buy nothing and cost the case that matters — an older copy of
+// this app checks `PORTABLE_MANUSCRIPT_READABLE_VERSIONS` and would refuse the
+// package outright, so an author carrying a paper to a machine that has not
+// updated yet would lose the whole paper rather than a few versions of one
+// section.
+//
+// Review rounds arrive last so far and stay on 2 for exactly that reason,
+// though the loss they would cause is the larger one. `reviewRounds` is a new
+// optional top-level array: a package written before rounds travelled simply
+// has no such key and imports as it always did, and a build that predates them
+// reads a package that has one, restores the manuscript whole and ignores the
+// key it does not know. Bumping to 3 would invert that — the older build would
+// refuse the file outright, so an author moving a revised paper to a machine
+// still on the previous release would lose the manuscript *and* the responses
+// rather than just the responses. The version guards what a reader must
+// understand to make sense of the paper, and nothing here changes that.
+export const PORTABLE_MANUSCRIPT_VERSION = 2 as const;
+export const PORTABLE_MANUSCRIPT_READABLE_VERSIONS = [1, 2];
 export const PORTABLE_MANUSCRIPT_FILENAME = 'research-paper.json';
 
 export type PortableManuscriptMetadata = {
@@ -29,11 +83,24 @@ export type PortableManuscriptMetadata = {
   supplementAffiliations?: string;
 };
 
+// The journal template the manuscript targets, carried whole so a restore can
+// re-link it when the workspace already has it and re-create it when it does
+// not. `profileKey` is the stable identity of a seeded template; `name` is the
+// fallback for one the author wrote themselves.
+export type PortableJournalTemplate = JournalStyle & {
+  name: string;
+};
+
 export type PortableManuscriptSource = {
   manuscript: PortableManuscriptMetadata;
   sections: SectionLike[];
   figures: FigureLike[];
   references: ReferenceLike[];
+  journal?: PortableJournalTemplate;
+  // The rounds of peer review this manuscript has been through. Optional, so a
+  // caller assembling a source by hand (a JATS article, a .docx preview) is
+  // unchanged by their arrival.
+  reviewRounds?: ReviewRoundLike[];
 };
 
 export type PortableResearchPaperManifest = {
@@ -54,6 +121,9 @@ export type PortableResearchPaperManifest = {
   sections: Array<{
     key: string;
     name: string;
+    // The key an in-text `[#sec:…]` points at. Absent on a section the author
+    // never named, which is most of them.
+    refKey?: string;
     sectionType: string;
     placement: string;
     content: string;
@@ -63,6 +133,18 @@ export type PortableResearchPaperManifest = {
     wordLimit?: number;
     wordCount: number;
     includeInExport: boolean;
+    // Set only on a section that is an alternative version of another one: the
+    // key of the section it rewords, the journal profile it is pinned to, and
+    // the rule it declares it satisfies. All three are absent on an ordinary
+    // section — writing empty strings here would make every section look like a
+    // version of nothing.
+    variantOfKey?: string;
+    variantProfileKey?: string;
+    variantRules?: string;
+    // The section's notes, which is where a co-author's comments and the
+    // answers written to them live. Absent on a section that has none, so a
+    // paper nobody has commented on travels exactly as it did before.
+    notes?: string;
   }>;
   figures: Array<{
     key: string;
@@ -73,6 +155,7 @@ export type PortableResearchPaperManifest = {
     assetKind: string;
     placement: string;
     imageSource: string;
+    numbered?: boolean;
     imageUrl?: string;
     imagePath?: string;
     altText?: string;
@@ -83,6 +166,13 @@ export type PortableResearchPaperManifest = {
     tableData?: string;
     equationLatex?: string;
     diagramSource?: string;
+    // A panel: the manifest key of the figure it is one cell of. Panels travel
+    // as ordinary figure entries pointing at their parent, so a reader that
+    // does not know about them restores a flat set of figures rather than
+    // nothing at all.
+    parentFigureKey?: string;
+    // On a parent: how many panels sit side by side before the layout wraps.
+    panelColumns?: number;
   }>;
   references: Array<{
     key: string;
@@ -101,6 +191,14 @@ export type PortableResearchPaperManifest = {
     notes?: string;
   }>;
   exportStyle: JournalStyle;
+  // The manuscript's target journal record (v2+). `exportStyle` is the
+  // resolved style used for this export; this is the template itself.
+  journal?: PortableJournalTemplate;
+  // Every round of review the manuscript has been through, with the decision
+  // letter as received and the author's answer to each point. Absent on a
+  // manuscript that has never been reviewed, which is most of them and every
+  // package written before rounds travelled.
+  reviewRounds?: PortableReviewRound[];
   submissionMaterials: SubmissionMaterials;
 };
 
@@ -130,6 +228,40 @@ export const portableFigureImagePath = (
   return `portable-assets/${safeKey}.${extension}`;
 };
 
+// A version travels by the key this manifest gave its base, never by the base's
+// record id: ids are local to one workspace, so a paper that changed machines
+// would arrive with every version pointing at nothing. A `variantOfId` naming a
+// section that is not in this package keeps its raw id here — that key resolves
+// to nothing on the way back in, which is what makes the importer drop the
+// orphan rather than restore it as a section of its own.
+const portableSectionVariantFields = (
+  section: SectionLike,
+  sectionKeyById: ReadonlyMap<string, string>,
+): {
+  variantOfKey?: string;
+  variantProfileKey?: string;
+  variantRules?: string;
+} => {
+  const variantOfId = section.variantOfId?.trim();
+  if (variantOfId === undefined || variantOfId.length === 0) return {};
+  const variantProfileKey = section.variantProfileKey?.trim();
+  // The rule travels beside the pin because it is the half that outlives this
+  // workspace: a version described as "≤200 words" is usable by whatever
+  // journals the receiving machine has, while a pin only means something there
+  // if the same profile exists. Dropping it would land the paper with a version
+  // that no journal ever picks.
+  const variantRules = section.variantRules?.trim();
+  return {
+    variantOfKey: sectionKeyById.get(variantOfId) ?? variantOfId,
+    ...(variantProfileKey !== undefined && variantProfileKey.length > 0
+      ? { variantProfileKey }
+      : {}),
+    ...(variantRules !== undefined && variantRules.length > 0
+      ? { variantRules }
+      : {}),
+  };
+};
+
 export const buildPortableResearchPaperManifest = (
   source: PortableManuscriptSource,
   exportStyle: JournalStyle,
@@ -147,6 +279,13 @@ export const buildPortableResearchPaperManifest = (
       section.id,
       `section-${index + 1}`,
     ]),
+  );
+  const figureKeyById = new Map(
+    source.figures.map((figure, index) => [figure.id, `figure-${index + 1}`]),
+  );
+  const reviewRounds = portableReviewRoundEntries(
+    source.reviewRounds ?? [],
+    sectionKeyById,
   );
 
   return {
@@ -171,6 +310,9 @@ export const buildPortableResearchPaperManifest = (
     sections: source.sections.map((section, index) => ({
       key: sectionKeyById.get(section.id) ?? `section-${index + 1}`,
       name: section.name ?? section.sectionType ?? 'Section',
+      ...(isNonEmptyString(section.refKey?.trim())
+        ? { refKey: (section.refKey as string).trim() }
+        : {}),
       sectionType: section.sectionType ?? 'OTHER',
       placement: section.placement ?? 'MAIN',
       content: section.content ?? '',
@@ -182,6 +324,8 @@ export const buildPortableResearchPaperManifest = (
         : {}),
       wordCount: section.wordCount ?? 0,
       includeInExport: section.includeInExport !== false,
+      ...(isNonEmptyString(section.notes) ? { notes: section.notes } : {}),
+      ...portableSectionVariantFields(section, sectionKeyById),
     })),
     figures: source.figures.map((figure, index) => {
       const refKey = figure.refKey ?? `figure-${index + 1}`;
@@ -197,6 +341,8 @@ export const buildPortableResearchPaperManifest = (
         assetKind: figure.assetKind ?? 'FIGURE',
         placement: figure.placement ?? 'MAIN',
         imageSource: figure.imageSource ?? 'NONE',
+        // Only the off state travels: unset has always meant numbered.
+        ...(figure.numbered === false ? { numbered: false } : {}),
         ...(imagePath !== null
           ? { imagePath }
           : figure.imageUrl !== null && figure.imageUrl !== undefined
@@ -223,6 +369,17 @@ export const buildPortableResearchPaperManifest = (
           : {}),
         ...(figure.diagramSource !== null && figure.diagramSource !== undefined
           ? { diagramSource: figure.diagramSource }
+          : {}),
+        ...(isNonEmptyString(figure.parentFigureId?.trim()) &&
+        figureKeyById.has(figure.parentFigureId as string)
+          ? {
+              parentFigureKey: figureKeyById.get(
+                figure.parentFigureId as string,
+              ),
+            }
+          : {}),
+        ...(figure.panelColumns !== null && figure.panelColumns !== undefined
+          ? { panelColumns: figure.panelColumns }
           : {}),
       };
     }),
@@ -264,6 +421,10 @@ export const buildPortableResearchPaperManifest = (
         : {}),
     })),
     exportStyle,
+    ...(source.journal !== undefined ? { journal: source.journal } : {}),
+    // Left out entirely on a manuscript with no rounds, so a paper that has
+    // never been reviewed is written exactly as it was before.
+    ...(reviewRounds.length > 0 ? { reviewRounds } : {}),
     submissionMaterials,
   };
 };
@@ -278,7 +439,9 @@ export const parsePortableResearchPaperManifest = (
   if (
     !isRecord(parsed) ||
     parsed.format !== PORTABLE_MANUSCRIPT_FORMAT ||
-    parsed.schemaVersion !== PORTABLE_MANUSCRIPT_VERSION ||
+    !PORTABLE_MANUSCRIPT_READABLE_VERSIONS.includes(
+      parsed.schemaVersion as number,
+    ) ||
     !isRecord(parsed.metadata) ||
     typeof parsed.metadata.title !== 'string' ||
     !isRecord(parsed.contributors) ||

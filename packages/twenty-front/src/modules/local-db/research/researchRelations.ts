@@ -388,6 +388,18 @@ export const RESEARCH_RELATIONS: ResearchRelation[] = [
     manyFieldLabel: 'Grant',
     manyFieldIcon: 'IconReportMoney',
   },
+  // Manuscript ↔ the review rounds it has been through (one per decision
+  // letter received, so an earlier rejection keeps its own answered points).
+  {
+    one: 'manuscript',
+    oneField: 'reviewRounds',
+    oneFieldLabel: 'Review rounds',
+    oneFieldIcon: 'IconMessage',
+    many: 'reviewRound',
+    manyField: 'manuscript',
+    manyFieldLabel: 'Manuscript',
+    manyFieldIcon: 'IconBook',
+  },
   // Obligation ↔ the documents uploaded for it (the report PDF, receipts…).
   {
     one: 'obligation',

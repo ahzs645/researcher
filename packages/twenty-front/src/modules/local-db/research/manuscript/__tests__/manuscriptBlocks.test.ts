@@ -1,4 +1,5 @@
 import { buildManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
+import { stripAssetNumberAnchors } from '@/local-db/research/manuscript/manuscriptAssetAnchors';
 import { buildBlockNoteDocument } from '@/local-db/research/manuscript/manuscriptBlocks';
 import { wrapManuscriptScript } from '@/local-db/research/manuscript/manuscriptScripts';
 
@@ -134,7 +135,11 @@ describe('buildBlockNoteDocument', () => {
     );
 
     expect(captionIndex).toBe(imageIndex - 1);
-    expect(blocks[captionIndex].content).toBe('Figure 1. Seasonal composition');
+    // The caption's label carries an invisible marker naming the asset, so the
+    // DOCX export can set that number as a Word field.
+    expect(stripAssetNumberAnchors(String(blocks[captionIndex].content))).toBe(
+      'Figure 1. Seasonal composition',
+    );
     expect(blocks[imageIndex - 2].type).toBe('pageBreak');
     expect(blocks[imageIndex + 1].type).toBe('pageBreak');
   });
@@ -626,5 +631,129 @@ describe('front matter pagination and title page templates', () => {
     });
 
     expect(JSON.stringify(blocks)).toContain('"textAlignment":"left"');
+  });
+});
+
+describe('one section counter', () => {
+  const sectioned = (content: string) =>
+    buildManuscriptBundle({
+      manuscript: { id: 'paper', name: 'Sectioned paper' },
+      style: { sectionNumbering: true },
+      sections: [
+        {
+          id: 'record-intro',
+          refKey: 'sec:intro',
+          name: 'Introduction',
+          placement: 'MAIN',
+          includeInExport: true,
+          content,
+        },
+        {
+          id: 'record-methods',
+          refKey: 'sec:methods',
+          name: 'Methods',
+          placement: 'MAIN',
+          includeInExport: true,
+          content: 'Sampling.',
+        },
+      ],
+      figures: [],
+      references: [],
+    });
+
+  it('prints the heading number a reference to that section resolved to', () => {
+    const bundle = sectioned('Described in [#sec:methods].');
+    const { blocks } = buildBlockNoteDocument(bundle);
+    const serialized = stripAssetNumberAnchors(JSON.stringify(blocks));
+
+    // The same "2" on both ends, because there is only one counter.
+    expect(serialized).toContain('2. Methods');
+    expect(serialized).toContain('Described in Section 2.');
+  });
+
+  it('carries the section key on the number so Word can make it a field', () => {
+    const { blocks } = buildBlockNoteDocument(
+      sectioned('Described in [#sec:methods].'),
+    );
+    const serialized = JSON.stringify(blocks);
+    // The marker is invisible and sits immediately before the number.
+    expect(serialized).toContain('sec:methods');
+    expect(stripAssetNumberAnchors(serialized)).not.toContain('sec:methods');
+  });
+
+  it('still counts a heading the bundle did not build from a section', () => {
+    const bundle = sectioned('Body.');
+    const withNotes = {
+      ...bundle,
+      nodes: [
+        ...bundle.nodes,
+        { kind: 'heading' as const, level: 2 as const, text: 'Notes' },
+      ],
+    };
+    const serialized = JSON.stringify(buildBlockNoteDocument(withNotes).blocks);
+    expect(serialized).toContain('3. Notes');
+  });
+});
+
+describe('a figure made of panels in the block model', () => {
+  it('sets the panels under one numbered caption', () => {
+    const bundle = buildManuscriptBundle({
+      manuscript: { id: 'paper', name: 'Panelled paper' },
+      style: {},
+      sections: [
+        {
+          id: 'res',
+          name: 'Results',
+          placement: 'MAIN',
+          includeInExport: true,
+          content: 'Body.',
+        },
+      ],
+      figures: [
+        {
+          id: 'plume',
+          refKey: 'fig:plume',
+          name: 'Plume',
+          caption: 'Transport of the plume.',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+          orderIndex: 0,
+          sectionId: 'res',
+        },
+        {
+          id: 'plume-left',
+          refKey: 'fig:plume-left',
+          name: 'Left',
+          caption: 'Northbound leg.',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+          orderIndex: 0,
+          parentFigureId: 'plume',
+          imageUrl: 'https://example.org/left.png',
+        },
+        {
+          id: 'plume-right',
+          refKey: 'fig:plume-right',
+          name: 'Right',
+          caption: 'Southbound leg.',
+          assetKind: 'FIGURE',
+          placement: 'MAIN',
+          orderIndex: 1,
+          parentFigureId: 'plume',
+          imageUrl: 'https://example.org/right.png',
+        },
+      ],
+      references: [],
+    });
+
+    const { blocks } = buildBlockNoteDocument(bundle);
+    const serialized = stripAssetNumberAnchors(JSON.stringify(blocks));
+
+    // Two pictures, each under its own letter…
+    expect(serialized).toContain('"caption":"(a) Northbound leg."');
+    expect(serialized).toContain('"caption":"(b) Southbound leg."');
+    // …and one caption, carrying one number, for the figure they make up.
+    expect(serialized).toContain('Figure 1. Transport of the plume.');
+    expect(serialized).not.toContain('Figure 2');
   });
 });

@@ -5,6 +5,9 @@ import { type ManuscriptImportSummary } from '@/local-db/research/import-wizard/
 
 type ManuscriptImportSummaryPanelProps = {
   summary: ManuscriptImportSummary;
+  // A package this app wrote, or a structured article from somewhere else.
+  // Both skip the mapping; only one of them is "yours".
+  sourceLabel?: string;
 };
 
 const StyledPanel = styled.div`
@@ -96,6 +99,7 @@ const pluralize = (count: number, noun: string): string =>
 
 export const ManuscriptImportSummaryPanel = ({
   summary,
+  sourceLabel = 'package',
 }: ManuscriptImportSummaryPanelProps) => {
   // Only asset records are enumerated here — inline math is reported apart so
   // the parts always add up to the asset total.
@@ -113,8 +117,8 @@ export const ManuscriptImportSummaryPanel = ({
   return (
     <StyledPanel>
       <StyledHeadline>
-        This package is already structured, so every part of it is imported as
-        it stands.
+        This {sourceLabel} is already structured, so every part of it is
+        imported as it stands.
       </StyledHeadline>
       <StyledCounts>
         {pluralize(summary.sectionCount, 'section')} ·{' '}

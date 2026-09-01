@@ -6,13 +6,17 @@ import { ManuscriptImportMapSidebar } from '@/local-db/research/import-wizard/co
 import { ManuscriptImportShortcutBar } from '@/local-db/research/import-wizard/components/ManuscriptImportShortcutBar';
 import { useManuscriptImportMapHotkeys } from '@/local-db/research/import-wizard/hooks/useManuscriptImportMapHotkeys';
 import { useManuscriptImportMapState } from '@/local-db/research/import-wizard/hooks/useManuscriptImportMapState';
+import { type ManuscriptRevisions } from '@/local-db/research/import-wizard/utils/readManuscriptWordRevisions';
 import {
   type ImportBlock,
   type ImportBlockOverrides,
   type ImportBlockRole,
   type ImportedSourceInfo,
 } from '@/local-db/research/manuscript/manuscriptImportBlocks';
-import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
+import {
+  type ImportedDocument,
+  type TrackedChangeResolution,
+} from '@/local-db/research/manuscript/manuscriptDocImport';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
   type PrepareManuscriptImportOptions,
@@ -23,6 +27,10 @@ type ManuscriptImportMapStepProps = {
   blocks: ImportBlock[];
   sourceInfo: ImportedSourceInfo;
   sourceName: string;
+  // Set only for a .docx that carries tracked changes or comments.
+  revisions?: ManuscriptRevisions;
+  isResolvingTrackedChanges: boolean;
+  onTrackedChangesChange: (resolution: TrackedChangeResolution) => void;
   reconcile: boolean;
   existingReferences: PrepareManuscriptImportOptions['existingReferences'];
   existingFigureRefKeys: string[];
@@ -84,6 +92,9 @@ export const ManuscriptImportMapStep = ({
   blocks,
   sourceInfo,
   sourceName,
+  revisions,
+  isResolvingTrackedChanges,
+  onTrackedChangesChange,
   reconcile,
   existingReferences,
   existingFigureRefKeys,
@@ -99,6 +110,7 @@ export const ManuscriptImportMapStep = ({
     blocks,
     sourceInfo,
     sourceName,
+    commentAnchors: revisions?.comments ?? [],
     reconcile,
     existingReferences,
     existingFigureRefKeys,
@@ -168,6 +180,9 @@ export const ManuscriptImportMapStep = ({
           blocks={blocks}
           overrides={mapState.overrides}
           sourceName={sourceName}
+          revisions={revisions}
+          isResolvingTrackedChanges={isResolvingTrackedChanges}
+          onTrackedChangesChange={onTrackedChangesChange}
           isPreparing={mapState.isPreparing}
           onBack={onBack}
           onContinue={mapState.handleContinue}

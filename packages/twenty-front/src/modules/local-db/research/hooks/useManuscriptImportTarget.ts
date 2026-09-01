@@ -111,6 +111,14 @@ export const useManuscriptImportTarget = (manuscriptId: string) => {
     existingFigureRefKeys: figureRefKeys,
     exportTableStyle,
     targetJournal,
+    exportStyleOverrides: manuscript?.exportStyleOverrides ?? null,
+    existingJournals: (journalRecords as unknown as JournalRecord[]).map(
+      (journal) => ({
+        id: journal.id,
+        name: journal.name,
+        profileKey: journal.profileKey,
+      }),
+    ),
     submissionExtras: manuscript?.submissionExtras ?? null,
     competingInterests: manuscript?.competingInterests ?? null,
     refetchImportedRecords,

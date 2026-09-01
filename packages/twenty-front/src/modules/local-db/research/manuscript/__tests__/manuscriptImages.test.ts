@@ -103,3 +103,34 @@ describe('figureToMarkdown', () => {
     );
   });
 });
+
+describe('describeImageSource for non-picture assets', () => {
+  it('describes an equation by its body, not by a missing image', () => {
+    expect(
+      describeImageSource({
+        id: 'e1',
+        assetKind: 'EQUATION',
+        equationLatex: '\\sum_{i} x_{i}',
+        imageSource: 'NONE',
+      }),
+    ).toBe('Typeset from LaTeX');
+    expect(
+      describeImageSource({
+        id: 'e2',
+        assetKind: 'EQUATION',
+        imageSource: 'NONE',
+      }),
+    ).toBe('No equation body yet');
+  });
+
+  it('describes a table by its grid', () => {
+    expect(
+      describeImageSource({
+        id: 't1',
+        assetKind: 'TABLE',
+        tableData: '| a | b |\n| --- | --- |',
+        imageSource: 'NONE',
+      }),
+    ).toBe('Table grid');
+  });
+});

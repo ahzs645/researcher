@@ -39,10 +39,19 @@ export const resolveFigureImage = (figure: FigureLike): ResolvedImage => {
 };
 
 // True when a figure has a usable image (vs caption-only placeholder). A
-// diagram counts: its picture is rendered from Mermaid source at export time.
-export const figureHasImage = (figure: FigureLike): boolean =>
+// diagram counts: its picture is rendered from Mermaid source at export time,
+// and so does a panel's, because a figure made of panels is a container — its
+// pixels are its panels'.
+export const figureHasImage = (
+  figure: FigureLike & { panels?: readonly FigureLike[] },
+): boolean =>
   resolveFigureImage(figure).kind !== 'none' ||
-  isNonEmptyString(figure.diagramSource);
+  isNonEmptyString(figure.diagramSource) ||
+  (figure.panels ?? []).some(
+    (panel) =>
+      resolveFigureImage(panel).kind !== 'none' ||
+      isNonEmptyString(panel.diagramSource),
+  );
 
 // Render a numbered figure as a self-contained Markdown block: the image (or a
 // placeholder), then the captioned label, plus credit if present. Tables, which
@@ -67,7 +76,33 @@ export const figureToMarkdown = (figure: NumberedFigure): string => {
     return lines.join('\n\n');
   }
 
-  if (image.kind !== 'none') {
+  // A figure made of panels draws each panel in turn, each under its own
+  // letter, and then one caption for the lot: the panels are cells of one
+  // numbered figure, not figures that happen to be adjacent.
+  const panels = figure.panels ?? [];
+  if (panels.length > 0) {
+    for (const panel of panels) {
+      const panelImage = resolveFigureImage(panel);
+      lines.push(`<a id="${panel.refKey ?? panel.id}"></a>`);
+      if (panelImage.kind !== 'none') {
+        lines.push(
+          `![${isNonEmptyString(panel.altText) ? panel.altText : (panel.name ?? panel.label)}](${panelImage.src})`,
+        );
+      } else if (isNonEmptyString(panel.diagramSource)) {
+        lines.push(`\`\`\`mermaid\n${panel.diagramSource.trim()}\n\`\`\``);
+      }
+      const panelCaption = isNonEmptyString(panel.caption)
+        ? panel.caption
+        : isNonEmptyString(panel.name)
+          ? panel.name
+          : '';
+      lines.push(
+        [`**${panel.label}**`, panelCaption]
+          .filter((part) => part.length > 0)
+          .join(' '),
+      );
+    }
+  } else if (image.kind !== 'none') {
     lines.push(`![${alt}](${image.src})`);
   } else if (isNonEmptyString(figure.diagramSource)) {
     // No raster yet — carry the Mermaid source itself, which every Markdown
@@ -99,6 +134,16 @@ export const figureToMarkdown = (figure: NumberedFigure): string => {
 
 // A short, human description of where a figure's image comes from, for the UI.
 export const describeImageSource = (figure: FigureLike): string => {
+  // An equation is typeset, not pictured — "No image yet" reads as a missing
+  // asset when nothing is missing.
+  if (figure.assetKind === 'EQUATION') {
+    return isNonEmptyString(figure.equationLatex)
+      ? 'Typeset from LaTeX'
+      : 'No equation body yet';
+  }
+  if (figure.assetKind === 'TABLE' && isNonEmptyString(figure.tableData)) {
+    return 'Table grid';
+  }
   const resolved = resolveFigureImage(figure);
   if (resolved.kind === 'dataurl' || resolved.kind === 'url') {
     switch (figure.imageSource) {

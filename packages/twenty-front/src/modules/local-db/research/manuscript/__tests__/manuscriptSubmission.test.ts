@@ -279,3 +279,74 @@ describe('validateSubmission', () => {
     ).toBe('figures');
   });
 });
+// The checks a caller has to compute for us — the Crossref retraction scan, the
+// screening of the manuscript's sections — have to count for exactly as much as
+// the ones raised here, or supplying one would be decoration.
+describe('validateSubmission with caller-supplied checks', () => {
+  const readyMaterials = {
+    coverLetter: 'Dear Editor.',
+    competingInterests: 'Nothing to declare.',
+    highlights: ['One result', 'Second result', 'Third result'].join('\n'),
+  };
+
+  it('changes nothing when no extra checks are supplied', () => {
+    const withoutExtras = validateSubmission(
+      buildManuscriptBundle(baseInput),
+      readyMaterials,
+    );
+    const withEmptyExtras = validateSubmission(
+      buildManuscriptBundle(baseInput),
+      readyMaterials,
+      [],
+    );
+
+    expect(withoutExtras.ready).toBe(true);
+    expect(withEmptyExtras).toEqual(withoutExtras);
+  });
+
+  it('lets a supplied error gate the export', () => {
+    const readiness = validateSubmission(
+      buildManuscriptBundle(baseInput),
+      readyMaterials,
+      [
+        {
+          id: 'retraction-ref-1',
+          label: 'Retracted reference',
+          detail: '[@smith2019] A retracted paper — Retraction (2021)',
+          severity: 'ERROR',
+          target: 'references',
+        },
+      ],
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.errorCount).toBe(1);
+    expect(
+      readiness.checks.find((check) => check.id === 'retraction-ref-1')?.target,
+    ).toBe('references');
+  });
+
+  it('counts a supplied warning without gating the export', () => {
+    const baseline = validateSubmission(
+      buildManuscriptBundle(baseInput),
+      readyMaterials,
+    );
+    const readiness = validateSubmission(
+      buildManuscriptBundle(baseInput),
+      readyMaterials,
+      [
+        {
+          id: 'automated-screening',
+          label: 'Automated screening',
+          detail: 'not found: Open data statement',
+          severity: 'WARNING',
+          target: 'submission',
+        },
+      ],
+    );
+
+    expect(readiness.ready).toBe(true);
+    expect(readiness.warningCount).toBe(baseline.warningCount + 1);
+    expect(readiness.checks).toHaveLength(baseline.checks.length + 1);
+  });
+});

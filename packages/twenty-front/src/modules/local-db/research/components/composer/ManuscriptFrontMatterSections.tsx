@@ -1,10 +1,18 @@
 import { styled } from '@linaria/react';
+import { isNonEmptyString } from '@sniptt/guards';
 import { useEffect, useMemo, useState } from 'react';
+import { isDefined } from 'twenty-shared/utils';
 import { H3Title, IconChevronDown, IconChevronRight } from 'twenty-ui/display';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptSectionEditor } from '@/local-db/research/components/ManuscriptSectionEditor';
+import { ManuscriptSectionVersionBar } from '@/local-db/research/components/composer/ManuscriptSectionVersionBar';
+import { type ExistingJournalTemplate } from '@/local-db/research/import-wizard/hooks/useManuscriptImportCommit';
 import { extractCitationKeys } from '@/local-db/research/manuscript/manuscriptCrossReference';
+import {
+  sectionVariantKey,
+  sectionVariantsByBaseId,
+} from '@/local-db/research/manuscript/manuscriptSectionVariants';
 import {
   type FigureLike,
   type JournalStyle,
@@ -28,6 +36,7 @@ const sectionTypeLabel = (sectionType?: string | null) =>
   (sectionType ?? 'OTHER').toLowerCase().replaceAll('_', ' ');
 
 type ManuscriptFrontMatterSectionsProps = {
+  existingJournals?: ExistingJournalTemplate[];
   figures: FigureLike[];
   onChangeIncludeInExport: (
     sectionId: string,
@@ -37,6 +46,7 @@ type ManuscriptFrontMatterSectionsProps = {
     sectionId: string,
     placement: SectionPlacement,
   ) => Promise<void>;
+  onCreateSectionVariant: (baseSectionId: string) => Promise<void>;
   onPersistSection: (sectionId: string, markdown: string) => void;
   references: ReferenceLike[];
   sections: SectionLike[];
@@ -81,11 +91,27 @@ const StyledRowButton = styled.button`
   width: 100%;
 `;
 
-const StyledName = styled.span`
+const StyledHeading = styled.span`
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+`;
+
+const StyledName = styled.span`
   font-size: ${themeCssVariables.font.size.sm};
   font-weight: ${themeCssVariables.font.weight.medium};
-  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+// Only a row that actually has a version renders this line, so a paper that
+// never uses versions — most of them — keeps the row it always had.
+const StyledVersionNote = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -99,9 +125,14 @@ const StyledBadge = styled.span`
   padding: 1px ${themeCssVariables.spacing[1]};
 `;
 
-const StyledWordCount = styled.span`
-  color: ${themeCssVariables.font.color.tertiary};
+const StyledWordCount = styled.span<{ over: boolean }>`
+  color: ${({ over }) =>
+    over
+      ? themeCssVariables.font.color.danger
+      : themeCssVariables.font.color.tertiary};
   font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${({ over }) =>
+    over ? themeCssVariables.font.weight.medium : 'inherit'};
   white-space: nowrap;
 `;
 
@@ -146,9 +177,11 @@ const StyledCheckbox = styled.label`
 `;
 
 export const ManuscriptFrontMatterSections = ({
+  existingJournals,
   figures,
   onChangeIncludeInExport,
   onChangePlacement,
+  onCreateSectionVariant,
   onPersistSection,
   references,
   sections,
@@ -161,8 +194,16 @@ export const ManuscriptFrontMatterSections = ({
       sections.filter(
         (section) =>
           section.placement === 'FRONT_MATTER' &&
+          // A version mirrors its base's placement, name and type, so without
+          // this it would sit beside the base as a second, identical-looking
+          // row — the same duplicate the outline already refuses to draw.
+          !isNonEmptyString(section.variantOfId) &&
           section.sectionType?.toUpperCase() !== 'KEYWORDS',
       ),
+    [sections],
+  );
+  const versionsByBaseId = useMemo(
+    () => sectionVariantsByBaseId(sections),
     [sections],
   );
   const citationKeys = useMemo(
@@ -175,22 +216,95 @@ export const ManuscriptFrontMatterSections = ({
       }, []),
     [sections],
   );
+  const activeVariantKey = sectionVariantKey(style);
+  const activeJournalLabel = style.name ?? activeVariantKey;
+  // Versions are keyed by profile, not by journal record, so a version can name
+  // a profile this workspace does not have. Only the journals it does have can
+  // be given their proper name; the rest fall back to the key itself.
+  const journalNameByVariantKey = useMemo(
+    () =>
+      new Map(
+        (existingJournals ?? []).flatMap((journal) => {
+          const key = sectionVariantKey(journal);
+          return isNonEmptyString(key) && isNonEmptyString(journal.name)
+            ? [[key, journal.name] as const]
+            : [];
+        }),
+      ),
+    [existingJournals],
+  );
   const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(
     () => new Set(),
   );
+  // Which wording each row is editing, keyed by the id of the base section that
+  // owns the row. Rows expand independently here, unlike the Write tab's single
+  // editor, so one shared selection — the composer's or a lone local id — would
+  // make opening a second row change what the first one is editing.
+  const [selectedSectionIdByBaseId, setSelectedSectionIdByBaseId] = useState<
+    Record<string, string>
+  >({});
+  // Which row is mid-create rather than a single boolean: the Write tab has one
+  // bar and can use a flag, but every row here draws its own, and one boolean
+  // would put "Adding version…" on all of them at once.
+  const [creatingVersionForSectionId, setCreatingVersionForSectionId] =
+    useState<string | null>(null);
+
+  // A version has no row of its own, so a composer-wide selection that lands on
+  // one belongs to the row of the base it rewords.
+  const composerSelectedVariantOfId = sections.find(
+    (section) => section.id === selectedSectionId,
+  )?.variantOfId;
+  const composerSelectedBaseId = isNonEmptyString(composerSelectedVariantOfId)
+    ? composerSelectedVariantOfId
+    : selectedSectionId;
 
   useEffect(() => {
     if (
-      selectedSectionId === undefined ||
-      !frontMatterSections.some((section) => section.id === selectedSectionId)
+      composerSelectedBaseId === undefined ||
+      !frontMatterSections.some(
+        (section) => section.id === composerSelectedBaseId,
+      )
     ) {
       return;
     }
-    setExpandedSectionIds((current) => new Set(current).add(selectedSectionId));
-  }, [frontMatterSections, selectedSectionId]);
+    setExpandedSectionIds((current) =>
+      new Set(current).add(composerSelectedBaseId),
+    );
+  }, [frontMatterSections, composerSelectedBaseId]);
 
   const reportUpdateFailure = () =>
     enqueueErrorSnackBar({ message: 'Could not update front-matter section' });
+
+  // Until the author picks inside a row, it follows the composer's selection
+  // when that points into this section — which is what makes "New version for
+  // MDPI" open the version it just created, as the Write tab does. Rejected: an
+  // effect copying the composer's id into local state, which would snap the row
+  // back to the version every time a save refetched the sections.
+  const selectedIdForRow = (baseSection: SectionLike): string => {
+    const chosen = selectedSectionIdByBaseId[baseSection.id];
+    if (isNonEmptyString(chosen)) return chosen;
+    return composerSelectedBaseId === baseSection.id &&
+      isNonEmptyString(selectedSectionId)
+      ? selectedSectionId
+      : baseSection.id;
+  };
+
+  // The refusal to write a second version for the same journal comes back as a
+  // rejected promise and is shown as it was written, rather than being turned
+  // into a generic failure the author cannot act on.
+  const createSectionVersion = (baseSectionId: string) => {
+    setCreatingVersionForSectionId(baseSectionId);
+    void onCreateSectionVariant(baseSectionId)
+      .catch((error: unknown) =>
+        enqueueErrorSnackBar({
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Could not add a journal version',
+        }),
+      )
+      .finally(() => setCreatingVersionForSectionId(null));
+  };
 
   return (
     <StyledArea aria-label="Front-matter sections">
@@ -200,6 +314,31 @@ export const ManuscriptFrontMatterSections = ({
       ) : (
         frontMatterSections.map((section) => {
           const isExpanded = expandedSectionIds.has(section.id);
+          const versions = versionsByBaseId.get(section.id) ?? [];
+          const selectedId = selectedIdForRow(section);
+          // A stale id — the version was deleted elsewhere — falls back to the
+          // paper's own text rather than leaving the row with no editor.
+          const editedSection =
+            versions.find((version) => version.id === selectedId) ?? section;
+          const activeVersion = isNonEmptyString(activeVariantKey)
+            ? versions.find(
+                (version) => version.variantProfileKey === activeVariantKey,
+              )
+            : undefined;
+          // The header reports what this section will be when exported to the
+          // journal now selected, counted against that journal's cap — the same
+          // reading the outline row gives, so the two agree.
+          const shownSection = activeVersion ?? section;
+          const wordCount = shownSection.wordCount ?? 0;
+          const wordLimit =
+            isDefined(activeVersion) &&
+            isDefined(activeVersion.wordLimit) &&
+            activeVersion.wordLimit > 0
+              ? activeVersion.wordLimit
+              : null;
+          const versionNote = isDefined(activeVersion)
+            ? `Exports as ${activeJournalLabel ?? 'journal'} version`
+            : `Has ${versions.length} journal ${versions.length === 1 ? 'version' : 'versions'}, none for ${activeJournalLabel ?? 'this journal'}`;
           return (
             <StyledSection key={section.id}>
               <StyledRowButton
@@ -215,12 +354,23 @@ export const ManuscriptFrontMatterSections = ({
                 }
               >
                 {isExpanded ? <IconChevronDown /> : <IconChevronRight />}
-                <StyledName>{section.name ?? 'Untitled section'}</StyledName>
+                <StyledHeading>
+                  <StyledName>{section.name ?? 'Untitled section'}</StyledName>
+                  {versions.length > 0 ? (
+                    <StyledVersionNote title={versionNote}>
+                      {versionNote}
+                    </StyledVersionNote>
+                  ) : null}
+                </StyledHeading>
                 <StyledBadge>
                   {sectionTypeLabel(section.sectionType)}
                 </StyledBadge>
-                <StyledWordCount>
-                  {section.wordCount ?? 0} words
+                <StyledWordCount
+                  over={wordLimit !== null && wordCount > wordLimit}
+                >
+                  {wordLimit === null
+                    ? `${wordCount} words`
+                    : `${wordCount} / ${wordLimit} words`}
                 </StyledWordCount>
               </StyledRowButton>
               {isExpanded ? (
@@ -262,12 +412,37 @@ export const ManuscriptFrontMatterSections = ({
                       Include in export
                     </StyledCheckbox>
                   </StyledActions>
+                  {/* Placement and export inclusion above stay on the base
+                      section even while a version is open: they are the shape
+                      of the paper, which a version never changes — only the
+                      words below it do. */}
+                  <ManuscriptSectionVersionBar
+                    baseSection={section}
+                    versions={versions}
+                    selectedSectionId={editedSection.id}
+                    activeVariantKey={activeVariantKey}
+                    activeJournalLabel={activeJournalLabel}
+                    journalNameByVariantKey={journalNameByVariantKey}
+                    isCreatingVersion={
+                      creatingVersionForSectionId === section.id
+                    }
+                    onCreateVersion={createSectionVersion}
+                    onSelectSection={(sectionId) =>
+                      setSelectedSectionIdByBaseId((current) => ({
+                        ...current,
+                        [section.id]: sectionId,
+                      }))
+                    }
+                  />
                   <ManuscriptSectionEditor
+                    // Remounted per section so the editor loads the wording now
+                    // selected instead of keeping the previous one's buffer.
+                    key={editedSection.id}
                     citationKeys={citationKeys}
                     figures={figures}
-                    initialMarkdown={section.content ?? ''}
+                    initialMarkdown={editedSection.content ?? ''}
                     onPersist={(markdown) =>
-                      onPersistSection(section.id, markdown)
+                      onPersistSection(editedSection.id, markdown)
                     }
                     references={references}
                     style={style}

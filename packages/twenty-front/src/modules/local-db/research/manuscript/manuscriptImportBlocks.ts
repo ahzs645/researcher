@@ -1,6 +1,9 @@
 import {
+  attachImportedComments,
+  classifyLayoutTable,
   parseImportedAssetCaption,
   parseMarkdownDocument,
+  type ImportedCommentAnchor,
   type ImportedDocument,
   type WordMarkdownBlock,
 } from './manuscriptDocImport';
@@ -15,6 +18,9 @@ export type ImportedSourceInfo = Pick<
   | 'titlePageExtraLines'
   | 'warnings'
   | 'stats'
+  | 'sourceStylesXml'
+  | 'sourceDocumentName'
+  | 'revisionSummary'
 >;
 
 export type ImportBlockRole =
@@ -112,7 +118,15 @@ const blockText = (markdown: string, role: ImportBlockRole): string => {
     return IMAGE_LINE.exec(markdown.trim())?.[1]?.trim() ?? '';
   }
   if (role === 'equation') {
+    const layout = classifyLayoutTable(markdown.trim().split('\n'));
+    if (layout?.kind === 'equation') {
+      return `${layout.source}\u2003(${layout.label})`;
+    }
     return EQUATION_BLOCK.exec(markdown.trim())?.[1]?.trim() ?? markdown.trim();
+  }
+  if (role === 'body') {
+    const layout = classifyLayoutTable(markdown.trim().split('\n'));
+    if (layout?.kind === 'callout') return layout.text;
   }
   return markdown.trim();
 };
@@ -148,8 +162,18 @@ const classifyBlock = (
   }
 
   if (wordBlock?.kind === 'table' || isGfmTableBlock(normalized)) {
+    // Word sets a numbered display equation as a one-row, two-column table and
+    // a boxed note as a one-cell table. The import lifts both back out, so the
+    // review list has to name them for what they are — otherwise a reader
+    // "corrects" fourteen equations that were never tables.
+    const layout = classifyLayoutTable(normalized.split('\n'));
     return {
-      role: 'table',
+      role:
+        layout?.kind === 'equation'
+          ? 'equation'
+          : layout?.kind === 'callout'
+            ? 'body'
+            : 'table',
       roleConfidence: 'certain',
       ...(wordBlock?.styleName !== undefined
         ? { sourceStyleName: wordBlock.styleName }
@@ -418,12 +442,17 @@ const serializeBlock = (
     return `${'#'.repeat(headingLevel)} ${stripMarkdownDelimiters(markdown)}`;
   }
   if (role === 'equation') {
+    // A numbered equation keeps the shape the extractor reads, so it lands as
+    // a numbered `EQUATION` asset rather than as anonymous display math.
+    if (classifyLayoutTable(markdown.trim().split('\n'))?.kind === 'equation') {
+      return markdown.trim();
+    }
     return `$$${stripMarkdownDelimiters(markdown)}$$`;
   }
   if (role === 'caption') {
     return serializeCaption(block, override, blocks, blocksById, overrides);
   }
-  if (role === 'body' && block.role === 'table') {
+  if (role === 'body' && isGfmTableBlock(markdown.trim())) {
     return parseMarkdownTable(markdown)
       .map((row) => row.join(' '))
       .join('\n')
@@ -439,6 +468,10 @@ export const assembleImportedDocument = (
   blocks: ImportBlock[],
   overrides: ImportBlockOverrides,
   sourceInfo: ImportedSourceInfo = {},
+  // Comments the source anchored under a heading. Mapping rewrites the document
+  // through Markdown, so they are re-attached to whatever sections come out of
+  // it rather than carried on the blocks.
+  commentAnchors: ImportedCommentAnchor[] = [],
 ): ImportedDocument => {
   const blocksById = new Map(blocks.map((block) => [block.id, block]));
   const linkedCaptionsByAssetId = new Map<string, ImportBlock[]>();
@@ -514,6 +547,7 @@ export const assembleImportedDocument = (
   const document = parseMarkdownDocument(serializedBlocks.join('\n\n'));
   return {
     ...document,
+    sections: attachImportedComments(document.sections, commentAnchors),
     ...(sourceInfo.title !== undefined ? { title: sourceInfo.title } : {}),
     ...(sourceInfo.authorLine !== undefined
       ? { authorLine: sourceInfo.authorLine }
@@ -531,6 +565,15 @@ export const assembleImportedDocument = (
       ? { warnings: sourceInfo.warnings }
       : {}),
     ...(sourceInfo.stats !== undefined ? { stats: sourceInfo.stats } : {}),
+    ...(sourceInfo.sourceStylesXml !== undefined
+      ? { sourceStylesXml: sourceInfo.sourceStylesXml }
+      : {}),
+    ...(sourceInfo.sourceDocumentName !== undefined
+      ? { sourceDocumentName: sourceInfo.sourceDocumentName }
+      : {}),
+    ...(sourceInfo.revisionSummary !== undefined
+      ? { revisionSummary: sourceInfo.revisionSummary }
+      : {}),
     ...(suppressedAssetLineSignatures.size > 0
       ? {
           suppressedAssetLineSignatures: [...suppressedAssetLineSignatures],

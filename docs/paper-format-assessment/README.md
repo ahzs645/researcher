@@ -190,3 +190,29 @@ The gap list above is historical. Current state:
    lookups inherently need connectivity and now fail with explicit messages.
 7. **Persistence/collaboration — unchanged** (IndexedDB locally; Convex is
    still the planned backend, and its `recordSchema` lags the frontend model).
+
+---
+
+## 7. Second pass (2026-08-24): a real AMT paper
+
+The status list above was verified against a real Copernicus/AMT manuscript in
+its two working shapes, run through the actual pipeline rather than a sample.
+It exposed a further set of defects — Word heading styles losing to a prose
+heuristic, journal title blocks importing as sections, numbered display
+equations importing as tables (and renumbering the real ones), and three
+distinct citation losses — all now fixed, plus a seeded AMT/Copernicus journal
+template. A second round then fixed what only shows up in the finished
+document: full reference-entry parsing (co-authors, initials, journal, volume,
+pages — an imported bibliography now exports as the paper wrote it), byline and
+affiliation splitting, Unicode maths recovered as LaTeX, and a switch that
+keeps the source document's own asset numbering. A third closed the round
+trip: a portable package now carries its journal template and restores itself
+without a review step, and imported equations are named after the quantity
+they define instead of by number alone. A fourth made the Word file a Word
+file: maths written in a sentence exports as a real equation object, and every
+number is a live `SEQ` field with `REF` cross-references pointing at it, so
+moving an equation renumbers the sentences that name it. See
+**`amt-paper-transposition.md`** in this folder for the run, the fixes, and
+what is still open; the end-to-end regression lives in
+`manuscriptAmtPaperImport.test.ts`, and a captured run through the real
+interface in `../amt-import-walkthrough/`.

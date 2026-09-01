@@ -1,13 +1,20 @@
 import { useCallback, useRef, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 
+import { manuscriptImportedSectionNotes } from '@/local-db/research/manuscript/manuscriptComments';
 import { type ImportedDocument } from '@/local-db/research/manuscript/manuscriptDocImport';
 import {
   type ExistingImportReference,
   type PreparedManuscriptImport,
 } from '@/local-db/research/manuscript/manuscriptImportPrepare';
-import { portableManuscriptRecordUpdate } from '@/local-db/research/manuscript/manuscriptPortableImport';
+import {
+  matchPortableJournalTemplate,
+  portableManuscriptRecordUpdate,
+  portableSectionVariantUpdates,
+} from '@/local-db/research/manuscript/manuscriptPortableImport';
+import { portableReviewRoundRecords } from '@/local-db/research/manuscript/manuscriptPortableReviewRounds';
 import { type SubmissionTransposeUpdate } from '@/local-db/research/manuscript/manuscriptSubmissionTranspose';
+import { withImportedSourceStyles } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { serializeManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';
 import { dedupeReferenceDrafts } from '@/local-db/research/manuscript/manuscriptReferenceStore';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
@@ -20,6 +27,18 @@ type UseManuscriptImportCommitOptions = {
   manuscriptName?: string | null;
   existingSectionCount: number;
   existingReferences: ExistingImportReference[];
+  // What the manuscript already carries, so an imported document's own Word
+  // styles are adopted without overwriting a template the author picked.
+  existingExportStyleOverrides?: string | null;
+  // The workspace's journal templates, so a package that carries its own can
+  // be linked to the one already here instead of duplicating it.
+  existingJournals?: ExistingJournalTemplate[];
+};
+
+export type ExistingJournalTemplate = {
+  id: string;
+  name?: string | null;
+  profileKey?: string | null;
 };
 
 export type ManuscriptImportCreatedCounts = {
@@ -32,12 +51,14 @@ type ManuscriptImportCreatedRecords = {
   references: string[];
   sections: string[];
   figures: string[];
+  reviewRounds: string[];
 };
 
 const emptyCreatedRecords = (): ManuscriptImportCreatedRecords => ({
   references: [],
   sections: [],
   figures: [],
+  reviewRounds: [],
 });
 
 const emptyCreatedCounts = (): ManuscriptImportCreatedCounts => ({
@@ -55,6 +76,7 @@ type ManuscriptMetadataUpdate = {
   manuscriptType?: string;
   status?: string;
   targetVenue?: string;
+  targetJournalId?: string;
   doi?: string;
   supplementTitle?: string;
   supplementAuthorLine?: string;
@@ -74,6 +96,8 @@ export const useManuscriptImportCommit = ({
   manuscriptName,
   existingSectionCount,
   existingReferences,
+  existingExportStyleOverrides,
+  existingJournals,
 }: UseManuscriptImportCommitOptions) => {
   const { createOneRecord: createSection } = useCreateOneRecord({
     objectNameSingular: 'manuscriptSection',
@@ -84,6 +108,12 @@ export const useManuscriptImportCommit = ({
   const { createOneRecord: createFigure } = useCreateOneRecord({
     objectNameSingular: 'figure',
   });
+  const { createOneRecord: createJournalTemplate } = useCreateOneRecord({
+    objectNameSingular: 'journalTemplate',
+  });
+  const { createOneRecord: createReviewRound } = useCreateOneRecord({
+    objectNameSingular: 'reviewRound',
+  });
   const { deleteOneRecord: deleteSection } = useDeleteOneRecord({
     objectNameSingular: 'manuscriptSection',
   });
@@ -92,6 +122,9 @@ export const useManuscriptImportCommit = ({
   });
   const { deleteOneRecord: deleteFigure } = useDeleteOneRecord({
     objectNameSingular: 'figure',
+  });
+  const { deleteOneRecord: deleteReviewRound } = useDeleteOneRecord({
+    objectNameSingular: 'reviewRound',
   });
   const { updateOneRecord } = useUpdateOneRecord();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
@@ -150,6 +183,7 @@ export const useManuscriptImportCommit = ({
 
         const sectionIdsByOrder = new Map<number, string>();
         for (const section of preparedImport.sections) {
+          const sectionNotes = manuscriptImportedSectionNotes(section);
           const created = await createSection({
             name: section.name,
             manuscriptId,
@@ -165,9 +199,17 @@ export const useManuscriptImportCommit = ({
                 ? false
                 : section.includeInExport,
             status: section.status ?? 'DRAFTING',
+            // The key an in-text `[#sec:…]` points at, when the source
+            // carried one — without it the references restore as dangling.
+            ...(section.refKey === undefined ? {} : { refKey: section.refKey }),
             ...(section.wordLimit !== undefined
               ? { wordLimit: section.wordLimit }
               : {}),
+            // A reviewer's comments have no record of their own; the section's
+            // notes are where they survive the import — and where an answer to
+            // one is written, which is why a package's notes come back whole
+            // rather than being re-rendered from the comments alone.
+            ...(sectionNotes === undefined ? {} : { notes: sectionNotes }),
           });
           currentCreatedCounts = {
             ...currentCreatedCounts,
@@ -185,8 +227,37 @@ export const useManuscriptImportCommit = ({
           });
         }
 
+        // A version has to wait for its base to exist before it can point at
+        // it, so the link is written after every section is created rather
+        // than in the loop above.
+        // Only a portable package carries versions, and `preparedImport` is a
+        // union of the two import shapes, so the branch is narrowed here
+        // rather than asserted.
+        for (const update of portableSectionVariantUpdates(
+          'sectionVariants' in preparedImport
+            ? (preparedImport.sectionVariants ?? [])
+            : [],
+          sectionIdsByOrder,
+        )) {
+          await updateOneRecord({
+            objectNameSingular: 'manuscriptSection',
+            idToUpdate: update.sectionId,
+            updateOneRecordInput: {
+              variantOfId: update.variantOfId,
+              ...(update.variantRules !== undefined
+                ? { variantRules: update.variantRules }
+                : {}),
+              ...(update.variantProfileKey !== undefined
+                ? { variantProfileKey: update.variantProfileKey }
+                : {}),
+            },
+          });
+        }
+
+        const figureIdsByOrder = new Map<number, string>();
+        const panelParentOrderById = new Map<string, number>();
         for (const figure of preparedImport.figures) {
-          const { sectionOrderIndex, ...record } = figure;
+          const { sectionOrderIndex, parentOrderIndex, ...record } = figure;
           const created = await createFigure({
             ...record,
             manuscriptId,
@@ -196,8 +267,13 @@ export const useManuscriptImportCommit = ({
               : {}),
           });
           const createdId = (created as { id?: string } | undefined)?.id;
-          if (isDefined(createdId))
+          if (isDefined(createdId)) {
             currentCreatedRecords.figures.push(createdId);
+            figureIdsByOrder.set(figure.orderIndex, createdId);
+            if (parentOrderIndex !== undefined) {
+              panelParentOrderById.set(createdId, parentOrderIndex);
+            }
+          }
           currentCreatedCounts = {
             ...currentCreatedCounts,
             figures: currentCreatedCounts.figures + 1,
@@ -206,6 +282,43 @@ export const useManuscriptImportCommit = ({
           setCreatedRecords({
             ...currentCreatedRecords,
             figures: [...currentCreatedRecords.figures],
+          });
+        }
+
+        // A panel has to wait for its parent to exist before it can point at
+        // it — the same two-step the section versions above take, and for the
+        // same reason: neither record has an id until it is created.
+        for (const [figureId, parentOrderIndex] of panelParentOrderById) {
+          const parentFigureId = figureIdsByOrder.get(parentOrderIndex);
+          if (!isDefined(parentFigureId) || parentFigureId === figureId) {
+            continue;
+          }
+          await updateOneRecord({
+            objectNameSingular: 'figure',
+            idToUpdate: figureId,
+            updateOneRecordInput: { parentFigureId },
+          });
+        }
+
+        // A round's points name the sections its answers changed, so the
+        // rounds are built after every section exists — the same wait the
+        // version links and the panel links take above. A round has no id of
+        // its own until now either, so its points are written once, resolved,
+        // rather than created empty and patched afterwards.
+        for (const round of portableReviewRoundRecords(
+          'reviewRounds' in preparedImport
+            ? (preparedImport.reviewRounds ?? [])
+            : [],
+          sectionIdsByOrder,
+        )) {
+          const created = await createReviewRound({ ...round, manuscriptId });
+          const createdId = (created as { id?: string } | undefined)?.id;
+          if (isDefined(createdId)) {
+            currentCreatedRecords.reviewRounds.push(createdId);
+          }
+          setCreatedRecords({
+            ...currentCreatedRecords,
+            reviewRounds: [...currentCreatedRecords.reviewRounds],
           });
         }
 
@@ -231,6 +344,16 @@ export const useManuscriptImportCommit = ({
               document.titlePageExtraLines,
             );
         }
+        // The source .docx's own styles become the export style base, so the
+        // file this manuscript exports looks like the file it came from.
+        const importedStyles = withImportedSourceStyles(
+          existingExportStyleOverrides,
+          document.sourceStylesXml,
+          document.sourceDocumentName,
+        );
+        if (importedStyles !== undefined) {
+          manuscriptUpdate.exportStyleOverrides = importedStyles;
+        }
         if (submissionTransposeUpdate !== undefined) {
           Object.assign(manuscriptUpdate, submissionTransposeUpdate);
         }
@@ -239,6 +362,27 @@ export const useManuscriptImportCommit = ({
             manuscriptUpdate,
             portableManuscriptRecordUpdate(document.portablePackage),
           );
+          // A first-party package names the template the paper is written
+          // against. Link the one this workspace already has, or create it —
+          // otherwise the restored paper is formatted by whichever profile
+          // happens to be listed first.
+          const portableJournal = document.portablePackage.journal;
+          if (portableJournal !== undefined) {
+            const matched = matchPortableJournalTemplate(
+              portableJournal,
+              existingJournals ?? [],
+            );
+            if (matched !== undefined) {
+              manuscriptUpdate.targetJournalId = matched.id;
+            } else {
+              const created = await createJournalTemplate(
+                portableJournal as unknown as Record<string, unknown>,
+              );
+              if (isDefined(created?.id)) {
+                manuscriptUpdate.targetJournalId = created.id;
+              }
+            }
+          }
         }
         if (Object.keys(manuscriptUpdate).length > 0) {
           await updateOneRecord({
@@ -248,8 +392,14 @@ export const useManuscriptImportCommit = ({
           });
         }
 
+        // Rounds are named only when there are some: an ordinary import would
+        // otherwise report "0 review rounds" on every paper never reviewed.
+        const restoredRounds =
+          currentCreatedRecords.reviewRounds.length === 0
+            ? ''
+            : ` · ${currentCreatedRecords.reviewRounds.length} review rounds`;
         enqueueSuccessSnackBar({
-          message: `${preparedImport.portable ? 'Reconstructed' : 'Imported'} ${totalSectionCount} sections · ${referencesToCreate.length} references · ${preparedImport.linkedCount} citations · ${preparedImport.linkedAssetCount} figure/table links · ${preparedImport.figures.length} figures/tables`,
+          message: `${preparedImport.portable ? 'Reconstructed' : 'Imported'} ${totalSectionCount} sections · ${referencesToCreate.length} references · ${preparedImport.linkedCount} citations · ${preparedImport.linkedAssetCount} figure/table links · ${preparedImport.figures.length} figures/tables${restoredRounds}`,
         });
         return true;
       } catch (error) {
@@ -270,9 +420,13 @@ export const useManuscriptImportCommit = ({
     [
       createFigure,
       createReference,
+      createReviewRound,
       createSection,
       enqueueErrorSnackBar,
+      createJournalTemplate,
       enqueueSuccessSnackBar,
+      existingExportStyleOverrides,
+      existingJournals,
       existingSectionCount,
       existingReferences,
       failed,
@@ -287,6 +441,10 @@ export const useManuscriptImportCommit = ({
     commitMutexRef.current = true;
     setIsCommitting(true);
     try {
+      // Newest first, so the rounds go before the sections their points name.
+      for (const roundId of [...createdRecords.reviewRounds].reverse()) {
+        await deleteReviewRound(roundId);
+      }
       for (const figureId of [...createdRecords.figures].reverse()) {
         await deleteFigure(figureId);
       }
@@ -316,6 +474,7 @@ export const useManuscriptImportCommit = ({
     createdRecords,
     deleteFigure,
     deleteReference,
+    deleteReviewRound,
     deleteSection,
     enqueueErrorSnackBar,
     enqueueSuccessSnackBar,

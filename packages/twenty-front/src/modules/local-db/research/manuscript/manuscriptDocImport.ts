@@ -8,19 +8,30 @@
 
 import { countWords } from './manuscriptAssembly';
 import { assetPlacementMarker } from './manuscriptAssetPlacement';
+import {
+  manuscriptCommentsNote,
+  type ManuscriptComment,
+} from './manuscriptComments';
+import { wrapManuscriptFootnote } from './manuscriptFootnotes';
 import { COMMAND_TEXT } from './manuscriptMathGlyphs';
+import { unicodeMathToLatex } from './manuscriptMathUnicode';
 import {
   escapeManuscriptTableCellSpanMarker,
   TABLE_SPAN_LEFT_MARKER,
   TABLE_SPAN_UP_MARKER,
 } from './manuscriptTableGrid';
-import { gridToMarkdownTable } from './manuscriptTables';
-import { wrapManuscriptScript } from './manuscriptScripts';
+import { gridToMarkdownTable, parseMarkdownTable } from './manuscriptTables';
+import {
+  stripManuscriptScriptMarkers,
+  wrapManuscriptScript,
+} from './manuscriptScripts';
 import { type PortableResearchPaperManifest } from './manuscriptPortableManifest';
 import { type AssetKind } from './manuscriptTypes';
 
 export type ImportedSectionDraft = {
   name: string;
+  // The slug an in-text `[#sec:…]` points at, when the source carried one.
+  refKey?: string;
   sectionType: string;
   placement: string;
   content: string;
@@ -30,6 +41,15 @@ export type ImportedSectionDraft = {
   includeInExport: boolean;
   status?: string;
   wordLimit?: number;
+  // Reviewer comments the source document anchored inside this section. The
+  // composer has no in-line comment layer, so they ride along as a draft field
+  // and land in the section's notes at commit time instead of being dropped.
+  comments?: ImportedComment[];
+  // The section's notes field, whole, when the source had one to give — a
+  // portable package carries it across, comment lines, answers and the
+  // author's own jottings alike. A Word import has no notes to carry, only
+  // comments, and the commit step renders those into this same field.
+  notes?: string;
 };
 
 export type ImportedDocument = {
@@ -47,10 +67,22 @@ export type ImportedDocument = {
     embeddedImageCount: number;
     tableCount: number;
   };
+  // Present only when the source carried revisions or comments, so a clean
+  // document imports exactly as it did before this existed.
+  revisionSummary?: WordRevisionSummary;
   // Exact body lines that the import map deliberately demoted from captions.
   // Asset extraction must preserve them as prose instead of reclassifying them.
   suppressedAssetLineSignatures?: string[];
+  // `word/styles.xml` from the source .docx, and the file it came from. A paper
+  // arrives looking like itself — its own fonts, headings and spacing — and the
+  // DOCX exporter can use those styles as its base so the export it produces is
+  // a drop-in replacement for the document the author already has.
+  sourceStylesXml?: string;
+  sourceDocumentName?: string;
   portablePackage?: PortableResearchPaperManifest;
+  // Where that structure came from: a package this app exported, or a JATS
+  // article someone else's tool wrote.
+  portableSourceKind?: 'PACKAGE' | 'JATS';
 };
 
 export type ImportedFigureDraft = {
@@ -69,7 +101,15 @@ export type ImportedFigureDraft = {
   altText?: string;
   credit?: string;
   widthPercent?: number;
+  // Off for an asset the source set without a number.
+  numbered?: boolean;
   orderIndex: number;
+  // A panel of another figure in this same import, by that figure's
+  // `orderIndex`. The records do not exist yet, so `orderIndex` is the only
+  // handle either end has — the same one a figure already finds its section by.
+  parentOrderIndex?: number;
+  // On a parent: how many panels sit side by side before the layout wraps.
+  panelColumns?: number;
 };
 
 // Heading text → section type + placement. Order matters: the first rule whose
@@ -311,6 +351,7 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
 
   let title: string | undefined;
   let startIndex = 0;
+  let titlePageBlock: Block | null = null;
 
   const first = blocks[0];
   if (first.heading === null) {
@@ -325,6 +366,7 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
       first.heading = 'Title page';
       first.level = 1;
       first.body = remainder;
+      titlePageBlock = first;
     } else {
       startIndex = 1;
     }
@@ -342,6 +384,7 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
       if (first.body.length > 0) {
         first.heading = 'Title page';
         first.level = 1;
+        titlePageBlock = first;
       } else {
         startIndex = 1;
       }
@@ -353,7 +396,15 @@ export const parseMarkdownDocument = (text: string): ImportedDocument => {
   // outline depth an author sees matches the one they wrote, instead of every
   // section exporting one level deeper than the title it sits under.
   const body = blocks.slice(startIndex);
-  const shallowest = Math.min(...body.map((block) => block.level || 1));
+  // The synthetic "Title page" block is ours, not the author's: anchoring the
+  // outline on its level 1 left a document whose own top-level sections are
+  // Word "Heading 2" exporting one level too deep.
+  const outlineBody = body.filter((block) => block !== titlePageBlock);
+  const shallowest = Math.min(
+    ...(outlineBody.length > 0 ? outlineBody : body).map(
+      (block) => block.level || 1,
+    ),
+  );
   if (Number.isFinite(shallowest) && shallowest > 1) {
     for (const block of body) {
       block.level = Math.max(1, (block.level || 1) - (shallowest - 1));
@@ -473,6 +524,500 @@ const wordRunsText = (xml: string): string => {
   return text;
 };
 
+// ── Tracked changes and comments ───────────────────────────────────────────
+// A manuscript coming back from a co-author is the commonest input this app
+// has, and it arrives full of `w:ins`/`w:del` runs. Reading only `<w:t>` kept
+// every insertion and swallowed every deletion — deleted text lives in
+// `<w:delText>` — which is "accept all changes" chosen by accident and stated
+// nowhere. The resolution is an explicit option now, and the counts below are
+// what the wizard shows the author before anything is committed.
+
+export type TrackedChangeResolution = 'ACCEPT' | 'REJECT';
+
+export type WordRevisionSummary = {
+  insertionCount: number;
+  deletionCount: number;
+  // Word's third kind of revision: the reviewer changed how something looks
+  // rather than what it says. It reaches the author as its own line because it
+  // is the one kind that used to be resolved silently and only in one
+  // direction.
+  formattingChangeCount: number;
+  commentCount: number;
+};
+
+// The stored shape plus the id the source document gave it. That id is
+// Word's, not ours — it is re-issued on every export — so it lives only for as
+// long as the import does, and never reaches the notes field.
+export type ImportedComment = ManuscriptComment & {
+  commentId: string;
+};
+
+// A comment carries the heading it sat under so it can be re-attached after the
+// blocks have been through Markdown and back, which is what the import wizard
+// does between mapping and commit.
+export type ImportedCommentAnchor = ImportedComment & {
+  headingText?: string;
+};
+
+// `w:ins`/`w:del` also mark inserted or deleted *paragraph marks and table
+// rows*, which carry no text of their own and live inside the properties
+// elements. Drop those first: an author told "3 insertions" means three pieces
+// of inserted text. Innermost properties first, so the outer non-greedy match
+// still ends on its own closing tag.
+const REVISION_PROPERTY_ELEMENTS = [
+  /<w:rPr\b[\s\S]*?<\/w:rPr>/g,
+  /<w:pPr\b[\s\S]*?<\/w:pPr>/g,
+  /<w:trPr\b[\s\S]*?<\/w:trPr>/g,
+  /<w:tcPr\b[\s\S]*?<\/w:tcPr>/g,
+];
+
+// Word records a formatting revision by nesting the *previous* properties
+// inside the current ones: `<w:rPr>… now …<w:rPrChange><w:rPr>… before …
+// </w:rPr></w:rPrChange></w:rPr>`. Every properties element has exactly one
+// partner named for it, and this is all of them — nothing else in
+// WordprocessingML records a formatting revision. Listed innermost-first for
+// the same reason `REVISION_PROPERTY_ELEMENTS` is: a run's own properties
+// should be settled before a paragraph's are replaced wholesale.
+const FORMATTING_REVISION_PROPERTIES = [
+  'rPr',
+  'pPr',
+  'tcPr',
+  'trPr',
+  'tblPrEx',
+  'tblPr',
+  'sectPr',
+];
+
+// Built from the list above so the two cannot drift. The alternation puts
+// `tblPr` before `tblPrEx`, which backtracks correctly: `<w:tblPrExChange>` is
+// not a `tblPr` change.
+const FORMATTING_REVISION_ELEMENT = new RegExp(
+  `<w:(?:${FORMATTING_REVISION_PROPERTIES.join('|')})Change(?![A-Za-z])`,
+  'g',
+);
+
+// `(?![A-Za-z])` is load-bearing: `<w:delText>` is the deleted *text*, and
+// `<w:insideH>` is a table border. Neither is a revision.
+const INSERTION_ELEMENT = /<w:(?:ins|moveTo)(?![A-Za-z])/g;
+const DELETION_ELEMENT = /<w:(?:del|moveFrom)(?![A-Za-z])/g;
+const ANY_REVISION_ELEMENT = /<w:(?:ins|del|moveTo|moveFrom)(?![A-Za-z])/;
+const REVISION_OPENING_TAG =
+  /<w:(ins|del|moveTo|moveFrom)(?![A-Za-z])((?:[^>"]|"[^"]*")*?)(\/?)>/g;
+const COMMENT_ANCHOR_TAG =
+  /<w:comment(Reference|RangeStart|RangeEnd)\b((?:[^>"]|"[^"]*")*?)\/?>/g;
+const COMMENT_ELEMENT =
+  /<w:comment\b((?:[^>"]|"[^"]*")*?)>([\s\S]*?)<\/w:comment>/g;
+
+const attributeValue = (attributes: string, name: string): string | undefined =>
+  new RegExp(`\\b${name}="([^"]*)"`).exec(attributes)?.[1];
+
+const collapseWhitespace = (value: string): string =>
+  stripManuscriptScriptMarkers(value).replace(/\s+/g, ' ').trim();
+
+// Move revisions are a deletion and an insertion Word happens to know are the
+// same words; pandoc drops the pair on the floor. Treating `w:moveTo` as an
+// insertion and `w:moveFrom` as a deletion keeps a moved paragraph in exactly
+// one place under either resolution.
+const isInsertionElement = (name: string): boolean =>
+  name === 'ins' || name === 'moveTo';
+
+const revisionElementEnd = (
+  xml: string,
+  name: string,
+  from: number,
+): { innerEnd: number; after: number } | null => {
+  const scanner = new RegExp(
+    `<(/?)w:${name}(?![A-Za-z])((?:[^>"]|"[^"]*")*?)(/?)>`,
+    'g',
+  );
+  scanner.lastIndex = from;
+  let depth = 1;
+  let match = scanner.exec(xml);
+  while (match !== null) {
+    if (match[3] !== '/') {
+      depth += match[1] === '/' ? -1 : 1;
+      if (depth === 0) {
+        return { innerEnd: match.index, after: scanner.lastIndex };
+      }
+    }
+    match = scanner.exec(xml);
+  }
+  return null;
+};
+
+// Deleted runs keep their text in `<w:delText>`, which no reader in this file
+// looks at. Rejecting a deletion means putting that text back where a normal
+// run would have it.
+const restoreDeletedRunText = (xml: string): string =>
+  xml
+    .replace(/<w:delText\b/g, '<w:t')
+    .replace(/<\/w:delText>/g, '</w:t>')
+    .replace(/<w:delInstrText\b/g, '<w:instrText')
+    .replace(/<\/w:delInstrText>/g, '</w:instrText>');
+
+const propertiesOpeningTag = (name: string): RegExp =>
+  new RegExp(`<w:${name}(?![A-Za-z])((?:[^>"]|"[^"]*")*?)(/?)>`, 'g');
+
+type ElementSpan = {
+  start: number;
+  innerStart: number;
+  innerEnd: number;
+  after: number;
+};
+
+// Where the first `<w:name>` in a slice begins and ends. A properties element
+// can hold a copy of itself, so the end has to be found by balancing rather
+// than by a lazy match that would stop on the copy's closing tag.
+const firstElementSpan = (xml: string, name: string): ElementSpan | null => {
+  const opening = propertiesOpeningTag(name);
+  const match = opening.exec(xml);
+  if (match === null) return null;
+  if (match[2] === '/') {
+    return {
+      start: match.index,
+      innerStart: opening.lastIndex,
+      innerEnd: opening.lastIndex,
+      after: opening.lastIndex,
+    };
+  }
+  const end = revisionElementEnd(xml, name, opening.lastIndex);
+  return end === null
+    ? null
+    : {
+        start: match.index,
+        innerStart: opening.lastIndex,
+        innerEnd: end.innerEnd,
+        after: end.after,
+      };
+};
+
+// Settle one kind of formatting revision. Accepting means dropping the change
+// element and letting the current properties stand; rejecting means the run or
+// paragraph keeps the properties recorded inside it instead. Either way the
+// change element is gone afterwards, which is the point: leaving it would hand
+// every downstream reader two sets of properties where it expects one, and the
+// lazy `<w:rPr>…</w:rPr>` matches this file is full of would end on the wrong
+// closing tag.
+const resolveFormattingRevision = (
+  xml: string,
+  propertiesName: string,
+  resolution: TrackedChangeResolution,
+): string => {
+  const changeName = `${propertiesName}Change`;
+  if (!xml.includes(`<w:${changeName}`)) return xml;
+
+  const opening = propertiesOpeningTag(propertiesName);
+  let resolved = '';
+  let cursor = 0;
+  let match = opening.exec(xml);
+  while (match !== null) {
+    // A self-closing properties element holds nothing, so it holds no change.
+    const end =
+      match[2] === '/'
+        ? null
+        : revisionElementEnd(xml, propertiesName, opening.lastIndex);
+    if (end !== null) {
+      const innerStart = opening.lastIndex;
+      const inner = xml.slice(innerStart, end.innerEnd);
+      const change = firstElementSpan(inner, changeName);
+      if (change !== null) {
+        const previousBody = inner.slice(change.innerStart, change.innerEnd);
+        const previous = firstElementSpan(previousBody, propertiesName);
+        // A change element holding no copy records that there were no
+        // properties before it, so rejecting it leaves the element empty.
+        const restored =
+          previous === null
+            ? ''
+            : previousBody.slice(previous.innerStart, previous.innerEnd);
+        resolved +=
+          xml.slice(cursor, innerStart) +
+          (resolution === 'ACCEPT'
+            ? inner.slice(0, change.start) + inner.slice(change.after)
+            : restored);
+        cursor = end.innerEnd;
+        // The previous copy has been spliced in or thrown away; scanning back
+        // into it would only find the same element a second time.
+        opening.lastIndex = cursor;
+      }
+    }
+    match = opening.exec(xml);
+  }
+  return resolved + xml.slice(cursor);
+};
+
+// Reading a run's `w:rPr` is "accept the formatting change" chosen by accident:
+// right under ACCEPT, wrong under REJECT, where the author asked to see the
+// document as it stood before the reviewer touched it and would instead get the
+// reviewer's bold. Resolving it here rather than at each reader keeps the two
+// resolutions to one place, next to the insertions and deletions they arrive
+// with.
+export const resolveWordFormattingRevisions = (
+  xml: string,
+  resolution: TrackedChangeResolution,
+): string =>
+  FORMATTING_REVISION_PROPERTIES.reduce(
+    (current, propertiesName) =>
+      resolveFormattingRevision(current, propertiesName, resolution),
+    xml,
+  );
+
+// Rewrite a body so the remaining runs are the text the chosen resolution
+// keeps. Nesting is real — an author deletes what a co-author inserted — so the
+// walk recurses: inserted-then-deleted text survives neither resolution, which
+// is the right answer in both directions.
+const resolveRevisionElements = (
+  xml: string,
+  resolution: TrackedChangeResolution,
+): string => {
+  if (!ANY_REVISION_ELEMENT.test(xml)) return xml;
+
+  let resolved = '';
+  let cursor = 0;
+  REVISION_OPENING_TAG.lastIndex = 0;
+  let match = REVISION_OPENING_TAG.exec(xml);
+  while (match !== null) {
+    resolved += xml.slice(cursor, match.index);
+    const openingTagEnd = match.index + match[0].length;
+    // A self-closing marker sits on a paragraph mark or a table row: it has no
+    // text to keep or drop, and the paragraph itself stays either way.
+    const end =
+      match[3] === '/'
+        ? null
+        : revisionElementEnd(xml, match[1], REVISION_OPENING_TAG.lastIndex);
+    if (end === null) {
+      cursor = openingTagEnd;
+    } else {
+      if (isInsertionElement(match[1]) === (resolution === 'ACCEPT')) {
+        const inner = resolveRevisionElements(
+          xml.slice(openingTagEnd, end.innerEnd),
+          resolution,
+        );
+        resolved += isInsertionElement(match[1])
+          ? inner
+          : restoreDeletedRunText(inner);
+      }
+      cursor = end.after;
+    }
+    REVISION_OPENING_TAG.lastIndex = cursor;
+    match = REVISION_OPENING_TAG.exec(xml);
+  }
+  return resolved + xml.slice(cursor);
+};
+
+// Formatting revisions are settled first and only once, before the insertion
+// walk recurses into anything: a run still carrying both its old and its new
+// properties answers "is this bold?" with both at the same time, and that is
+// the first question every downstream pass asks of a run.
+export const resolveWordTrackedChanges = (
+  xml: string,
+  resolution: TrackedChangeResolution,
+): string =>
+  resolveRevisionElements(
+    resolveWordFormattingRevisions(xml, resolution),
+    resolution,
+  );
+
+const bodyCommentIds = (documentXml: string): Set<string> => {
+  const ids = new Set<string>();
+  for (const match of documentXml.matchAll(COMMENT_ANCHOR_TAG)) {
+    const commentId = attributeValue(match[2], 'w:id');
+    if (commentId !== undefined) ids.add(commentId);
+  }
+  return ids;
+};
+
+export const parseWordComments = (commentsXml: string): ImportedComment[] => {
+  const comments: ImportedComment[] = [];
+  for (const match of commentsXml.matchAll(COMMENT_ELEMENT)) {
+    const commentId = attributeValue(match[1], 'w:id');
+    if (commentId === undefined) continue;
+    const author = decodeXml(attributeValue(match[1], 'w:author') ?? '').trim();
+    const initials = decodeXml(
+      attributeValue(match[1], 'w:initials') ?? '',
+    ).trim();
+    const date = attributeValue(match[1], 'w:date') ?? '';
+    comments.push({
+      commentId,
+      // An anonymised review still has an author slot to fill.
+      author: author.length > 0 ? author : 'Unknown author',
+      ...(initials.length > 0 ? { initials } : {}),
+      ...(date.length > 0 ? { date } : {}),
+      text: collapseWhitespace(wordRunsText(match[2])),
+    });
+  }
+  return comments;
+};
+
+export const summarizeWordRevisions = (
+  documentXml: string,
+  commentsXml = '',
+): WordRevisionSummary => {
+  // Dropping the change elements first — which is what accepting them does —
+  // leaves no properties element sitting inside a copy of itself, so the lazy
+  // strips below still end on their own closing tag rather than on the copy's,
+  // and a paragraph-mark `w:ins` recorded in a copy cannot be counted as one
+  // more insertion.
+  const body = REVISION_PROPERTY_ELEMENTS.reduce(
+    (xml, pattern) => xml.replace(pattern, ''),
+    resolveWordFormattingRevisions(documentXml, 'ACCEPT'),
+  );
+  return {
+    insertionCount: (body.match(INSERTION_ELEMENT) ?? []).length,
+    deletionCount: (body.match(DELETION_ELEMENT) ?? []).length,
+    // Counted on the document as it arrived, like the two above: the change
+    // elements the strip has just removed are exactly the count.
+    formattingChangeCount: (
+      documentXml.match(FORMATTING_REVISION_ELEMENT) ?? []
+    ).length,
+    // A comment can be anchored without a body (a stripped package) or carry a
+    // body nothing anchors; the author should hear about either.
+    commentCount: Math.max(
+      bodyCommentIds(documentXml).size,
+      parseWordComments(commentsXml).length,
+    ),
+  };
+};
+
+export const hasWordRevisions = (summary: WordRevisionSummary): boolean =>
+  summary.insertionCount +
+    summary.deletionCount +
+    summary.formattingChangeCount +
+    summary.commentCount >
+  0;
+
+const countPhrase = (count: number, noun: string): string =>
+  `${count} ${count === 1 ? noun : `${noun}s`}`;
+
+const TRACKED_CHANGE_WARNING = 'This document has tracked changes:';
+const COMMENT_WARNING = /^This document has \d+ comments?\./;
+const FORMATTING_REVISION_WARNING =
+  /^This document has \d+ formatting revisions?\./;
+
+// A caller that knows more than the body XML did — the import wizard reads
+// `word/comments.xml`, which the parser was not given — replaces these rather
+// than stacking a second, differently-counted copy on top.
+export const isWordRevisionWarning = (warning: string): boolean =>
+  warning.startsWith(TRACKED_CHANGE_WARNING) ||
+  FORMATTING_REVISION_WARNING.test(warning) ||
+  COMMENT_WARNING.test(warning);
+
+export const wordRevisionWarnings = (
+  summary: WordRevisionSummary,
+  resolution: TrackedChangeResolution,
+): string[] => {
+  const warnings: string[] = [];
+  if (summary.insertionCount + summary.deletionCount > 0) {
+    warnings.push(
+      `${TRACKED_CHANGE_WARNING} ${countPhrase(
+        summary.insertionCount,
+        'insertion',
+      )} and ${countPhrase(summary.deletionCount, 'deletion')}. ${
+        resolution === 'ACCEPT'
+          ? 'They are being accepted: inserted text is imported and deleted text is dropped.'
+          : 'They are being rejected: inserted text is dropped and deleted text is restored.'
+      } The revision history itself is not imported.`,
+    );
+  }
+  if (summary.formattingChangeCount > 0) {
+    warnings.push(
+      `This document has ${countPhrase(
+        summary.formattingChangeCount,
+        'formatting revision',
+      )}. ${
+        resolution === 'ACCEPT'
+          ? 'They are being accepted: the formatting the reviewer set is used.'
+          : 'They are being rejected: the formatting from before the review is used.'
+      } Formatting is only read where it decides structure — a bold run or a heading style becoming a heading — and is not imported as styling.`,
+    );
+  }
+  if (summary.commentCount > 0) {
+    warnings.push(
+      `This document has ${countPhrase(
+        summary.commentCount,
+        'comment',
+      )}. Each one is imported into the notes of the section it sits in, with its author and the text it was anchored to.`,
+    );
+  }
+  return warnings;
+};
+
+// The composer stores no comment records, so a section's imported comments are
+// rendered into its existing notes field — one line each, attributed. That
+// rendering is also how a comment is stored and read back, so the writer lives
+// beside the reader in `manuscriptComments` rather than here.
+export const importedCommentsNote = (comments: ImportedComment[]): string =>
+  manuscriptCommentsNote(comments);
+
+// ── Footnotes and endnotes ─────────────────────────────────────────────────
+// A note's text is not in the body at all. `word/document.xml` carries only
+// `<w:footnoteReference w:id="3"/>` — a run with no `<w:t>` in it, so the run
+// reader quite correctly contributed nothing — while the prose lives in
+// `word/footnotes.xml` under a `<w:footnote w:id="3">` with the same id.
+// Reading the body alone is how every footnote of every imported paper was
+// dropped without a word being said about it.
+//
+// Word keeps its own furniture in those same parts: the rule drawn above the
+// notes and its continued-on-the-next-page twin are `<w:footnote>` elements
+// carrying a `w:type` (ids -1 and 0). They are not the author's notes and must
+// never arrive as content.
+
+const NOTE_ELEMENT =
+  /<w:(footnote|endnote)\b((?:[^>"]|"[^"]*")*?)>([\s\S]*?)<\/w:\1>/g;
+
+// The body's anchor. Word writes it self-closing; the paired spelling is legal
+// and leaves only its closing tag behind, which carries no text either way.
+const NOTE_REFERENCE_TAG =
+  /<w:(footnote|endnote)Reference\b((?:[^>"]|"[^"]*")*?)\/?>/g;
+
+const XML_TEXT_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+};
+
+const encodeXmlText = (value: string): string =>
+  value.replace(/[&<>]/g, (character) => XML_TEXT_ESCAPES[character]);
+
+// Note id → the note's text, for one of the two parts. A note with nothing in
+// it is left out: an empty `^[]` in the prose would be a marker pointing at
+// nothing, which is worse than the note the author never wrote.
+export const parseWordNotes = (notesXml: string): Record<string, string> => {
+  const notes: Record<string, string> = {};
+  for (const match of notesXml.matchAll(NOTE_ELEMENT)) {
+    const noteId = attributeValue(match[2], 'w:id');
+    if (noteId === undefined) continue;
+    if (attributeValue(match[2], 'w:type') !== undefined) continue;
+    const text = collapseWhitespace(wordRunsText(match[3]));
+    if (text.length === 0) continue;
+    notes[noteId] = text;
+  }
+  return notes;
+};
+
+// Put each note's text where its anchor sits, as a `<w:t>` run, so every pass
+// that follows — headings, tables, the block splitter — reads it in document
+// order with no idea that footnotes exist. An anchor whose note is missing
+// (a stripped package, a part the caller did not read) is left exactly as it
+// was, which is the behaviour every import had before this.
+export const inlineWordNoteReferences = (
+  bodyXml: string,
+  notesById: Record<string, string>,
+  endnotesById: Record<string, string> = {},
+): string =>
+  bodyXml.replace(
+    NOTE_REFERENCE_TAG,
+    (tag, kind: string, attributes: string) => {
+      const noteId = attributeValue(attributes, 'w:id');
+      const text =
+        noteId === undefined
+          ? undefined
+          : (kind === 'endnote' ? endnotesById : notesById)[noteId];
+      return text === undefined
+        ? tag
+        : `<w:t>${encodeXmlText(wrapManuscriptFootnote(text))}</w:t>`;
+    },
+  );
+
 export type WordStyleDefinition = {
   name: string;
   headingLevel: number;
@@ -481,6 +1026,15 @@ export type WordStyleDefinition = {
 export type WordImportOptions = {
   styles?: Record<string, WordStyleDefinition>;
   imageByRelationshipId?: Record<string, { dataUrl: string; altText: string }>;
+  // Defaults to ACCEPT, which is what every import did before the choice
+  // existed — and the only behaviour a document with no revisions can have.
+  trackedChanges?: TrackedChangeResolution;
+  // `word/comments.xml` from the same .docx package, when the caller read it.
+  commentsXml?: string;
+  // `word/footnotes.xml` and `word/endnotes.xml` from that same package. The
+  // body holds only the anchors, so without these the notes cannot arrive.
+  footnotesXml?: string;
+  endnotesXml?: string;
 };
 
 export type WordMarkdownBlock = {
@@ -490,6 +1044,142 @@ export type WordMarkdownBlock = {
   styleName?: string;
   sourceHeadingLevel?: number;
   headingSource?: 'style' | 'semantic' | 'bold';
+  // Ids of the comments anchored in this block, so a comment can be traced to
+  // the heading it sits under once the text is Markdown.
+  commentIds?: string[];
+};
+
+const COMMENT_ANCHOR_MAX_LENGTH = 120;
+const HEADING_MARKDOWN_LINE = /^\s*#{1,6}\s+(.*\S)\s*$/m;
+
+// What the comment was written about, read from the range the source marked
+// around it. A bare `w:commentReference` with no range leaves the anchor
+// unknown rather than guessed at from the surrounding paragraph.
+const commentAnchorTexts = (documentXml: string): Record<string, string> => {
+  const rangeByCommentId = new Map<string, { start?: number; end?: number }>();
+  for (const match of documentXml.matchAll(COMMENT_ANCHOR_TAG)) {
+    const commentId = attributeValue(match[2], 'w:id');
+    if (commentId === undefined || match[1] === 'Reference') continue;
+    const range = rangeByCommentId.get(commentId) ?? {};
+    rangeByCommentId.set(
+      commentId,
+      match[1] === 'RangeStart'
+        ? { ...range, start: match.index + match[0].length }
+        : { ...range, end: match.index },
+    );
+  }
+
+  const texts: Record<string, string> = {};
+  for (const [commentId, range] of rangeByCommentId) {
+    if (
+      range.start === undefined ||
+      range.end === undefined ||
+      range.end <= range.start
+    ) {
+      continue;
+    }
+    const text = collapseWhitespace(
+      wordRunsText(documentXml.slice(range.start, range.end)),
+    );
+    if (text.length === 0) continue;
+    texts[commentId] =
+      text.length > COMMENT_ANCHOR_MAX_LENGTH
+        ? `${text.slice(0, COMMENT_ANCHOR_MAX_LENGTH - 1).trimEnd()}…`
+        : text;
+  }
+  return texts;
+};
+
+const anchoredCommentIds = (xml: string): string[] => {
+  const commentIds: string[] = [];
+  for (const match of xml.matchAll(COMMENT_ANCHOR_TAG)) {
+    const commentId = attributeValue(match[2], 'w:id');
+    if (commentId !== undefined && !commentIds.includes(commentId)) {
+      commentIds.push(commentId);
+    }
+  }
+  return commentIds;
+};
+
+export const parseWordCommentAnchors = (
+  documentXml: string,
+  commentsXml: string,
+  blocks: WordMarkdownBlock[],
+): ImportedCommentAnchor[] => {
+  const comments = parseWordComments(commentsXml);
+  if (comments.length === 0) return [];
+
+  const anchorTexts = commentAnchorTexts(documentXml);
+  const headingByCommentId = new Map<string, string>();
+  let currentHeading: string | undefined;
+  for (const block of blocks) {
+    // A comment on the heading paragraph itself belongs to the section that
+    // heading opens, so the heading is read before the block's comments.
+    const heading = HEADING_MARKDOWN_LINE.exec(block.markdown)?.[1];
+    if (heading !== undefined) currentHeading = heading;
+    for (const commentId of block.commentIds ?? []) {
+      if (currentHeading !== undefined && !headingByCommentId.has(commentId)) {
+        headingByCommentId.set(commentId, currentHeading);
+      }
+    }
+  }
+
+  return comments.map((comment) => {
+    const anchoredText = anchorTexts[comment.commentId];
+    const headingText = headingByCommentId.get(comment.commentId);
+    return {
+      ...comment,
+      ...(anchoredText !== undefined ? { anchoredText } : {}),
+      ...(headingText !== undefined ? { headingText } : {}),
+    };
+  });
+};
+
+const commentSectionIndex = (
+  sections: ImportedSectionDraft[],
+  anchor: ImportedCommentAnchor,
+): number => {
+  const headingText = anchor.headingText;
+  if (headingText !== undefined) {
+    const byHeading = sections.findIndex(
+      (section) =>
+        normalizeHeading(section.name) === normalizeHeading(headingText),
+    );
+    if (byHeading >= 0) return byHeading;
+  }
+  // The heading a comment sat under can be folded away (title-page furniture)
+  // or renamed, so fall back to the section that still holds the anchored text.
+  const anchoredText = anchor.anchoredText;
+  if (anchoredText !== undefined) {
+    const probe = anchoredText.slice(0, 40);
+    const byContent = sections.findIndex((section) =>
+      collapseWhitespace(section.content).includes(probe),
+    );
+    if (byContent >= 0) return byContent;
+  }
+  return 0;
+};
+
+export const attachImportedComments = (
+  sections: ImportedSectionDraft[],
+  anchors: ImportedCommentAnchor[],
+): ImportedSectionDraft[] => {
+  if (anchors.length === 0 || sections.length === 0) return sections;
+
+  const commentsBySectionIndex = new Map<number, ImportedComment[]>();
+  for (const anchor of anchors) {
+    const { headingText: _headingText, ...comment } = anchor;
+    const sectionIndex = commentSectionIndex(sections, anchor);
+    commentsBySectionIndex.set(sectionIndex, [
+      ...(commentsBySectionIndex.get(sectionIndex) ?? []),
+      comment,
+    ]);
+  }
+
+  return sections.map((section, index) => {
+    const comments = commentsBySectionIndex.get(index);
+    return comments === undefined ? section : { ...section, comments };
+  });
 };
 
 export const parseWordStyleDefinitions = (
@@ -886,6 +1576,28 @@ const headingBlock = (
   };
 };
 
+// A styled paragraph longer than this is a mis-styled body paragraph, not a
+// heading — the longest real title in the seeded template library is ~180
+// characters.
+const STYLED_HEADING_MAX_LENGTH = 250;
+
+// "Ahmad Jalil and Hossein Kazemian", "A. Jalil^1*, H. Kazemian^1" — the author
+// line of a journal title block. Word centres and bolds it exactly like a
+// heading, so without this it became a section whose body swallowed the
+// affiliation, the correspondence line and everything up to the abstract.
+const looksLikeAuthorList = (text: string): boolean => {
+  const stripped = stripManuscriptScriptMarkers(text).trim();
+  if (stripped.length === 0 || stripped.includes('@')) return false;
+  if (!/^[\p{Lu}]/u.test(stripped)) return false;
+  const words = stripped.split(/\s+/);
+  if (words.length > 15) return false;
+  if (!/(?:,|;|\band\b|&)/.test(stripped)) return false;
+  const nameLike = words.filter((word) =>
+    /^[\p{Lu}][\p{L}'’.-]*[,;]?$/u.test(word),
+  ).length;
+  return nameLike >= 2 && nameLike >= words.length - 3;
+};
+
 const wordParagraphToMarkdown = (
   paragraphXml: string,
   options: WordImportOptions,
@@ -907,9 +1619,17 @@ const wordParagraphToMarkdown = (
     ...(styleId.length > 0 ? { styleId } : {}),
     ...(styleName !== undefined ? { styleName } : {}),
   };
+  // Only the paragraph's own block claims its comments: a trailing heading
+  // split off the end opens the *next* section, and would drag the comment
+  // there with it.
+  const commentIds = anchoredCommentIds(paragraphXml);
+  const anchoredComments =
+    commentIds.length > 0 ? { commentIds } : ({} as { commentIds?: string[] });
 
   if (paragraphText.length === 0 && images.length === 0 && math.length === 0) {
-    return [{ kind: 'paragraph', markdown: '', ...provenance }];
+    return [
+      { kind: 'paragraph', markdown: '', ...provenance, ...anchoredComments },
+    ];
   }
 
   // A trailing bold run after a line break is the next heading, not the tail of
@@ -935,6 +1655,7 @@ const wordParagraphToMarkdown = (
         kind: 'paragraph',
         markdown: `\n## Keywords\n\n${text.replace(/^keywords?\s*:\s*/i, '')}\n`,
         ...provenance,
+        ...anchoredComments,
         sourceHeadingLevel: 2,
         headingSource: 'semantic',
       },
@@ -946,16 +1667,27 @@ const wordParagraphToMarkdown = (
   let headingSource: WordMarkdownBlock['headingSource'];
   let finalLevel = 0;
   // A multi-line paragraph is prose with breaks in it, never a single heading.
-  if (math.length === 0 && !isProseLike(text) && !text.includes('\n')) {
-    if (level > 0) {
+  if (math.length === 0 && !text.includes('\n')) {
+    if (level > 0 && text.length <= STYLED_HEADING_MAX_LENGTH) {
+      // Word's own heading style is a declaration, not a guess — trust it even
+      // when the text reads like prose. "2. Introduction" ends its number with
+      // a full stop and a real paper title runs well past a sentence, and both
+      // used to be demoted to body text, taking every section under them with
+      // it.
       finalLevel = Math.min(level, 3);
       headingSource = 'style';
-    } else if (detectedLevel > 0) {
-      finalLevel = detectedLevel;
-      headingSource = 'semantic';
-    } else if (isDirectlyBold(paragraphXml) && text.length <= 100) {
-      finalLevel = 3;
-      headingSource = 'bold';
+    } else if (!isProseLike(text)) {
+      if (detectedLevel > 0) {
+        finalLevel = detectedLevel;
+        headingSource = 'semantic';
+      } else if (
+        isDirectlyBold(paragraphXml) &&
+        text.length <= 100 &&
+        !looksLikeAuthorList(text)
+      ) {
+        finalLevel = 3;
+        headingSource = 'bold';
+      }
     }
   }
   const renderedText =
@@ -968,6 +1700,7 @@ const wordParagraphToMarkdown = (
         .filter((part) => part.trim().length > 0)
         .join('\n\n'),
       ...provenance,
+      ...anchoredComments,
       ...(finalLevel > 0 && headingSource !== undefined
         ? { sourceHeadingLevel: finalLevel, headingSource }
         : {}),
@@ -1018,6 +1751,13 @@ const wordTableToMarkdown = (tableXml: string): string => {
   );
   const grid = rows.filter((cells) => cells.length > 0);
   if (grid.length === 0) return '';
+  // A one-cell table is a boxed note ("Working-draft status: …"), not data.
+  // Left as a table it became a captionless one-cell `Table 1` that renumbered
+  // every real table after it.
+  if (grid.length === 1 && grid[0].length === 1) {
+    const text = grid[0][0].trim();
+    if (text.length > 0) return `\n${text}\n`;
+  }
   // Word marks repeated header rows with `w:tblHeader`; a leading run of them
   // is the table's header deck.
   const headerFlags = rowMatches
@@ -1201,23 +1941,133 @@ const removeDuplicateTitleBlocks = (
   });
 };
 
+// The title block of a journal manuscript is a stack of centred, bold lines —
+// the title continuation, a subtitle, the author list — that Word never styles
+// as headings. Our own bold/semantic guesses turn each of them into a section
+// whose body then swallows the affiliation and the correspondence line. Once a
+// document proves it uses real heading styles, treat every *guessed* heading
+// before its first recognisable section (Abstract, Keywords, Introduction…) as
+// title-page furniture instead.
+const demoteLeadingTitleBlockHeadings = (
+  blocks: WordMarkdownBlock[],
+): WordMarkdownBlock[] => {
+  if (!blocks.some((block) => block.headingSource === 'style')) return blocks;
+  const boundary = blocks.findIndex(
+    (block) =>
+      block.sourceHeadingLevel !== undefined &&
+      classifyHeading(
+        block.markdown.replace(/^\s*#{1,6}\s*/, '').split('\n')[0],
+      ).sectionType !== 'OTHER',
+  );
+  if (boundary < 0) return blocks;
+
+  return blocks.map((block, index) => {
+    if (
+      index >= boundary ||
+      block.headingSource === undefined ||
+      block.headingSource === 'style'
+    ) {
+      return block;
+    }
+    const {
+      sourceHeadingLevel: _level,
+      headingSource: _source,
+      ...rest
+    } = block;
+    return {
+      ...rest,
+      markdown: block.markdown.replace(/^\s*#{1,6}\s+/, '').trimEnd(),
+    };
+  });
+};
+
+const TITLE_STYLE = /\b(?:title|subtitle)\b/i;
+
+// "Keywords:" and a bare abstract paragraph get headings we invent, at a level
+// we picked. Anchor them to the document's own top heading level so the
+// imported outline matches the paper instead of nesting the front matter one
+// step deeper than everything else.
+const alignSyntheticFrontMatterHeadings = (
+  blocks: WordMarkdownBlock[],
+): WordMarkdownBlock[] => {
+  const styledLevels = blocks
+    .filter(
+      (block) =>
+        block.headingSource === 'style' &&
+        // The "Title" style names the document, not its first section, so it
+        // is not the level the sections sit at.
+        !TITLE_STYLE.test(`${block.styleId ?? ''} ${block.styleName ?? ''}`),
+    )
+    .map((block) => block.sourceHeadingLevel ?? 1);
+  if (styledLevels.length === 0) return blocks;
+  const topLevel = Math.min(...styledLevels);
+
+  return blocks.map((block) => {
+    if (
+      block.headingSource !== 'semantic' ||
+      block.sourceHeadingLevel === undefined ||
+      block.sourceHeadingLevel === topLevel ||
+      !/^\s*#{1,6}\s+(keywords|abstract)\s*$/i.test(
+        block.markdown.split('\n\n')[0] ?? '',
+      )
+    ) {
+      return block;
+    }
+    return {
+      ...block,
+      sourceHeadingLevel: topLevel,
+      markdown: block.markdown.replace(
+        /^(\s*)#{1,6}(\s+)/,
+        `$1${'#'.repeat(topLevel)}$2`,
+      ),
+    };
+  });
+};
+
 export const parseWordMlToMarkdownBlocks = (
   documentXml: string,
   options: WordImportOptions = {},
 ): WordMarkdownBlock[] => {
-  const body =
-    /<w:body\b[\s\S]*?<\/w:body>/.exec(documentXml)?.[0] ?? documentXml;
+  // Resolve revisions before anything reads a run: every downstream pass —
+  // headings, tables, math, images — then sees one settled document rather than
+  // a mix of both versions.
+  const resolution = options.trackedChanges ?? 'ACCEPT';
+  const resolvedBody = resolveWordTrackedChanges(
+    /<w:body\b[\s\S]*?<\/w:body>/.exec(documentXml)?.[0] ?? documentXml,
+    resolution,
+  );
+  // Notes are resolved the same way the body was: a reviewer who edited a
+  // footnote with track changes on gets the version the author chose, not both
+  // halves of it run together.
+  const body = inlineWordNoteReferences(
+    resolvedBody,
+    parseWordNotes(
+      resolveWordTrackedChanges(options.footnotesXml ?? '', resolution),
+    ),
+    parseWordNotes(
+      resolveWordTrackedChanges(options.endnotesXml ?? '', resolution),
+    ),
+  );
   const tokens = tokenizeWordBody(body);
   const out: WordMarkdownBlock[] = [];
   for (const token of tokens) {
-    out.push(
-      ...(token.startsWith('<w:tbl')
-        ? [{ kind: 'table' as const, markdown: wordTableToMarkdown(token) }]
-        : wordParagraphToMarkdown(token, options)),
-    );
+    if (!token.startsWith('<w:tbl')) {
+      out.push(...wordParagraphToMarkdown(token, options));
+      continue;
+    }
+    const commentIds = anchoredCommentIds(token);
+    out.push({
+      kind: 'table',
+      markdown: wordTableToMarkdown(token),
+      ...(commentIds.length > 0 ? { commentIds } : {}),
+    });
   }
-  return injectAuthorContributionsHeading(
-    injectAbstractHeading(removeDuplicateTitleBlocks(out)),
+  return alignSyntheticFrontMatterHeadings(
+    demoteLeadingTitleBlockHeadings(
+      injectAuthorContributionsHeading(
+        injectAbstractHeading(removeDuplicateTitleBlocks(out)),
+      ),
+    ),
   );
 };
 
@@ -1243,6 +2093,44 @@ export const parseWordMlToMarkdown = (
     parseWordMlToMarkdownBlocks(documentXml, options),
   );
 
+export type WordRevisions = {
+  summary: WordRevisionSummary;
+  resolution: TrackedChangeResolution;
+  comments: ImportedCommentAnchor[];
+};
+
+// What a .docx has to answer for: the counts as its source wrote them, and its
+// comments quoted against the text the chosen resolution keeps. Null when the
+// document answers for nothing — never edited with track changes on and never
+// commented — which is every clean manuscript. Every reader of a .docx package
+// goes through here, so the two import entry points cannot drift apart.
+export const readWordRevisions = (
+  documentXml: string,
+  commentsXml: string,
+  resolution: TrackedChangeResolution,
+  // The blocks the caller already parsed, when it has them. A caller that has
+  // none — reading the two revision entries out of a package without inflating
+  // its media — has them parsed here, but only once the summary says there is
+  // something to anchor.
+  parsedBlocks?: WordMarkdownBlock[],
+): WordRevisions | null => {
+  const summary = summarizeWordRevisions(documentXml, commentsXml);
+  if (!hasWordRevisions(summary)) return null;
+
+  return {
+    summary,
+    resolution,
+    comments: parseWordCommentAnchors(
+      resolveWordTrackedChanges(documentXml, resolution),
+      commentsXml,
+      parsedBlocks ??
+        parseWordMlToMarkdownBlocks(documentXml, {
+          trackedChanges: resolution,
+        }),
+    ),
+  };
+};
+
 // ── Title-page metadata ────────────────────────────────────────────────────
 // A thesis title page is a stack of one-line fragments ("by", the student
 // number, the degree statement, the date). Word styles each of them like a
@@ -1257,14 +2145,20 @@ const AFFILIATION_LINE =
 const DEGREE_STATEMENT =
   /thesis|dissertation|in partial fulfil|requirements for the degree|degree of\b/i;
 const CORRESPONDING_LINE = /^\*?(?:corresponding author|correspondence)\s*:/i;
+const EMAIL_ADDRESS = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 
-const isAuthorCandidate = (line: string): boolean =>
+const isAuthorCandidate = (line: string, hasConnector: boolean): boolean =>
   line.length <= 200 &&
   !TITLE_PAGE_CONNECTOR.test(line) &&
   !DEGREE_STATEMENT.test(line) &&
   !AFFILIATION_LINE.test(line) &&
   !CORRESPONDING_LINE.test(line) &&
-  !/^\d/.test(line);
+  !/^\d/.test(line) &&
+  // A thesis cover names its author on the line after "by", so anything there
+  // is the author. A journal title block has no connector, and the line under
+  // the title is just as often the rest of the title — take it only when it
+  // reads like a list of people.
+  (hasConnector || looksLikeAuthorList(line));
 
 type TitlePageMetadata = {
   sections: ImportedSectionDraft[];
@@ -1272,10 +2166,19 @@ type TitlePageMetadata = {
   affiliations?: string;
   correspondingAuthor?: string;
   titlePageExtraLines?: string[];
+  // The rest of the title, split by how the source wrote it: lines the title's
+  // own paragraph wrapped onto, and the subtitle paragraphs that follow it.
+  wrappedTitleLines?: string[];
+  subtitleLines?: string[];
 };
 
 const extractTitlePageMetadata = (
   allSections: ImportedSectionDraft[],
+  // How many of the title-page lines are the *title's own* wrapped lines. A
+  // journal title block sets the title over two lines of one paragraph and its
+  // subtitle in the next paragraph: the wrapped lines rejoin with a space, the
+  // subtitle with the colon that separates a title from its subtitle.
+  wrappedTitleLineCount = 0,
 ): TitlePageMetadata => {
   const titlePageIndex = allSections.findIndex(
     (section) => section.sectionType === 'TITLE_PAGE',
@@ -1323,12 +2226,24 @@ const extractTitlePageMetadata = (
     TITLE_PAGE_CONNECTOR.test(line),
   );
   const authorIndex = lines.findIndex(
-    (line, index) => index > connectorIndex && isAuthorCandidate(line),
+    (line, index) =>
+      index > connectorIndex && isAuthorCandidate(line, connectorIndex >= 0),
   );
   const authorLine = authorIndex >= 0 ? lines[authorIndex] : undefined;
-  const correspondingIndex = lines.findIndex((line) =>
+  // Journals print "Correspondence: …"; plenty of drafts just put the author's
+  // name and address on their own line under the affiliation.
+  const explicitCorrespondingIndex = lines.findIndex((line) =>
     CORRESPONDING_LINE.test(line),
   );
+  const correspondingIndex =
+    explicitCorrespondingIndex >= 0
+      ? explicitCorrespondingIndex
+      : lines.findIndex(
+          (line, index) =>
+            index > authorIndex &&
+            EMAIL_ADDRESS.test(line) &&
+            !AFFILIATION_LINE.test(line),
+        );
   const correspondingAuthor =
     correspondingIndex >= 0
       ? lines[correspondingIndex].replace(/^\*|\*$/g, '').trim()
@@ -1348,11 +2263,29 @@ const extractTitlePageMetadata = (
   const affiliationLines = lines.filter((_line, index) =>
     affiliationIndexes.has(index),
   );
+  // Everything above the author line (or above a thesis "by" connector) is
+  // still the title; everything below it is furniture.
+  const titleEnd = connectorIndex >= 0 ? connectorIndex : authorIndex;
+  const isTitleContinuation = (index: number): boolean =>
+    titleEnd > 0 &&
+    index < titleEnd &&
+    index !== correspondingIndex &&
+    !affiliationIndexes.has(index) &&
+    !DEGREE_STATEMENT.test(lines[index]);
+  const titleContinuationLines = lines.filter((_line, index) =>
+    isTitleContinuation(index),
+  );
+  const wrappedTitleLines = titleContinuationLines.slice(
+    0,
+    wrappedTitleLineCount,
+  );
+  const subtitleLines = titleContinuationLines.slice(wrappedTitleLineCount);
   const extraLines = lines.filter(
     (_line, index) =>
       index !== authorIndex &&
       index !== correspondingIndex &&
-      !affiliationIndexes.has(index),
+      !affiliationIndexes.has(index) &&
+      !isTitleContinuation(index),
   );
 
   return {
@@ -1363,43 +2296,88 @@ const extractTitlePageMetadata = (
       : {}),
     ...(correspondingAuthor !== undefined ? { correspondingAuthor } : {}),
     ...(extraLines.length > 0 ? { titlePageExtraLines: extraLines } : {}),
+    ...(wrappedTitleLines.length > 0 ? { wrappedTitleLines } : {}),
+    ...(subtitleLines.length > 0 ? { subtitleLines } : {}),
   };
+};
+
+// The title's own paragraph may wrap onto further lines; every line after it
+// belongs to a later paragraph, which is what makes it a subtitle rather than
+// more of the title. Count the breaks in the source paragraph itself: by the
+// time the text is blocks, a line break and a paragraph break look alike.
+const wrappedTitleLineCount = (documentXml: string): number => {
+  const body =
+    /<w:body\b[\s\S]*?<\/w:body>/.exec(documentXml)?.[0] ?? documentXml;
+  for (const token of tokenizeWordBody(body)) {
+    if (token.startsWith('<w:tbl')) return 0;
+    if (!/<w:t\b[^>]*>[^<]*\S/.test(token)) continue;
+    return (token.match(/<w:br\b[^>]*\/?>/g) ?? []).length;
+  }
+  return 0;
 };
 
 export const parseWordDocumentFromBlocks = (
   documentXml: string,
   blocks: WordMarkdownBlock[],
+  options: WordImportOptions = {},
 ): ImportedDocument => {
+  const resolution = options.trackedChanges ?? 'ACCEPT';
+  // Counted on the source as it arrived; every count below it is counted on the
+  // document the author actually gets, so a deleted table stops being "Table 3"
+  // the moment its deletion is accepted.
+  const revisions = readWordRevisions(
+    documentXml,
+    options.commentsXml ?? '',
+    resolution,
+    blocks,
+  );
+  const resolvedXml = resolveWordTrackedChanges(documentXml, resolution);
   const markdown = serializeWordMarkdownBlocks(blocks);
   const document = parseMarkdownDocument(markdown);
-  const equationCount = (documentXml.match(/<m:oMath\b/g) ?? []).length;
+  const equationCount = (resolvedXml.match(/<m:oMath\b/g) ?? []).length;
   const embeddedImageCount = (
     markdown.match(/!\[[^\]]*\]\(data:image\//g) ?? []
   ).length;
-  const tableCount = (documentXml.match(/<w:tbl\b/g) ?? []).length;
-  const warnings: string[] = [];
+  const tableCount = (resolvedXml.match(/<w:tbl\b/g) ?? []).length;
+  const warnings: string[] =
+    revisions === null
+      ? []
+      : wordRevisionWarnings(revisions.summary, resolution);
 
   if (document.sections.length <= 1) {
     warnings.push(
       'Few semantic sections were detected. Review the section names and types before importing.',
     );
   }
-  if (embeddedImageCount === 0 && /<w:drawing\b/.test(documentXml)) {
+  if (embeddedImageCount === 0 && /<w:drawing\b/.test(resolvedXml)) {
     warnings.push(
       'The document contains images that could not be resolved from the DOCX package.',
     );
   }
 
-  const { sections, ...titlePageMetadata } = extractTitlePageMetadata(
-    document.sections,
-  );
+  const { sections, wrappedTitleLines, subtitleLines, ...titlePageMetadata } =
+    extractTitlePageMetadata(
+      document.sections,
+      wrappedTitleLineCount(resolvedXml),
+    );
+  const title =
+    document.title === undefined
+      ? undefined
+      : [
+          [document.title, ...(wrappedTitleLines ?? [])].join(' '),
+          ...(subtitleLines ?? []),
+        ].join(': ');
 
   return {
     ...document,
-    sections,
+    ...(title !== undefined ? { title } : {}),
+    // Comments are attached last: the title-page pass folds sections away, and
+    // a comment must land in a section that still exists.
+    sections: attachImportedComments(sections, revisions?.comments ?? []),
     ...titlePageMetadata,
     warnings,
     stats: { equationCount, embeddedImageCount, tableCount },
+    ...(revisions === null ? {} : { revisionSummary: revisions.summary }),
   };
 };
 
@@ -1410,6 +2388,7 @@ export const parseWordDocument = (
   parseWordDocumentFromBlocks(
     documentXml,
     parseWordMlToMarkdownBlocks(documentXml, options),
+    options,
   );
 
 // ── Lift standalone tables into numbered figure records ─────────────────────
@@ -1432,12 +2411,16 @@ export const parseImportedAssetCaption = (
   kind: 'FIGURE' | 'TABLE',
 ): ImportedAssetCaption | null => {
   const prefix = kind === 'FIGURE' ? '(?:fig(?:ure)?)' : '(?:table|tbl)';
+  // The label may carry an appendix letter ("Table B1", "Fig. A2") or the
+  // supplement's "S" — both are part of the number, not of the caption text.
   const match = new RegExp(
-    `^\\s*${prefix}\\s*\\.?\\s*(?:([sS]?\\d+(?:\\.\\d+)*(?:[a-z])?)\\s*([.:)])?\\s*)?(.*)$`,
+    `^\\s*${prefix}\\s*\\.?\\s*(?:((?:[A-Za-z])?\\d+(?:\\.\\d+)*(?:[a-z])?)\\s*([.:)])?\\s*)?(.*)$`,
     'i',
   ).exec(line);
   if (match === null) return null;
-  let sourceLabel = match[1]?.replace(/^s/i, 'S');
+  let sourceLabel = match[1]?.replace(/^[a-z]/, (letter) =>
+    letter.toUpperCase(),
+  );
   let explicitLabel = match[2] !== undefined;
   let caption = match[3].trim();
   const embeddedSourceLabel =
@@ -1466,6 +2449,144 @@ const importedAssetRefKey = (
     : `imported-${kind.toLowerCase()}-${sourceLabel
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')}`;
+
+// ── Layout tables: numbered equations and single-cell callouts ─────────────
+// Word has no display-equation object, so Copernicus/AMT (and every template
+// derived from theirs) sets an equation in a one-row, two-column borderless
+// table: the equation on the left, "(3)" on the right. Elsevier and Springer
+// drafts do the same. Imported as data, each one became a junk `Table` that
+// renumbered the paper's real tables and printed a bordered grid around the
+// maths. They are equations — the composer already numbers, cross-references
+// and typesets `EQUATION` assets — and a one-cell table is a callout, which is
+// prose.
+
+const EQUATION_NUMBER_CELL = /^\(\s*([A-Za-z]?\d+(?:\.\d+)?[a-z]?)\s*\)$/;
+// An equation body needs a relation or an operator; a stray two-column table of
+// prose must not be swallowed.
+const EQUATION_BODY = /[=<>≤≥≈∝∑∫±]|\\frac|\\sum|\\int/;
+
+const equationRefKey = (label: string): string =>
+  `eq-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+export type LayoutTableRewrite =
+  // `source` is the equation exactly as the document showed it, for a review
+  // list that should read like the author's own page; `latex` is what gets
+  // stored and typeset.
+  | { kind: 'equation'; latex: string; source: string; label: string }
+  | { kind: 'callout'; text: string };
+
+// Decide what a table block really is, from its parsed grid. Exported so the
+// import map shows the same answer the import will act on: a numbered equation
+// reads as an equation in the review list, not as a table.
+export const classifyLayoutTable = (
+  block: string[],
+): LayoutTableRewrite | null => {
+  const rows = parseMarkdownTable(block.join('\n'));
+  if (rows.length !== 1) return null;
+  const cells = rows[0].map((cell) => cell.trim());
+
+  if (cells.length === 1) {
+    const text = cells[0];
+    return text.length === 0 || text.includes('|')
+      ? null
+      : { kind: 'callout', text };
+  }
+
+  if (cells.length !== 2) return null;
+  const [body, number] = cells;
+  const label = EQUATION_NUMBER_CELL.exec(number)?.[1];
+  if (label === undefined || body.length === 0 || !EQUATION_BODY.test(body)) {
+    return null;
+  }
+  // Word flattened the maths to characters; recover the LaTeX the renderers
+  // expect so the equation typesets instead of printing as text.
+  return {
+    kind: 'equation',
+    latex: unicodeMathToLatex(body),
+    source: body,
+    label,
+  };
+};
+
+// The quantity an equation defines — what a scientist would call it. "x̄j,time
+// = Σi wij xi / Σi wij" is *the duration-weighted mean*, so the asset list can
+// say that instead of numbering it and nothing more.
+const definedQuantity = (source: string): string | undefined => {
+  const relation = /^([^=<>≤≥≈]{1,40})=(?!=)/.exec(source);
+  const quantity = relation?.[1]?.trim().replace(/[,;:]$/, '');
+  return quantity !== undefined && quantity.length > 0 ? quantity : undefined;
+};
+
+// Rewrite layout tables in place: equations become `EQUATION` assets anchored
+// where they stood, callouts fall back to the prose they always were.
+export const extractLayoutTables = (
+  sections: ImportedSectionDraft[],
+  startOrderIndex = 0,
+  usedRefKeys: Set<string> = new Set<string>(),
+): { sections: ImportedSectionDraft[]; figures: ImportedFigureDraft[] } => {
+  const figures: ImportedFigureDraft[] = [];
+  let order = startOrderIndex;
+
+  const nextSections = sections.map((section) => {
+    const lines = section.content.split('\n');
+    const out: string[] = [];
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!isTableLine(lines[index])) {
+        out.push(lines[index]);
+        continue;
+      }
+      let end = index;
+      while (end < lines.length && isTableLine(lines[end])) end += 1;
+      const block = lines.slice(index, end);
+      const rewrite = classifyLayoutTable(block);
+      if (rewrite === null) {
+        out.push(...block);
+        index = end - 1;
+        continue;
+      }
+      if (rewrite.kind === 'callout') {
+        out.push(rewrite.text);
+        index = end - 1;
+        continue;
+      }
+
+      const refKeyBase = equationRefKey(rewrite.label);
+      let refKey = refKeyBase;
+      let duplicateIndex = 2;
+      while (usedRefKeys.has(refKey)) {
+        refKey = `${refKeyBase}-${duplicateIndex}`;
+        duplicateIndex += 1;
+      }
+      usedRefKeys.add(refKey);
+      const quantity = definedQuantity(rewrite.source);
+      figures.push({
+        name:
+          quantity === undefined
+            ? `Equation (${rewrite.label})`
+            : `${quantity} — equation (${rewrite.label})`,
+        assetKind: 'EQUATION',
+        placement: section.placement === 'SUPPLEMENT' ? 'SUPPLEMENT' : 'MAIN',
+        refKey,
+        caption: '',
+        sourceLabel: rewrite.label,
+        sectionOrderIndex: section.orderIndex,
+        equationLatex: rewrite.latex,
+        imageSource: 'NONE',
+        orderIndex: order,
+      });
+      order += 1;
+      out.push(assetPlacementMarker(refKey));
+      index = end - 1;
+    }
+    const content = out
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return { ...section, content, wordCount: countWords(content) };
+  });
+
+  return { sections: nextSections, figures };
+};
 
 export const extractTablesToFigures = (
   sections: ImportedSectionDraft[],
@@ -1794,6 +2915,69 @@ const plainRangeValue = (token: AssetReferenceToken): number | null =>
 // Convert source-visible labels ("Fig. 2.6b", "Fig. S2.18") into stable
 // asset references. The optional panel suffix remains outside the token, so a
 // reordered composite figure renders as the new number plus the same panel.
+// "Eq. (7)", "Eqs. (7) and (8)", "Eq. (11a)" — an equation reference wears its
+// number in parentheses, so it needs its own pass rather than the shared
+// `Fig./Table N` list matcher.
+const IMPORTED_EQUATION_REFERENCE =
+  /\b(Eqs?|Equations?)\.?\s+(\(\s*[A-Za-z]?\d+(?:\.\d+)?[a-z]?\s*\)(?:\s*(?:,|and|&|–|—|to)\s*\(\s*[A-Za-z]?\d+(?:\.\d+)?[a-z]?\s*\))*)/gi;
+const EQUATION_NUMBER_TOKEN = /\(\s*([A-Za-z]?\d+(?:\.\d+)?[a-z]?)\s*\)/g;
+
+const linkImportedEquationReferences = (
+  sections: ImportedSectionDraft[],
+  figures: ImportedFigureDraft[],
+): { sections: ImportedSectionDraft[]; linkedCount: number } => {
+  const byLabel = new Map<string, ImportedFigureDraft>();
+  for (const figure of figures) {
+    if (figure.assetKind !== 'EQUATION' || figure.sourceLabel === undefined) {
+      continue;
+    }
+    const label = figure.sourceLabel.toLowerCase();
+    if (!byLabel.has(label)) byLabel.set(label, figure);
+  }
+  if (byLabel.size === 0) return { sections, linkedCount: 0 };
+
+  let linkedCount = 0;
+  const linkedSections = sections.map((section) => {
+    const content = section.content.replace(
+      IMPORTED_EQUATION_REFERENCE,
+      (original: string, keyword: string, list: string) => {
+        EQUATION_NUMBER_TOKEN.lastIndex = 0;
+        const labels = [...list.matchAll(EQUATION_NUMBER_TOKEN)].map(
+          (match) => match[1],
+        );
+        const targets = labels.map((label) => byLabel.get(label.toLowerCase()));
+        // All or nothing: a half-linked list renders one live number beside a
+        // stale source number, which renumbering then makes wrong.
+        if (targets.some((target) => target === undefined)) return original;
+        linkedCount += targets.length;
+        let cursor = 0;
+        let targetIndex = 0;
+        EQUATION_NUMBER_TOKEN.lastIndex = 0;
+        let result = '';
+        for (const match of list.matchAll(EQUATION_NUMBER_TOKEN)) {
+          const index = match.index ?? 0;
+          result += list.slice(cursor, index);
+          result += `[#${targets[targetIndex]?.refKey ?? ''}]`;
+          cursor = index + match[0].length;
+          targetIndex += 1;
+        }
+        result += list.slice(cursor);
+        // The keyword is part of the rendered label ("(7)" carries no "Eq."),
+        // so it stays in the prose exactly as the author wrote it.
+        return `${keyword}${original.slice(
+          keyword.length,
+          original.length - list.length,
+        )}${result}`;
+      },
+    );
+    return content === section.content
+      ? section
+      : { ...section, content, wordCount: countWords(content) };
+  });
+
+  return { sections: linkedSections, linkedCount };
+};
+
 export const linkImportedAssetReferences = (
   sections: ImportedSectionDraft[],
   figures: ImportedFigureDraft[],
@@ -1915,6 +3099,11 @@ export const linkImportedAssetReferences = (
     const content = replace(withFigures, 'TABLE', IMPORTED_TABLE_REFERENCE);
     return { ...section, content, wordCount: countWords(content) };
   });
+  const withEquations = linkImportedEquationReferences(linkedSections, figures);
 
-  return { sections: linkedSections, figures, linkedCount };
+  return {
+    sections: withEquations.sections,
+    figures,
+    linkedCount: linkedCount + withEquations.linkedCount,
+  };
 };

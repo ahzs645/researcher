@@ -11,6 +11,9 @@ export type SubmissionMaterials = {
   competingInterests?: string | null;
   suggestedReviewers?: string | null;
   submissionExtras?: string | null;
+  // The response-to-reviewers document as Markdown, built from the review
+  // round the author has been answering. Absent until a round has answers.
+  responseToReviewers?: string | null;
 };
 
 export type SubmissionCheckSeverity = 'ERROR' | 'WARNING' | 'READY';
@@ -180,6 +183,7 @@ const bundleWarningCheck = (
 export const validateSubmission = (
   bundle: ManuscriptBundle,
   materials: SubmissionMaterials,
+  extraChecks: SubmissionCheck[] = [],
 ): SubmissionReadiness => {
   const checks: SubmissionCheck[] = [];
   const abstractWords = countWords(bundle.metadata.abstract);
@@ -350,6 +354,13 @@ export const validateSubmission = (
       target: 'submission',
     });
   }
+
+  // Checks the caller had to compute for us, appended before the counts so a
+  // supplied ERROR gates the export exactly like one raised here. They arrive
+  // as an argument because this function is pure and synchronous and they are
+  // neither: the retraction verdicts are session state from a Crossref scan,
+  // and screening reads manuscript sections the bundle does not carry.
+  checks.push(...extraChecks);
 
   const errorCount = checks.filter(
     (check) => check.severity === 'ERROR',

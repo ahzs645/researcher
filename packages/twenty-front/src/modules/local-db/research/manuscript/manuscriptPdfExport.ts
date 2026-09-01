@@ -19,9 +19,18 @@ import {
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { fitManuscriptFigureImages } from './manuscriptFigureFit';
+import { composeManuscriptFigurePanels } from './manuscriptPanelComposite';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { isImageDataUrl } from './manuscriptImages';
 import { latexToScriptedText } from './manuscriptMathText';
+import { stripAssetNumberAnchors } from './manuscriptAssetAnchors';
+import { stripCrossReferenceAnchors } from './manuscriptCrossReference';
+import {
+  manuscriptFootnoteMarkersToScripts,
+  manuscriptFootnoteNotesNodes,
+  numberManuscriptFootnotes,
+} from './manuscriptFootnotes';
+import { hasInlineMath, linearizeInlineMath } from './manuscriptInlineMath';
 import {
   A4_HEIGHT_POINTS,
   PRINTABLE_WIDTH_POINTS,
@@ -43,11 +52,28 @@ import {
 export const exportManuscriptToPdfBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
-  bundle = await fitManuscriptFigureImages(
-    await prepareManuscriptDiagramImages(
-      await prepareManuscriptBundleWithCsl(bundle),
+  const drawnBundle = await fitManuscriptFigureImages(
+    await composeManuscriptFigurePanels(
+      await prepareManuscriptDiagramImages(
+        await prepareManuscriptBundleWithCsl(bundle),
+      ),
     ),
   );
+  // react-pdf lays out a flow of text and has no notion of a page's foot, so
+  // there is nowhere to set a real footnote: anything drawn there would have to
+  // be positioned by guessing where the page was going to break. The honest
+  // answer is the one a printed book falls back on when its notes will not fit
+  // the page — a superscript marker in the sentence and a numbered "Notes"
+  // list at the end of the document.
+  const { bundle: numberedBundle, footnotes } =
+    numberManuscriptFootnotes(drawnBundle);
+  bundle = {
+    ...numberedBundle,
+    nodes: [
+      ...numberedBundle.nodes,
+      ...manuscriptFootnoteNotesNodes(footnotes),
+    ],
+  };
   const { editor, blocks } = buildBlockNoteDocument(bundle);
   // Times-Roman is one of PDF's built-in fonts, and built-in means WinAnsi:
   // no ≤, no ≥, no ∑, none of the Unicode sub- and superscripts the equation
@@ -93,7 +119,7 @@ export const exportManuscriptToPdfBlob = async (
     return {
       equation: latexToScriptedText(latex ?? ''),
       ...(label !== undefined && label.trim().length > 0
-        ? { label: label.trim() }
+        ? { label: stripAssetNumberAnchors(label).trim() }
         : {}),
     };
   };
@@ -265,14 +291,28 @@ export const exportManuscriptToPdfBlob = async (
   // react-pdf shift the pieces.
   const transformStyledText = exporter.transformStyledText.bind(exporter);
   exporter.transformStyledText = (styledText) => {
-    if (!hasManuscriptScripts(styledText.text)) {
-      return transformStyledText(styledText);
+    // `$C_j$` in a sentence is maths. react-pdf cannot typeset it, so it is
+    // linearized to the same scripted form a display equation gets rather
+    // than printed with its delimiters.
+    // The numbering anchors are the DOCX export's, marking which asset each
+    // printed number belongs to. react-pdf draws text: it prints the number.
+    // A footnote anchor becomes the superscript number the notes list at the
+    // end of the document is keyed by; the script machinery below then raises
+    // it the way it raises an imported "PM2.5".
+    const plain = stripAssetNumberAnchors(
+      stripCrossReferenceAnchors(
+        manuscriptFootnoteMarkersToScripts(styledText.text),
+      ),
+    );
+    const text = hasInlineMath(plain) ? linearizeInlineMath(plain) : plain;
+    if (!hasManuscriptScripts(text)) {
+      return transformStyledText({ ...styledText, text });
     }
     const base = transformStyledText({ ...styledText, text: '' });
     return cloneElement(
       base,
       {},
-      ...scriptRuns(styledText.text, bundle.style.bodyFontSize ?? 12),
+      ...scriptRuns(text, bundle.style.bodyFontSize ?? 12),
     );
   };
   exporter.styles.page = {

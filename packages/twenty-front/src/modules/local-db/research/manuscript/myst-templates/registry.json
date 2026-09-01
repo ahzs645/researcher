@@ -1,0 +1,2665 @@
+[
+  {
+    "id": "docx/myst/curvenote",
+    "title": "Curvenote Docx Template",
+    "description": "Template for docx curvenote exports",
+    "tags": [
+      "paper"
+    ],
+    "parts": [],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors"
+      },
+      {
+        "id": "bibliography"
+      }
+    ],
+    "options": [
+      {
+        "id": "hideFooter",
+        "type": "boolean",
+        "description": "Hide Curvenote logo footer on each page",
+        "default": false
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/curvenote_docx"
+    }
+  },
+  {
+    "id": "docx/myst/default",
+    "title": "Default Docx Template",
+    "description": "Template for docx myst exports",
+    "tags": [
+      "paper"
+    ],
+    "parts": [],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors"
+      },
+      {
+        "id": "bibliography"
+      }
+    ],
+    "options": [
+      {
+        "id": "hideFooter",
+        "type": "boolean",
+        "description": "Hide MyST logo footer on each page",
+        "default": false
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/docx_default"
+    }
+  },
+  {
+    "id": "tex/myst/agu2019",
+    "title": "AGU Journal",
+    "description": "The official 2019 AGU Journal template",
+    "tags": [
+      "paper",
+      "journal",
+      "geoscience",
+      "earthscience"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "A good Abstract will begin with a short description of the problem being addressed, briefly describe the new data or analyses, then briefly states the main conclusion(s) and how they are supported and uncertainties.\n",
+        "required": true
+      },
+      {
+        "id": "data_availability",
+        "title": "Availability Statement",
+        "description": "AGU requires an Availability Statement for the underlying data needed to understand, evaluate, and build upon the reported research at the time of peer review and publication.\nAdditionally, authors should include an Availability Statement for the software that has a significant impact on the research. Details and templates are in the Availability Statement section of the Data & Software for Authors Guidance:\nhttps://www.agu.org/Publish-with-AGU/Publish/Author-Resources/Data-and-Software-for-Authors#availability\nFor physical samples, use the IGSN persistent identifier, see the International Geo Sample Numbers section:\nhttps://www.agu.org/Publish-with-AGU/Publish/Author-Resources/Data-and-Software-for-Authors#IGSN\n",
+        "required": true
+      },
+      {
+        "id": "summary",
+        "title": "Plain Language Summary",
+        "description": "The Plain Language Summary should be written for a broad audience, including journalists and the science-interested public, that will not have a background in your field.\nA Plain Language Summary is required in GRL, JGR: Planets, JGR: Biogeosciences, JGR: Oceans, G-Cubed, Reviews of Geophysics, and JAMES.\nSee also http://sharingscience.agu.org/creating-plain-language-summary/\n",
+        "required": false
+      },
+      {
+        "id": "acknowledgments",
+        "description": "The acknowledgments must list:\n\n  - A statement that indicates to the reader where the data supporting the conclusions can be obtained (for example, in the references, tables, supporting information, and other databases).\n  - All funding sources related to this work from all authors\n  - Any real or perceived financial conflicts of interests for any author\n  - Other affiliations for any author that may be perceived as having a conflict of interest with respect to the results of this paper.\n\nIt is also the appropriate place to thank colleagues and other contributors.\nAGU does not normally allow dedications.\n",
+        "required": false
+      },
+      {
+        "id": "keypoints",
+        "description": "Key Points summarize the main points and conclusions of the article.\nInclude up to three key points (at least one is required). Must be a list in the frontmatter.\nEach must be 140 characters or fewer with no special characters or punctuation and must be complete sentences\n",
+        "required": true,
+        "as_list": true
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "bibliography"
+      },
+      {
+        "id": "affiliations"
+      }
+    ],
+    "options": [
+      {
+        "id": "journal_name",
+        "type": "choice",
+        "description": "AGU Journal name selection",
+        "required": true,
+        "choices": [
+          "JGR: Atmospheres",
+          "JGR: Biogeosciences",
+          "JGR: Earth Surface",
+          "JGR: Oceans",
+          "JGR: Planets",
+          "JGR: Solid Earth",
+          "JGR: Space Physics",
+          "Global Biogeochemical Cycles",
+          "Geophysical Research Letters",
+          "Paleoceanography and Paleoclimatology",
+          "Radio Science",
+          "Reviews of Geophysics",
+          "Tectonics",
+          "Space Weather",
+          "Water Resources Research",
+          "Geochemistry, Geophysics, Geosystems",
+          "Journal of Advances in Modeling Earth Systems (JAMES)",
+          "Earth's Future",
+          "Earth and Space Science",
+          "Geohealth",
+          "Notebooks Now!"
+        ]
+      },
+      {
+        "id": "draft",
+        "type": "boolean",
+        "description": "Mark the document as draft"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/agu2019"
+    }
+  },
+  {
+    "id": "tex/myst/arxiv_nips",
+    "title": "arXiv (NIPS Style)",
+    "description": "An arXiv compatible template based on the NIPS 2018 Style",
+    "tags": [
+      "paper",
+      "preprint",
+      "arxiv",
+      "bioarxiv",
+      "eartharxiv"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "Keep it short — abstracts longer than 1920 characters will not be accepted; abridge your abstract if necessary\n",
+        "required": true,
+        "max_chars": 1920
+      },
+      {
+        "id": "acknowledgments",
+        "description": "Free form acknowledgments section will be include at the end of the article"
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "description"
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "keywords"
+      },
+      {
+        "id": "short_title"
+      },
+      {
+        "id": "date"
+      },
+      {
+        "id": "bibliography"
+      },
+      {
+        "id": "subject"
+      },
+      {
+        "id": "subtitle"
+      }
+    ],
+    "options": [
+      {
+        "id": "show_date",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "id": "link",
+        "type": "string",
+        "description": "Include a link to the article online. This link will be placed inline at the end of all content, before the bibliography section.\n"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/arxiv_nips"
+    }
+  },
+  {
+    "id": "tex/myst/arxiv_two_column",
+    "title": "arXiv (Two Column)",
+    "description": "A two column arXiv compatible template",
+    "tags": [
+      "paper",
+      "two-column",
+      "preprint",
+      "arxiv",
+      "bioarxiv",
+      "eartharxiv"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "Keep it short — abstracts longer than 1920 characters will not be accepted; abridge your abstract if necessary\n",
+        "required": true,
+        "max_chars": 1920
+      },
+      {
+        "id": "acknowledgments",
+        "description": "Free form acknowledgments section will be include at the end of the article"
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "keywords",
+        "required": true
+      },
+      {
+        "id": "bibliography"
+      }
+    ],
+    "options": [
+      {
+        "id": "link",
+        "type": "string",
+        "description": "Include a link back to the article on curvenote.com. This link will be placed inline at the end of all content, before the bibliography section.\n"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/arxiv_two_column"
+    }
+  },
+  {
+    "id": "tex/myst/cageo",
+    "title": "Computers & Geosciences",
+    "description": "Latex template for the Computers & Geosciences journal by Elsevier\nPlease confirm that your submission follows all the requirements of the guidelines, including the submission checklist:\n  - Cover letter\n  - Highlights\n  - Authorship statement\n  - The manuscript must be single column and double spaced\n  - Reference must be in the author-date format\n  - Code availability section \nThe manuscripts that do meet the requirement guidelines will be desk-rejected.\n",
+    "tags": [
+      "paper",
+      "single_column",
+      "two_column"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "A good abstract will begin with a short description of the problem being addressed, briefly describe the new data or analyses, then briefly states the main conclusion(s) and how they are supported and uncertainties.\n",
+        "required": true
+      },
+      {
+        "id": "cover_letter_description",
+        "description": "Sample cover letter content is shown, <cover_letter_description> will be replaced with the content from this part. <title> will be inserted automatically:\n\n\"please find the enclosed manuscript \"<title>\" which we are submitting for\nexclusive consideration for publication in Computers & Geosciences. We confirm that\nthe submission follows all the requirements and includes all the items of the\nsubmission checklist.\n\nThe manuscript presents:\n\n<cover_letter_description>\n\nWe provide the source codes in a public repository with details listed in \nthe section \"Code availability\".\n\nThanks for your consideration.\"\"\n",
+        "required": true
+      },
+      {
+        "id": "highlights",
+        "description": "Highlights should be provided as an itemized (bullet) list",
+        "required": true
+      },
+      {
+        "id": "acknowledgments",
+        "description": "The authors would like to acknowledge ...",
+        "required": false
+      },
+      {
+        "id": "code_availability",
+        "description": "Name of the code/library\n\nContact: e-mail and phone number\n\nHardware requirements: ...\n\nProgram language: ...\n\nSoftware required: ...\n\nProgram size: ...\n\nThe source codes are available for downloading at the link:\nhttps://github.com/ . . . .\n",
+        "required": true
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "bibliography"
+      },
+      {
+        "id": "short_title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "keywords",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "id": "paper_size",
+        "type": "choice",
+        "description": "Set the paper size for the document\n(a4paper, a5paper, b5paper, letterpaper, legalpaper, executivepaper)\n",
+        "choices": [
+          "a4paper",
+          "a5paper",
+          "b5paper",
+          "letterpaper",
+          "legalpaper",
+          "executivepaper"
+        ],
+        "default": "a4paper"
+      },
+      {
+        "id": "two_column",
+        "type": "boolean",
+        "description": "When true used the \"cas-dc\" two column format, otherwise the \"cas-sc\" single column is used"
+      },
+      {
+        "id": "doublespacing",
+        "type": "boolean",
+        "description": "Apply double line spacing",
+        "default": true
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/cageo"
+    }
+  },
+  {
+    "id": "tex/myst/curvenote",
+    "title": "Curvenote Default",
+    "description": "A paper styled template using the custom environments and styling to match Curvenote Web",
+    "tags": [
+      "article",
+      "paper"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "An abstract is a short summary of your research paper or report. A good abstract will prepare readers for\nthe detailed information to follow, communicate the essence of the article and help readers take away and\nremember key points.\n",
+        "max_words": 500
+      },
+      {
+        "id": "acknowledgments",
+        "description": "You can this section to highlight support such as; collaborations, data sources, funding sources, broader\nprojects. This section will be places towards the end of the article with a subtitle - Acknowledgments.\n"
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "description"
+      },
+      {
+        "id": "tags"
+      },
+      {
+        "id": "date",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "keywords"
+      },
+      {
+        "id": "bibliography"
+      }
+    ],
+    "options": [
+      {
+        "id": "link",
+        "type": "string",
+        "description": "Link to the article online as a footnote on the first page\n"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/curvenote"
+    }
+  },
+  {
+    "id": "tex/myst/eartharxiv",
+    "title": "EarthArXiv",
+    "description": "A preprint template for EarthArXiv with the AGU bibstyle",
+    "tags": [
+      "paper",
+      "geoscience",
+      "earthscience",
+      "preprint"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "No description",
+        "required": true,
+        "max_words": 500
+      },
+      {
+        "id": "acknowledgments",
+        "description": "No description"
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "keywords",
+        "required": true
+      },
+      {
+        "id": "bibliography"
+      }
+    ],
+    "options": [
+      {
+        "id": "two_column",
+        "type": "boolean"
+      },
+      {
+        "id": "line_numbers",
+        "type": "boolean"
+      },
+      {
+        "id": "link",
+        "type": "string",
+        "description": "Include a link back to the article on curvenote.com. This link will be placed inline at the end of all content, before the bibliography section.\n"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/eartharxiv"
+    }
+  },
+  {
+    "id": "tex/myst/egu_copernicus",
+    "title": "EGU Copernicus",
+    "description": "A template based on the the Copernicus Publications LaTeX Macro Package",
+    "tags": [
+      "paper",
+      "journal"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "the abstract should be intelligible to the general reader without reference to the text.\nAfter a brief introduction of the topic, the summary recapitulates the key points of the\narticle and mentions possible directions for prospective research. Reference citations\nshould not be included in this section, unless urgently required, and abbreviations should\nnot be included without explanations. An abstract should be short, clear, concise, and written\nin English with correct spelling and good sentence structure.\n",
+        "required": true
+      },
+      {
+        "id": "author_contribution",
+        "description": "this section is mandatory",
+        "required": true
+      },
+      {
+        "id": "competing_interests",
+        "description": "this section is mandatory even if you declare that no competing interests are present",
+        "required": true
+      },
+      {
+        "id": "disclaimer",
+        "description": "optional disclaimer section"
+      },
+      {
+        "id": "acknowledgments",
+        "description": "optional acknowledgments section"
+      },
+      {
+        "id": "code_availability",
+        "description": "use this section when having only software code available"
+      },
+      {
+        "id": "data_availability",
+        "description": "use this section when having only data sets available"
+      },
+      {
+        "id": "code_data_availability",
+        "description": "use this section when having data sets and software code available"
+      },
+      {
+        "id": "sample_availability",
+        "description": "use this section when having geoscientific samples available"
+      },
+      {
+        "id": "video_supplement",
+        "description": "use this section when having video supplements available"
+      },
+      {
+        "id": "appendix",
+        "description": "the main appendix section"
+      },
+      {
+        "id": "appendix_figures",
+        "description": "a figures appendix section"
+      },
+      {
+        "id": "appendix_tables",
+        "description": "a tables appendix section"
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "description",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "keywords",
+        "required": true
+      },
+      {
+        "id": "short_title",
+        "title": "Running Title",
+        "description": "Set a shorter running version of the title",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "id": "journal_name",
+        "type": "choice",
+        "description": "Name of the MDPI Journal being submitted to\n",
+        "required": true,
+        "choices": [
+          "adgeo",
+          "ars",
+          "asr",
+          "ascmo",
+          "angeo",
+          "aab",
+          "acp",
+          "amt",
+          "bg",
+          "cp",
+          "deuquasp",
+          "dwes",
+          "esurf",
+          "esd",
+          "essd",
+          "egqsj",
+          "egusphere",
+          "ejm",
+          "fr",
+          "gchron",
+          "gh",
+          "gc",
+          "gi",
+          "gmd",
+          "hgss",
+          "hess",
+          "jbji",
+          "jm",
+          "jsss",
+          "mr",
+          "ms",
+          "nhess",
+          "npg",
+          "os",
+          "polf",
+          "pb",
+          "piahs",
+          "sand",
+          "sd",
+          "soil",
+          "se",
+          "tc",
+          "wcd",
+          "we",
+          "wes"
+        ],
+        "default": "soil"
+      },
+      {
+        "id": "running_author",
+        "type": "string",
+        "title": "Running Author",
+        "description": "Set a short running author string",
+        "required": true
+      },
+      {
+        "id": "proof",
+        "type": "boolean",
+        "title": "Proof",
+        "description": "Mark as proof"
+      },
+      {
+        "id": "copyright",
+        "type": "string",
+        "title": "Copyright Statement",
+        "description": "Usually set by EGU, this is optional and can be used for copyright transfers",
+        "default": ""
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/egu_copernicus"
+    }
+  },
+  {
+    "id": "tex/myst/frontiers",
+    "title": "Frontiers",
+    "description": "A template for the Frontiers In range of Journals",
+    "tags": [
+      "paper",
+      "journal"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "As a primary goal, the abstract should render the general significance and conceptual advance of the work clearly accessible to a broad readership. References should not be cited in the abstract. Leave the Abstract empty if your article does not require one, please see http://www.frontiersin.org/about/AuthorGuidelines#SummaryTable for details according to article type.\n"
+      },
+      {
+        "id": "acknowledgments",
+        "description": "This is a short text to acknowledge the contributions of specific colleagues, institutions, or agencies that aided the efforts of the authors.\n"
+      },
+      {
+        "id": "conflicts",
+        "description": "All financial, commercial or other relationships that might be perceived by the academic community as representing a potential conflict of interest must be disclosed. If no such relationship exists, authors will be asked to confirm the following statement:\nThe authors declare that the research was conducted in the absence of any commercial or financial relationships that could be construed as a potential conflict of interest.\n"
+      },
+      {
+        "id": "author_contributions",
+        "description": "The Author Contributions section is mandatory for all articles, including articles by sole authors. If an appropriate statement is not provided on submission, a standard one will be inserted during the production process. The Author Contributions statement must describe the contributions of individual authors referred to by their initials and, in doing so, all authors agree to be accountable for the content of the work. Please see https://www.frontiersin.org/about/policies-and-publication-ethics#AuthorshipAuthorResponsibilities for full authorship criteria.\n"
+      },
+      {
+        "id": "funding",
+        "description": "Details of all funding sources should be provided, including grant numbers if applicable. Please ensure to add all necessary funding information, as after publication this is no longer possible.\n"
+      },
+      {
+        "id": "data_availability",
+        "description": "Please see the availability of data guidelines for more information, at https://www.frontiersin.org/about/author-guidelines#AvailabilityofData\nThe datasets [GENERATED/ANALYZED] for this study can be found in the [NAME OF REPOSITORY] [LINK].\n"
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "short_title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "keywords",
+        "description": "All article types: you may provide up to 8 keywords; at least 5 are mandatory.\n",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "id": "reference_format",
+        "type": "choice",
+        "description": "Harvard Referencing Style (Author-Date) or Vancouver Reference Style (Numbered) For Frontiers Reference Styles by Journal see https://zendesk.frontiersin.org/hc/en-us/articles/360017860337-Frontiers-Reference-Styles-by-Journal\n",
+        "required": true,
+        "choices": [
+          "Harvard",
+          "Vancouver"
+        ],
+        "default": "Harvard"
+      },
+      {
+        "id": "line_numbers",
+        "type": "boolean",
+        "description": "Turn line numbers on in the PDF"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/frontiers"
+    }
+  },
+  {
+    "id": "tex/myst/isprs",
+    "title": "ISPRS - Full Paper",
+    "description": "ISPRS Full Paper template",
+    "tags": [
+      "paper",
+      "two_column"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "Between 100 and 250 words.",
+        "required": true,
+        "max_words": 250
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "bibliography"
+      },
+      {
+        "id": "keywords",
+        "description": "Should have between 5 to 8 keywords."
+      },
+      {
+        "id": "authors"
+      },
+      {
+        "id": "affiliations"
+      }
+    ],
+    "options": [
+      {
+        "id": "anonymous",
+        "type": "boolean",
+        "description": "Anonymize the authors of the document"
+      },
+      {
+        "id": "paper_size",
+        "type": "choice",
+        "description": "Set the paper size for the document",
+        "choices": [
+          "a4paper",
+          "letterpaper",
+          "legalpaper",
+          "a5paper",
+          "executivepaper",
+          "b5paper"
+        ],
+        "default": "a4paper"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/isprs"
+    }
+  },
+  {
+    "id": "tex/myst/lapreprint",
+    "title": "LaPreprint",
+    "description": "A template for easily creating pretty, nicely formatted preprints in LaTeX",
+    "tags": [
+      "paper",
+      "journal",
+      "preprint"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "An abstract is a short summary of your research paper or report. A good abstract will prepare readers for the detailed information to follow, communicate the essence of the article and help readers take away and remember key points.\n"
+      },
+      {
+        "id": "appendix",
+        "description": "Information to put at the back of your article"
+      },
+      {
+        "id": "data_availability",
+        "description": "Preprocessed data could be available, for example, on Zenodo"
+      },
+      {
+        "id": "funding",
+        "description": "Include any institutions who may have funded this work."
+      },
+      {
+        "id": "competing_interests",
+        "description": "Include this section even if you declare that no competing interests are present, by adding, for example \"The author declare no competing interests.\""
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "short_title"
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "bibliography"
+      },
+      {
+        "id": "keywords"
+      },
+      {
+        "id": "affiliations"
+      }
+    ],
+    "options": [
+      {
+        "id": "theme_color",
+        "type": "choice",
+        "description": "Choose between `blue` and `red` color scheme. Defaults to `blue`.",
+        "choices": [
+          "blue",
+          "red"
+        ],
+        "default": "blue"
+      },
+      {
+        "id": "line_spacing",
+        "type": "choice",
+        "description": "Use the onehalfspacing or doublespacing option for 1.5/2.0 line spacing.",
+        "choices": [
+          "single",
+          "onehalfspacing",
+          "doublespacing"
+        ],
+        "default": "single"
+      },
+      {
+        "id": "venue_footer",
+        "type": "choice",
+        "description": "Show a label of the venue, like \"arXiv\" in the footer of each page.",
+        "choices": [
+          "preprint",
+          "biorxiv",
+          "medrxiv",
+          "arxiv",
+          "chemrxiv"
+        ],
+        "default": "preprint"
+      },
+      {
+        "id": "number_sections",
+        "type": "boolean",
+        "description": "Number sections of the article"
+      },
+      {
+        "id": "line_numbers",
+        "type": "boolean",
+        "description": "Turn line numbers on in the PDF"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/lapreprint"
+    }
+  },
+  {
+    "id": "tex/myst/mdpi",
+    "title": "MDPI Journal",
+    "description": "A template for the MDPI range of Journals",
+    "tags": [
+      "paper",
+      "journal"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "A single plain text only paragraph of about 200 words maximum. For research articles, abstracts should give a pertinent overview of the work. We strongly encourage authors to use the following style of structured abstracts, but without headings: (1) Background: place the question addressed in a broad context and highlight the purpose of the study; (2) Methods: describe briefly the main methods or treatments applied; (3) Results: summarize the article's main findings; (4) Conclusion: indicate the main conclusions or interpretations. The abstract should be an objective representation of the article, it must not contain results which are not presented and substantiated in the main text and should not exaggerate the main conclusions.\n",
+        "required": true,
+        "plain": true,
+        "max_words": 200
+      },
+      {
+        "id": "author_contributions",
+        "description": "For research articles with several authors, a short paragraph specifying their individual contributions must be provided. The following statements should be used ``Conceptualization, X.X. and Y.Y.; methodology, X.X.; software, X.X.; validation, X.X., Y.Y. and Z.Z.; formal analysis, X.X.; investigation, X.X.; resources, X.X.; data curation, X.X.; writing---original draft preparation, X.X.; writing---review and editing, X.X.; visualization, X.X.; supervision, X.X.; project administration, X.X.; funding acquisition, Y.Y. All authors have read and agreed to the published version of the manuscript.'', please turn to the \\href{http://img.mdpi.org/data/contributor-role-instruction.pdf}{CRediT taxonomy} for the term explanation. Authorship must be limited to those who have contributed substantially to the work~reported.\n",
+        "required": true
+      },
+      {
+        "id": "funding",
+        "description": "Please add: ``This research received no external funding'' or ``This research was funded by NAME OF FUNDER grant number XXX.'' and  and ``The APC was funded by XXX''. Check carefully that the details given are accurate and use the standard spelling of funding agency names at \\url{https://search.crossref.org/funding}, any errors may affect your future funding.\n",
+        "required": true
+      },
+      {
+        "id": "key_contribution",
+        "description": "The breakthroughs or highlights of the manuscript. Authors can write one or two sentences to describe the most important part of the paper.\n",
+        "required": true,
+        "condition": {
+          "id": "journal_name",
+          "value": "toxins"
+        }
+      },
+      {
+        "id": "acknowledgments",
+        "description": "In this section you can acknowledge any support given which is not covered by the author contribution or funding sections. This may include administrative and technical support, or donations in kind (e.g., materials used for experiments).\n",
+        "required": false
+      },
+      {
+        "id": "summary",
+        "description": "A simple plain langauge summary\n",
+        "required": false
+      },
+      {
+        "id": "supplementary",
+        "description": "Example block content: \"The following are available online at https://www.mdpi.com/article/<doi>/<name>, Figure S1: title, Table S1: title, Video S1: title.\"\n",
+        "required": false
+      },
+      {
+        "id": "institutional_review",
+        "description": "In this section, please add the Institutional Review Board Statement and approval number for studies involving humans or animals. Please note that the Editorial Office might ask you for further information. Please add ``The study was conducted according to the guidelines of the Declaration of Helsinki, and approved by the Institutional Review Board (or Ethics Committee) of NAME OF INSTITUTE (protocol code XXX and date of approval).'' OR ``Ethical review and approval were waived for this study, due to REASON (please provide a detailed justification).'' OR ``Not applicable'' for studies not involving humans or animals. You might also choose to exclude this statement if the study did not involve humans or animals.\n",
+        "required": false
+      },
+      {
+        "id": "informed_consent",
+        "description": "Any research article describing a study involving humans should contain this statement. Please add ``Informed consent was obtained from all subjects involved in the study.'' OR ``Patient consent was waived due to REASON (please provide a detailed justification).'' OR ``Not applicable'' for studies not involving humans. You might also choose to exclude this statement if the study did not involve humans. Written informed consent for publication must be obtained from participating patients who can be identified (including by the patients themselves). Please state ``Written informed consent has been obtained from the patient(s) to publish this paper'' if applicable.\n",
+        "required": false
+      },
+      {
+        "id": "data_availability",
+        "description": "In this section, please provide details regarding where data supporting reported results can be found, including links to publicly archived datasets analyzed or generated during the study. Please refer to suggested Data Availability Statements in section ``MDPI Research Data Policies'' at \\url{https://www.mdpi.com/ethics}. You might choose to exclude this statement if the study did not report any data.\n",
+        "required": false
+      },
+      {
+        "id": "conflicts",
+        "description": "Declare conflicts of interest or state ``The authors declare no conflict of interest.'' Authors must identify and declare any personal circumstances or interest that may be perceived as inappropriately influencing the representation or interpretation of reported research results. Any role of the funders in the design of the study; in the collection, analyses or interpretation of data; in the writing of the manuscript, or in the decision to publish the results must be declared in this section. If there is no role, please state ``The funders had no role in the design of the study; in the collection, analyses, or interpretation of data; in the writing of the manuscript, or in the decision to publish the~results''.\n",
+        "required": false
+      },
+      {
+        "id": "sample_availability",
+        "description": "A statement on sample availability. e.g. ``Samples of the compounds ... are available from the authors.''\n",
+        "required": false
+      },
+      {
+        "id": "abbreviations",
+        "description": "A block containing ``The following abbreviations are used in this manuscript:'' and a table of abbreviations\n",
+        "required": false
+      },
+      {
+        "id": "appendix",
+        "description": "The appendix is an optional section that can contain details and data supplemental to the main text---for example, explanations of experimental details that would disrupt the flow of the main text but nonetheless remain crucial to understanding and reproducing the research shown; figures of replicates for experiments of which representative data are shown in the main text can be added here if brief, or as Supplementary Data. Mathematical proofs of results not central to the paper can be added as an appendix.\n",
+        "required": false
+      },
+      {
+        "id": "feature_application",
+        "description": "Authors are encouraged to provide a concise description of the specific application or a potential application of the work. This section is not mandatory.\n",
+        "required": true,
+        "condition": {
+          "id": "journal_name",
+          "value": "applsci"
+        }
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "date",
+        "required": true
+      },
+      {
+        "id": "keywords",
+        "description": "Include from three to ten pertinent keywords specific to the article; yet reasonably common within the subject discipline.\n",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "id": "journal_name",
+        "type": "choice",
+        "description": "Name of the MDPI Journal being submitted to\n",
+        "required": true,
+        "choices": [
+          "acoustics",
+          "actuators",
+          "addictions",
+          "admsci",
+          "adolescents",
+          "aerospace",
+          "agriculture",
+          "agriengineering",
+          "agronomy",
+          "ai",
+          "algorithms",
+          "allergies",
+          "analytica",
+          "animals",
+          "antibiotics",
+          "antibodies",
+          "antioxidants",
+          "appliedchem",
+          "applmech",
+          "applmicrobiol",
+          "applnano",
+          "applsci",
+          "arts",
+          "asi",
+          "atmosphere",
+          "atoms",
+          "audiolres",
+          "automation",
+          "axioms",
+          "batteries",
+          "bdcc",
+          "behavsci",
+          "beverages",
+          "biochem",
+          "bioengineering",
+          "biologics",
+          "biology",
+          "biomechanics",
+          "biomedicines",
+          "biomedinformatics",
+          "biomimetics",
+          "biomolecules",
+          "biophysica",
+          "biosensors",
+          "biotech",
+          "birds",
+          "bloods",
+          "brainsci",
+          "buildings",
+          "businesses",
+          "cancers",
+          "carbon",
+          "cardiogenetics",
+          "catalysts",
+          "cells",
+          "ceramics",
+          "challenges",
+          "chemengineering",
+          "chemistry",
+          "chemosensors",
+          "chemproc",
+          "children",
+          "civileng",
+          "cleantechnol",
+          "climate",
+          "clinpract",
+          "clockssleep",
+          "cmd",
+          "coatings",
+          "colloids",
+          "compounds",
+          "computation",
+          "computers",
+          "condensedmatter",
+          "conservation",
+          "constrmater",
+          "cosmetics",
+          "crops",
+          "cryptography",
+          "crystals",
+          "curroncol",
+          "cyber",
+          "dairy",
+          "data",
+          "dentistry",
+          "dermato",
+          "dermatopathology",
+          "designs",
+          "diabetology",
+          "diagnostics",
+          "digital",
+          "disabilities",
+          "diseases",
+          "diversity",
+          "dna",
+          "drones",
+          "dynamics",
+          "earth",
+          "ebj",
+          "ecologies",
+          "econometrics",
+          "economies",
+          "education",
+          "ejihpe",
+          "electricity",
+          "electrochem",
+          "electronicmat",
+          "electronics",
+          "encyclopedia",
+          "endocrines",
+          "energies",
+          "eng",
+          "engproc",
+          "entropy",
+          "environments",
+          "environsciproc",
+          "epidemiologia",
+          "epigenomes",
+          "fermentation",
+          "fibers",
+          "fire",
+          "fishes",
+          "fluids",
+          "foods",
+          "forecasting",
+          "forensicsci",
+          "forests",
+          "fractalfract",
+          "fuels",
+          "futureinternet",
+          "futuretransp",
+          "futurepharmacol",
+          "futurephys",
+          "galaxies",
+          "games",
+          "gases",
+          "gastroent",
+          "gastrointestdisord",
+          "gels",
+          "genealogy",
+          "genes",
+          "geographies",
+          "geohazards",
+          "geomatics",
+          "geosciences",
+          "geotechnics",
+          "geriatrics",
+          "hazardousmatters",
+          "healthcare",
+          "hearts",
+          "hemato",
+          "heritage",
+          "highthroughput",
+          "histories",
+          "horticulturae",
+          "humanities",
+          "hydrogen",
+          "hydrology",
+          "hygiene",
+          "idr",
+          "ijerph",
+          "ijfs",
+          "ijgi",
+          "ijms",
+          "ijns",
+          "ijtm",
+          "ijtpp",
+          "immuno",
+          "informatics",
+          "information",
+          "infrastructures",
+          "inorganics",
+          "insects",
+          "instruments",
+          "inventions",
+          "iot",
+          "j",
+          "jcdd",
+          "jcm",
+          "jcp",
+          "jcs",
+          "jdb",
+          "jfb",
+          "jfmk",
+          "jimaging",
+          "jintelligence",
+          "jlpea",
+          "jmmp",
+          "jmp",
+          "jmse",
+          "jne",
+          "jnt",
+          "jof",
+          "joitmc",
+          "jor",
+          "journalmedia",
+          "jox",
+          "jpm",
+          "jrfm",
+          "jsan",
+          "jtaer",
+          "jzbg",
+          "kidney",
+          "land",
+          "languages",
+          "laws",
+          "life",
+          "liquids",
+          "literature",
+          "livers",
+          "logistics",
+          "lubricants",
+          "machines",
+          "macromol",
+          "magnetism",
+          "magnetochemistry",
+          "make",
+          "marinedrugs",
+          "materials",
+          "materproc",
+          "mathematics",
+          "mca",
+          "measurements",
+          "medicina",
+          "medicines",
+          "medsci",
+          "membranes",
+          "metabolites",
+          "metals",
+          "metrology",
+          "micro",
+          "microarrays",
+          "microbiolres",
+          "micromachines",
+          "microorganisms",
+          "minerals",
+          "mining",
+          "modelling",
+          "molbank",
+          "molecules",
+          "mps",
+          "mti",
+          "nanoenergyadv",
+          "nanomanufacturing",
+          "nanomaterials",
+          "ncrna",
+          "network",
+          "neuroglia",
+          "neurolint",
+          "neurosci",
+          "nitrogen",
+          "notspecified",
+          "nri",
+          "nursrep",
+          "nutrients",
+          "obesities",
+          "oceans",
+          "ohbm",
+          "onco",
+          "oncopathology",
+          "optics",
+          "oral",
+          "organics",
+          "osteology",
+          "oxygen",
+          "parasites",
+          "parasitologia",
+          "particles",
+          "pathogens",
+          "pathophysiology",
+          "pediatrrep",
+          "pharmaceuticals",
+          "pharmaceutics",
+          "pharmacy",
+          "philosophies",
+          "photochem",
+          "photonics",
+          "physchem",
+          "physics",
+          "physiolsci",
+          "plants",
+          "plasma",
+          "pollutants",
+          "polymers",
+          "polysaccharides",
+          "preprints",
+          "proceedings",
+          "processes",
+          "prosthesis",
+          "proteomes",
+          "psych",
+          "psychiatryint",
+          "publications",
+          "quantumrep",
+          "quaternary",
+          "qubs",
+          "radiation",
+          "reactions",
+          "recycling",
+          "regeneration",
+          "religions",
+          "remotesensing",
+          "reports",
+          "reprodmed",
+          "resources",
+          "risks",
+          "robotics",
+          "safety",
+          "sci",
+          "scipharm",
+          "sensors",
+          "separations",
+          "sexes",
+          "signals",
+          "sinusitis",
+          "smartcities",
+          "sna",
+          "societies",
+          "socsci",
+          "soilsystems",
+          "solids",
+          "sports",
+          "standards",
+          "stats",
+          "stresses",
+          "surfaces",
+          "surgeries",
+          "suschem",
+          "sustainability",
+          "symmetry",
+          "systems",
+          "taxonomy",
+          "technologies",
+          "telecom",
+          "textiles",
+          "thermo",
+          "tourismhosp",
+          "toxics",
+          "toxins",
+          "transplantology",
+          "traumas",
+          "tropicalmed",
+          "universe",
+          "urbansci",
+          "uro",
+          "vaccines",
+          "vehicles",
+          "vetsci",
+          "vibration",
+          "viruses",
+          "vision",
+          "water",
+          "wevj",
+          "women",
+          "world"
+        ],
+        "default": "earth"
+      },
+      {
+        "id": "manuscript_type",
+        "type": "choice",
+        "description": "The type of manuscript to create\n",
+        "required": true,
+        "choices": [
+          "abstract",
+          "addendum",
+          "article",
+          "book",
+          "bookreview",
+          "briefreport",
+          "casereport",
+          "comment",
+          "commentary",
+          "communication",
+          "conferenceproceedings",
+          "correction",
+          "conferencereport",
+          "entry",
+          "expressionofconcern",
+          "extendedabstract",
+          "datadescriptor",
+          "editorial",
+          "essay",
+          "erratum",
+          "hypothesis",
+          "interestingimages",
+          "obituary",
+          "opinion",
+          "projectreport",
+          "reply",
+          "retraction",
+          "review",
+          "perspective",
+          "protocol",
+          "shortnote",
+          "studyprotocol",
+          "supfile",
+          "systematicreview",
+          "technicalnote",
+          "viewpoint",
+          "guidelines",
+          "registeredreport",
+          "tutorial"
+        ],
+        "default": "article"
+      },
+      {
+        "id": "manuscript_status",
+        "type": "choice",
+        "description": "Choose the status of the manuscript\n",
+        "required": true,
+        "choices": [
+          "submit",
+          "accept"
+        ],
+        "default": "submit"
+      },
+      {
+        "id": "entry_link",
+        "type": "string",
+        "description": "Link to the entry in the online Encyclopedia platform\n",
+        "condition": {
+          "id": "journal_name",
+          "value": "encyclopedia"
+        }
+      },
+      {
+        "id": "dataset",
+        "type": "string",
+        "description": "DOI number or link to the deposited data set in cases where the data set is published or set to be published separately. If the data set is submitted and will be published as a supplement to this paper in the journal Data, this field will be filled by the editors of the journal. In this case, please make sure to submit the data set as a supplement when entering your manuscript into our manuscript editorial system.\n",
+        "condition": {
+          "id": "journal_name",
+          "value": "data"
+        }
+      },
+      {
+        "id": "dataset_license",
+        "type": "string",
+        "description": "license under which the data set is made available (CC0, CC-BY, CC-BY-SA, CC-BY-NC, etc.)\n",
+        "condition": {
+          "id": "journal_name",
+          "value": "data"
+        }
+      },
+      {
+        "id": "lsid",
+        "type": "string",
+        "description": "Life Science Identifier url\n",
+        "required": false,
+        "condition": {
+          "id": "journal_name",
+          "value": "diversity"
+        }
+      },
+      {
+        "id": "chicago",
+        "type": "boolean",
+        "title": "Citation style",
+        "description": "Use Chicago style author citations\n"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/mdpi"
+    }
+  },
+  {
+    "id": "tex/myst/optica_journals",
+    "title": "Optica journals template",
+    "description": "A template for the Optica (formerly OSA) publisher",
+    "tags": [
+      "paper"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "A good abstract will begin with a short description of the problem being addressed, briefly describe the new data or analyses, then briefly states the main conclusion(s) and how they are supported and uncertainties.\n",
+        "required": true
+      },
+      {
+        "id": "funding",
+        "description": "This part will be filled in by the PRISM submission system, but can be included in the source document if desired. If included in the source document, it is just for visualization purposes and will be replaced by the PRISM content during submission anyways.\n",
+        "required": false
+      },
+      {
+        "id": "acknowledgement",
+        "description": "Additional information crediting individuals who contributed to the work being reported, clarifying who received funding from a particular source, or other information that does not fit the criteria for the funding block may also be included; for example, 'K. Flockhart thanks the National Science Foundation for help identifying collaborators for this work.'\n",
+        "required": false
+      },
+      {
+        "id": "disclosures",
+        "description": "List the Disclosures codes identified on the [Conflict of Interest policy page](https://opg.optica.org/submit/review/data-availability-policy.cfm).\n",
+        "required": false
+      },
+      {
+        "id": "data_availability",
+        "description": "A Data Availability Statement (DAS) is required for all submissions (except JOCN papers). The DAS should be an unnumbered separate section titled ``Data availability'' that immediately follows the Disclosures section. See the [Data Availability Statement policy page](https://opg.optica.org/submit/review/data-availability-policy.cfm) for more information. - When datasets are included as integral supplementary material in the paper, they must be declared (e.g., as \"Dataset 1\" following our current supplementary materials policy) and cited in the DAS, and should appear in the references. - When datasets are cited but not submitted as integral supplementary material, they must be cited in the DAS and should appear in the references. - If the data generated or analyzed as part of the research are not publicly available, that should be stated. Authors are encouraged to explain why (e.g. the data may be restricted for privacy reasons), and how the data might be obtained or accessed in the future. - If no data were generated or analyzed in the presented research, that should be stated. - Data availability statements are not required for preprint submissions.\n",
+        "required": false
+      },
+      {
+        "id": "supplemental",
+        "description": "A supplemental document must be called out in the back matter so that a link can be included. For example, “See Supplement 1 for supporting content.” Note that the Supplemental Document must also have a callout in the body of the paper.\n",
+        "required": false
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "affiliations",
+        "required": true
+      },
+      {
+        "id": "bibliography"
+      }
+    ],
+    "options": [
+      {
+        "id": "journal",
+        "type": "string",
+        "description": "The journal to which the paper is being submitted. If not specified, the default is `opticajournal`.\n"
+      },
+      {
+        "id": "bibliography_package",
+        "type": "choice",
+        "description": "The bibliography package to use. If not specified, the default is `natbib`.\n",
+        "choices": [
+          "natbib",
+          "biblatex",
+          "cite"
+        ]
+      }
+    ],
+    "links": {
+      "source": "https://github.com/ssenhorst/optica_journals"
+    }
+  },
+  {
+    "id": "tex/myst/physical_review_journals",
+    "title": "Physical Review Journals",
+    "description": "Template for Physical Review Journals",
+    "tags": [
+      "paper",
+      "two-column"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "A good abstract will begin with a short description of the problem being addressed, briefly describe the new data or analyses, then briefly states the main conclusion(s) and how they are supported and uncertainties.\n",
+        "required": true
+      },
+      {
+        "id": "acknowledgments",
+        "description": "Acknowledgments are a simple statement of thanks that appears at the end of a manuscript. They can recognize named individuals who contributed scientifically to the research of the paper; cite the funding agencies that provided financial support for the work; and note the affiliation of institutions in the byline. Acknowledgments to people precede those of financial support. Acknowledgments may not recognize those who helped in preparing the paper; editors who handled the peer review of the paper; those who contributed general encouragement (family, friends); or those who provided services that were not directly part of the research. Acknowledgements may not include a dedication or a memorial. Acknowledge positions, titles, and awards only if they provided funding for the research and state the source of financial funding in such cases. Noting the date associated with an award is not appropriate.\n",
+        "required": false
+      },
+      {
+        "id": "appendix",
+        "description": "Appendices contain additional material needed to understand the article. The appendix part can contain more than one section.\n",
+        "required": false
+      }
+    ],
+    "doc": [
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "bibliography"
+      },
+      {
+        "id": "keywords"
+      },
+      {
+        "id": "date"
+      }
+    ],
+    "options": [
+      {
+        "id": "draft",
+        "type": "boolean",
+        "description": "Mark the document as draft.",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "preprint",
+        "type": "string",
+        "description": "Institutional report numbers can be specified using this (see prepint revtex4-2 documentation).",
+        "required": false,
+        "max_chars": 20
+      },
+      {
+        "id": "linenumbers",
+        "type": "boolean",
+        "description": "Number lines (requires lineno.sty)",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "superscriptaddress",
+        "type": "boolean",
+        "description": "A major way of displaying authors and affiliations information is to use superscripts on the authors and affiliations. It should be mentioned that the affiliations for the superscriptaddress are presented and numbered in the order that they are encountered.",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "groupedaddress",
+        "type": "boolean",
+        "description": "To group authors with the same affiliation together this option can be chosen. This is the default behavior for most journals.",
+        "required": false,
+        "default": true
+      },
+      {
+        "id": "unsortedaddress",
+        "type": "boolean",
+        "description": "Grouping of authors into specific groups (see groupedaddress) is disabled.",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "runinaddress",
+        "type": "boolean",
+        "description": "Like groupedaddress, but joins multiple affiliations together into a single sequence separated by commas.",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "footinbib",
+        "type": "boolean",
+        "description": "The footnote text can either appear at the bottom of a page or as part of the bibliography. This option results it in only showing up in the bibliography. This can be used to override the default behavior of the journal.",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "nofootinbib",
+        "type": "boolean",
+        "description": "The footnote text can either appear at the bottom of a page or as part of the bibliography. This option results it in only showing up on the bottom of the page. This can be used to override  the default behavior of the journal.",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "bibnotes",
+        "type": "boolean",
+        "description": "Specifies whether additional author information such as email or homepage are put on the first page or at the start of the bibliography. For instance, the prb option puts all such footnotes at the start of the bibliography while the prl journal styles displays them on the first page. One can override a journal style’s default behavior by specifying explicitly the class option bibnotes (puts the footnotes at the start of the bibliography) or nobibnotes (puts them on the first page).",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "nobibnotes",
+        "type": "boolean",
+        "description": "Specifies whether additional author information such as email or homepage are put on the first page or at the start of the bibliography. For instance, the prb option puts all such footnotes at the start of the bibliography while the prl journal styles displays them on the first page. One can override a journal style’s default behavior by specifying explicitly the class option bibnotes (puts the footnotes at the start of the bibliography) or nobibnotes (puts them on the first page).",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "reprint",
+        "type": "boolean",
+        "description": "Closely approximate a given journal’s style. Can be either single or two-column formatting depending on the journal.",
+        "required": false,
+        "default": false
+      },
+      {
+        "id": "footnote_title",
+        "type": "string",
+        "description": "Adds a footnote to the article title.",
+        "required": false
+      },
+      {
+        "id": "styling",
+        "type": "choice",
+        "description": "Journal styling \":\" American Physical Society (aps), American Institute of Physics (aip), American Association of Physicists in Medicine (aapm), Society of Rheology (sor)",
+        "required": true,
+        "choices": [
+          "aps",
+          "aip",
+          "aapm",
+          "sor"
+        ],
+        "default": "aps"
+      },
+      {
+        "id": "aps_journal_type",
+        "type": "choice",
+        "description": "The types of American Physical Society journals",
+        "required": false,
+        "choices": [
+          "prl",
+          "pra",
+          "prb",
+          "prc",
+          "prd",
+          "pre",
+          "prab",
+          "prper",
+          "prx",
+          "prapplied",
+          "prfluids",
+          "prmaterials",
+          "physrev",
+          "rmp"
+        ],
+        "default": "pra"
+      },
+      {
+        "id": "aip_journal_type",
+        "type": "choice",
+        "description": "The types of American Institute of Physics journals",
+        "choices": [
+          "apl",
+          "bmf",
+          "cha",
+          "jap",
+          "jcp",
+          "jmp",
+          "rse",
+          "pof",
+          "pop",
+          "rsi",
+          "apm",
+          "adv",
+          "sd"
+        ],
+        "default": "apl"
+      },
+      {
+        "id": "aapm_journal_type",
+        "type": "choice",
+        "description": "The types of American Association of Physicists in Medicine journals",
+        "choices": [
+          "mph"
+        ],
+        "default": "mph"
+      },
+      {
+        "id": "sor_journal_type",
+        "type": "choice",
+        "description": "The types of Society of Rheology journals",
+        "choices": [
+          "jor"
+        ],
+        "default": "jor"
+      },
+      {
+        "id": "formatting",
+        "type": "choice",
+        "description": "Type of column formatting (one- or two-column article).",
+        "required": false,
+        "choices": [
+          "onecolumn",
+          "twocolumn"
+        ],
+        "default": "onecolumn"
+      },
+      {
+        "id": "paper_size",
+        "type": "choice",
+        "description": "Defines the size of the document, i.e. height and width.",
+        "required": false,
+        "choices": [
+          "letterpaper",
+          "a4paper",
+          "a5paper"
+        ],
+        "default": "letterpaper"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/physical_review_journals"
+    }
+  },
+  {
+    "id": "tex/myst/physiome",
+    "title": "Physiome Journal",
+    "description": "Physiome publishes articles describing physiological models which demonstrate that the mathematical model, model implementation, and simulation results are consistent and reproducible. Physiome articles must be linked to primary papers published in or accepted to a peer-reviewed physiology, bioengineering or biophysics journal.",
+    "tags": [
+      "article",
+      "paper"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "Please provide an abstract of no more than 300 words. Your abstract should explain the main contributions of your article, and should not contain any material that is not included in the main text.\n",
+        "required": true,
+        "max_words": 300
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "keywords",
+        "description": "Choose between 3 and 10 keywords that relate to the article\n",
+        "required": true
+      },
+      {
+        "id": "doi"
+      }
+    ],
+    "options": [
+      {
+        "id": "article_type",
+        "type": "choice",
+        "title": "Article Type",
+        "description": "See author instructions at: https://journal.physiomeproject.org/instructions-to-authors.html\n",
+        "required": true,
+        "choices": [
+          "Original",
+          "Retrospective",
+          "Review",
+          "Letter"
+        ],
+        "default": "Original"
+      },
+      {
+        "id": "line_numbers",
+        "type": "boolean",
+        "title": "Enable Line Numbers",
+        "description": "Show line numbers on the document",
+        "default": false
+      },
+      {
+        "id": "primary_pubs",
+        "type": "string",
+        "title": "Primary Publications",
+        "description": "A comma-seperated list of bibtex keys"
+      },
+      {
+        "id": "published",
+        "type": "boolean",
+        "description": "Is this submission published?",
+        "default": false
+      },
+      {
+        "id": "publication_date",
+        "type": "string",
+        "title": "Publication Date",
+        "description": "Use the form \"4 May 2020\"",
+        "condition": {
+          "id": "published",
+          "value": true
+        }
+      },
+      {
+        "id": "editor",
+        "type": "string",
+        "description": "Physiome Journal Editor",
+        "condition": {
+          "id": "published",
+          "value": true
+        }
+      },
+      {
+        "id": "curator",
+        "type": "string",
+        "description": "Physiome Journal Curator",
+        "condition": {
+          "id": "published",
+          "value": true
+        }
+      },
+      {
+        "id": "submitted_date",
+        "type": "string",
+        "title": "Submission Date",
+        "description": "Use the form \"4 May 2020\"",
+        "condition": {
+          "id": "published",
+          "value": true
+        }
+      },
+      {
+        "id": "accepted_date",
+        "type": "string",
+        "title": "Accepted Date",
+        "description": "Use the form \"4 May 2020\"",
+        "condition": {
+          "id": "published",
+          "value": true
+        }
+      },
+      {
+        "id": "cite_as",
+        "type": "string",
+        "title": "Submission Citation",
+        "description": "First and Second (2020) Example Article Title. Physiome 00(0).",
+        "condition": {
+          "id": "published",
+          "value": true
+        }
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/physiome"
+    }
+  },
+  {
+    "id": "tex/myst/plain_latex",
+    "title": "Plain LaTeX",
+    "description": "A minimal template that only uses vanilla LaTeX commands and environments",
+    "tags": [
+      "article",
+      "paper",
+      "vanilla"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "An abstract is a short summary of your research paper or report. A good abstract will prepare readers for\nthe detailed information to follow, communicate the essence of the article and help readers take away and\nremember key points.\n"
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "date"
+      },
+      {
+        "id": "bibliography"
+      }
+    ],
+    "options": [
+      {
+        "id": "link",
+        "type": "string",
+        "title": "Footnote Link",
+        "description": "This will add a footnote containing a link back to online version of your article\n"
+      },
+      {
+        "id": "logo",
+        "type": "boolean",
+        "title": "Curvenote Logo",
+        "description": "This will add a clickable Curvenote logo after the abstract with a link back to your article on Curvenote\n",
+        "default": true
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/plain_latex"
+    }
+  },
+  {
+    "id": "tex/myst/plain_latex_book",
+    "title": "Plain LaTeX Book",
+    "description": "A plain latex book theme",
+    "tags": [
+      "book"
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "subtitle"
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "bibliography"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/plain_latex_book"
+    }
+  },
+  {
+    "id": "tex/myst/spie_proceedings",
+    "title": "SPIE Proceedings",
+    "description": "A template using the styles provided by the SPIE for publications in their proceedings",
+    "tags": [
+      "paper",
+      "proceedings"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "An abstract is a short summary of your research paper or report. A good abstract will prepare readers for\nthe detailed information to follow, communicate the essence of the article and help readers take away and\nremember key points.\n",
+        "required": true
+      },
+      {
+        "id": "appendix",
+        "description": "Include one of more blocks in the appendix section, rendered after the main body of the article but before the bibliography."
+      },
+      {
+        "id": "acknowledgments",
+        "description": "This unnumbered section is used to identify those who have aided the authors in understanding or accomplishing the work presented and to acknowledge sources of funding.\n"
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "keywords",
+        "description": "Include a list of keywords after the abstract (minimum 3)\n"
+      },
+      {
+        "id": "bibliography"
+      }
+    ],
+    "options": [
+      {
+        "id": "paper_size",
+        "type": "choice",
+        "description": "Set the paper size for the document",
+        "choices": [
+          "usletter",
+          "a4paper"
+        ],
+        "default": "usletter"
+      },
+      {
+        "id": "double_spacing",
+        "type": "boolean",
+        "title": "Double line spacing",
+        "description": "Enable double line spacing",
+        "default": false
+      },
+      {
+        "id": "page_numbers",
+        "type": "boolean",
+        "description": "Enable page numbers",
+        "default": false
+      },
+      {
+        "id": "nocompress",
+        "type": "boolean",
+        "description": "Avoid compression of citations",
+        "default": true
+      },
+      {
+        "id": "start_page",
+        "type": "string",
+        "description": "Set the starting page number, only used when page numbers are enabled",
+        "default": "1"
+      },
+      {
+        "id": "link",
+        "type": "string",
+        "description": "Link to online article"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/spie_proceedings"
+    }
+  },
+  {
+    "id": "tex/myst/springer",
+    "title": "Springer",
+    "description": "Official template for Springer journals",
+    "tags": [
+      "paper",
+      "two-column"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "The abstract serves both as a general introduction to the topic and as a brief, non-technical summary of the main results and their implications. Authors are advised to check the author instructions for the journal they are submitting to for word limits and if structural elements like subheadings, citations, or equations are permitted.\n",
+        "required": true
+      },
+      {
+        "id": "acknowledgments",
+        "description": "Acknowledgments are not compulsory. Where included they should be brief. Grant or contribution numbers may be acknowledged. Please refer to Journal-level guidance for any specific requirements.\n",
+        "required": false
+      },
+      {
+        "id": "appendix",
+        "description": "An appendix contains supplementary information that is not an essential part of the text itself but which may be helpful in providing a more comprehensive understanding of the research problem or it is information that is too cumbersome to be included in the body of the paper.\n",
+        "required": false
+      },
+      {
+        "id": "declarations",
+        "description": "Some journals require declarations to be submitted in a standardised format. Please check the Instructions for Authors of the journal to which you are submitting to see if you need to complete this section. If yes, your manuscript must contain the following sections under the heading `Declarations':\n  - Funding\n  -  Conflict of interest/Competing interests (check journal-specific guidelines for which heading to use)\n  - Ethics approval \n  - Consent to participate\n  - Consent for publication\n  - Availability of data and materials\n  - Code availability \n  - Authors' contributions\nIf any of the sections are not relevant to your manuscript, please include the heading and %%write `Not applicable' for that section.\n",
+        "required": false
+      },
+      {
+        "id": "supplementary_information",
+        "description": "If your article has accompanying supplementary file/s please state so here. Authors reporting data from electrophoretic gels and blots should supply the full unprocessed scans for key as part of their Supplementary information. This may be requested by the editorial team/s if it is missing. Please refer to Journal-level guidance for any specific requirements\n",
+        "required": false
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "short_title",
+        "required": false
+      },
+      {
+        "id": "bibliography"
+      },
+      {
+        "id": "subtitle",
+        "required": false
+      },
+      {
+        "id": "keywords",
+        "required": false
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "affiliations",
+        "required": false
+      }
+    ],
+    "options": [
+      {
+        "id": "formatting",
+        "type": "choice",
+        "description": "Type of column formatting (one- or two-column article).",
+        "required": false,
+        "choices": [
+          "onecolumn",
+          "twocolumn"
+        ],
+        "default": "onecolumn"
+      },
+      {
+        "id": "referee",
+        "type": "boolean",
+        "description": "Mark the document as draft",
+        "default": false
+      },
+      {
+        "id": "line_numbers",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "id": "unnumbered_headings",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "id": "numbered_referencing",
+        "type": "boolean",
+        "description": "The reference styles (see option reference_style) support Namedate and Numbered referencing. By default the style follows the most common style. To switch between the options you can active (true) or deactivate (false) the `numbered` option.    \n",
+        "default": false
+      },
+      {
+        "id": "pdf_latex",
+        "type": "boolean",
+        "description": "When compiling with pdflatex/xelatex use pdflatex option.",
+        "default": true
+      },
+      {
+        "id": "reference_style",
+        "type": "choice",
+        "description": "The type the references are handled.",
+        "required": false,
+        "choices": [
+          "default",
+          "nature",
+          "basic",
+          "mathphys",
+          "vancouver",
+          "apa",
+          "chicago"
+        ],
+        "default": "default"
+      },
+      {
+        "id": "theorem_style",
+        "type": "choice",
+        "choices": [
+          "none",
+          "one",
+          "two",
+          "three"
+        ],
+        "default": "none"
+      },
+      {
+        "id": "theorem_sectionwise_numbering",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "id": "proposition_by_theorem_numbering",
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/springer"
+    }
+  },
+  {
+    "id": "tex/myst/volcanica",
+    "title": "Volcanica",
+    "description": "A template for submissions to the Volcanica journal",
+    "tags": [
+      "paper",
+      "journal",
+      "two-column",
+      "geoscience",
+      "earthscience"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "No description\n",
+        "required": true
+      },
+      {
+        "id": "acknowledgments",
+        "description": "No description\n",
+        "required": false
+      },
+      {
+        "id": "author_contributions",
+        "description": "No description\n",
+        "required": false
+      },
+      {
+        "id": "data_availability",
+        "description": "Links to data repositories, and/or a statement regarding the availability of data here. Authors are encouraged to make data freely available wherever possible: we recommend free repositories such as Zenodo and FigShare in order to facilitate transparent open access. We recommend versioning, archiving, and sharing code via GitHub/Zenodo; see: https://docs.github.com/en/repositories/archiving-a-github-repository/referencing-and-citing-content.\n",
+        "required": false
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "short_title",
+        "required": true
+      },
+      {
+        "id": "keywords",
+        "description": "Add up to six keywords"
+      },
+      {
+        "id": "bibliography"
+      },
+      {
+        "id": "affiliations"
+      }
+    ],
+    "options": [
+      {
+        "id": "article_type",
+        "type": "choice",
+        "description": "Details about different article types are available at: https://www.jvolcanica.org/ojs/index.php/volcanica/about/submissions\n",
+        "choices": [
+          "Research article",
+          "Report",
+          "Review",
+          "Methods"
+        ],
+        "default": "Research article"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/volcanica"
+    }
+  },
+  {
+    "id": "typst/myst/ieee-typst",
+    "title": "IEEE Typst Template",
+    "description": "IEEE Template from Typst app, updated as a MyST template",
+    "tags": [
+      "ieee",
+      "article",
+      "paper"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "An abstract is a short summary of your research paper or report. A good abstract will prepare readers for\nthe detailed information to follow, communicate the essence of the article and help readers take away and\nremember key points.\n",
+        "max_words": 500
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "keywords"
+      },
+      {
+        "id": "authors"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/ieee-typst-template"
+    }
+  },
+  {
+    "id": "typst/myst/lapreprint-typst",
+    "title": "LaPreprint Typst Template",
+    "description": "Easily create beautiful preprints in Typst",
+    "tags": [
+      "preprint",
+      "article",
+      "paper"
+    ],
+    "parts": [
+      {
+        "id": "abstract",
+        "description": "An abstract is a short summary of your research paper or report. A good abstract will prepare readers for the detailed information to follow, communicate the essence of the article and help readers take away and remember key points.\n",
+        "required": true,
+        "max_words": 500
+      },
+      {
+        "id": "summary",
+        "description": "Plain language summary",
+        "required": false,
+        "max_words": 500
+      },
+      {
+        "id": "acknowledgements",
+        "description": "Acknowledgements printed in the margin\n",
+        "max_words": 500
+      },
+      {
+        "id": "availability",
+        "description": "Data availability statement printed in the margin\n",
+        "max_words": 500
+      }
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "subtitle"
+      },
+      {
+        "id": "short_title"
+      },
+      {
+        "id": "open_access"
+      },
+      {
+        "id": "keywords"
+      },
+      {
+        "id": "doi"
+      },
+      {
+        "id": "venue"
+      }
+    ],
+    "options": [
+      {
+        "id": "logo",
+        "type": "file",
+        "description": "An image path that is shown in the top right of the page"
+      },
+      {
+        "id": "kind",
+        "type": "string",
+        "description": "The \"kind\" of the content, e.g. \"Original Research\" - shown as the title of the margin content on the first page"
+      },
+      {
+        "id": "short_citation",
+        "type": "string",
+        "description": "The short citation used in the document header. By default, it\nis automatically determined from the author names.\n"
+      },
+      {
+        "id": "heading_numbering",
+        "type": "string",
+        "description": "Heading numbering style.\nSee also https://typst.app/docs/reference/model/numbering/.\n"
+      },
+      {
+        "id": "theme",
+        "type": "string",
+        "description": "Allows to set the colortheme, e.g. red.darken(30%).\nDefault set to blue.darken(30%)\n"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/lapreprint-typst"
+    }
+  },
+  {
+    "id": "typst/myst/plain_typst_book",
+    "title": "Plain Typst Book",
+    "description": "Easily create beautiful books in Typst",
+    "tags": [
+      "book"
+    ],
+    "parts": [],
+    "doc": [
+      {
+        "id": "title",
+        "required": true
+      },
+      {
+        "id": "authors",
+        "required": true
+      },
+      {
+        "id": "subtitle"
+      },
+      {
+        "id": "short_title"
+      },
+      {
+        "id": "open_access"
+      },
+      {
+        "id": "keywords"
+      },
+      {
+        "id": "doi"
+      },
+      {
+        "id": "venue"
+      }
+    ],
+    "options": [
+      {
+        "id": "kind",
+        "type": "string",
+        "description": "The \"kind\" of the content, e.g. \"Original Research\" - shown as the title of the margin content on the first page"
+      },
+      {
+        "id": "cover",
+        "type": "file",
+        "description": "An image path that is shown in the front page"
+      },
+      {
+        "id": "coverposition",
+        "type": "number",
+        "description": "Sets the vertical position of the cover"
+      },
+      {
+        "id": "cover_width",
+        "type": "number",
+        "description": "Sets the width of the coverfigure"
+      },
+      {
+        "id": "ToC_depth",
+        "type": "number",
+        "description": "number to set the depth of ToC"
+      },
+      {
+        "id": "show_ToC",
+        "type": "boolean",
+        "description": "show ToC (default 1)"
+      },
+      {
+        "id": "logo",
+        "type": "file",
+        "description": "An image path that is shown in the top right of the page"
+      },
+      {
+        "id": "logo_width",
+        "type": "number",
+        "description": "sets width of logo"
+      },
+      {
+        "id": "papersize",
+        "type": "string",
+        "description": "sets papersize"
+      },
+      {
+        "id": "show_pagenumber",
+        "type": "boolean",
+        "description": "shows page number (default 1)"
+      },
+      {
+        "id": "fontstyle",
+        "type": "string",
+        "description": "sets the font"
+      },
+      {
+        "id": "fontsize",
+        "type": "number",
+        "description": "sets the fontsize"
+      },
+      {
+        "id": "margin_left",
+        "type": "number",
+        "description": "sets margin left (as percentage)"
+      },
+      {
+        "id": "margin_right",
+        "type": "number",
+        "description": "sets margin right (as percentage)"
+      },
+      {
+        "id": "margin_top",
+        "type": "number",
+        "description": "sets margin top (in cm)"
+      },
+      {
+        "id": "margin_bottom",
+        "type": "number",
+        "description": "sets  margin bottom (in cm)"
+      },
+      {
+        "id": "linespacing",
+        "type": "number",
+        "description": "sets the linespancing (default 0.5 (em))"
+      },
+      {
+        "id": "justification",
+        "type": "boolean",
+        "description": "sets the justifcation"
+      },
+      {
+        "id": "colortheme",
+        "type": "string",
+        "description": "theme color"
+      },
+      {
+        "id": "colorheadings",
+        "type": "string",
+        "description": "color of the headings"
+      },
+      {
+        "id": "preface",
+        "type": "string",
+        "description": "a preface which is not included online"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/myst-templates/plain_typst_book"
+    }
+  },
+  {
+    "id": "typst/stefanv/letterloom-typst",
+    "title": "Letterloom Typst Template",
+    "description": "A letter template",
+    "tags": [
+      "letter"
+    ],
+    "doc": [
+      {
+        "id": "title",
+        "description": "Letter title",
+        "required": true
+      },
+      {
+        "id": "date",
+        "description": "Letter date; leave blank for today's date"
+      }
+    ],
+    "options": [
+      {
+        "id": "from-name",
+        "type": "string",
+        "description": "Sender's name",
+        "required": true
+      },
+      {
+        "id": "from-address",
+        "type": "string",
+        "description": "Sender's address"
+      },
+      {
+        "id": "to-name",
+        "type": "string",
+        "description": "Recipient's name"
+      },
+      {
+        "id": "to-address",
+        "type": "string",
+        "description": "Recipient's address"
+      },
+      {
+        "id": "banner-image",
+        "type": "file",
+        "description": "Path to an image file to be used as letter banner"
+      },
+      {
+        "id": "salutation",
+        "type": "string",
+        "description": "Opening greeting"
+      },
+      {
+        "id": "closing",
+        "type": "string",
+        "description": "Closing phrase"
+      },
+      {
+        "id": "signature-name",
+        "type": "string",
+        "description": "Name of the signatory (appears in signature block)"
+      },
+      {
+        "id": "signature-title",
+        "type": "string",
+        "description": "Signatory's official title"
+      },
+      {
+        "id": "signature-affiliation",
+        "type": "string",
+        "description": "Affiliation of the signatory (e.g., organization or title)"
+      },
+      {
+        "id": "signature-image",
+        "type": "file",
+        "description": "Path to an image file of the signatory’s handwritten signature"
+      },
+      {
+        "id": "signature-image-width",
+        "type": "string",
+        "description": "Width of the signature image"
+      }
+    ],
+    "links": {
+      "source": "https://github.com/stefanv/myst-typst-letterloom"
+    }
+  }
+]

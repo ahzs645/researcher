@@ -2,7 +2,7 @@ import { styled } from '@linaria/react';
 import { useMemo, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { IconPlus } from 'twenty-ui/display';
-import { Button } from 'twenty-ui/input';
+import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptFigureCreateForm } from '@/local-db/research/components/ManuscriptFigureCreateForm';
@@ -18,7 +18,10 @@ import {
   uniqueFigureKey,
 } from '@/local-db/research/components/composer/manuscriptFigurePanelUtils';
 import { type ChartKind } from '@/local-db/research/manuscript/manuscriptChart';
-import { numberAssets } from '@/local-db/research/manuscript/manuscriptNumbering';
+import {
+  isFigurePanel,
+  numberAssets,
+} from '@/local-db/research/manuscript/manuscriptNumbering';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import {
   type FigureLike,
@@ -176,12 +179,39 @@ export const ManuscriptFigurePanel = ({
       );
   };
 
+  // A panel moves among its siblings, which is what changes its letter; a
+  // figure moves among the figures it shares a counter with.
   const orderedPeers = (figure: FigureLike) =>
-    numbered.filter(
-      (candidate) =>
-        candidate.assetKind === figure.assetKind &&
-        candidate.placement === figure.placement,
+    numbered.filter((candidate) =>
+      isFigurePanel(figure)
+        ? candidate.parentFigureId === figure.parentFigureId
+        : !isFigurePanel(candidate) &&
+          candidate.assetKind === figure.assetKind &&
+          candidate.placement === figure.placement,
     );
+
+  // What a figure can be made a panel of: any other picture figure that is not
+  // itself a panel, so a panel of a panel — which nothing downstream would
+  // know how to letter — cannot be asked for in the first place.
+  const panelParentOptions = (figure: FigureLike): SelectOption<string>[] => {
+    // A figure that already holds panels cannot become one.
+    const hasPanels = figures.some(
+      (candidate) => candidate.parentFigureId === figure.id,
+    );
+    if (hasPanels) return [];
+    return numbered
+      .filter(
+        (candidate) =>
+          candidate.id !== figure.id &&
+          !isFigurePanel(candidate) &&
+          candidate.assetKind !== 'TABLE' &&
+          candidate.assetKind !== 'EQUATION',
+      )
+      .map((candidate) => ({
+        value: candidate.id,
+        label: `${candidate.label} · ${candidate.name ?? candidate.refKey ?? candidate.id}`,
+      }));
+  };
 
   const moveFigure = (figure: FigureLike, direction: -1 | 1) => {
     const peers = orderedPeers(figure);
@@ -214,9 +244,19 @@ export const ManuscriptFigurePanel = ({
 
   const deleteFigure = (figure: FigureLike) => {
     const assetLabel = figure.assetKind?.toLowerCase() ?? 'asset';
+    // A panel whose parent is gone has nothing to take a letter from, so it
+    // goes back to being a figure of its own rather than disappearing — worth
+    // saying before the delete, not after.
+    const panelCount = figures.filter(
+      (candidate) => candidate.parentFigureId === figure.id,
+    ).length;
     enqueueDialog({
       title: `Delete ${assetLabel}?`,
-      message: `Delete ${figure.name ?? `this ${assetLabel}`} permanently? Cross-reference tokens such as [#${figure.refKey ?? figure.id}] will remain as unresolved warnings.`,
+      message: `Delete ${figure.name ?? `this ${assetLabel}`} permanently? Cross-reference tokens such as [#${figure.refKey ?? figure.id}] will remain as unresolved warnings.${
+        panelCount === 0
+          ? ''
+          : ` Its ${panelCount} panel${panelCount === 1 ? '' : 's'} will become numbered figures of their own.`
+      }`,
       buttons: [
         { title: 'Cancel' },
         {
@@ -456,6 +496,7 @@ export const ManuscriptFigurePanel = ({
             isAdding={isAdding}
             isExpanded={expandedFigureId === figure.id}
             tableStyle={tableStyle}
+            panelParentOptions={panelParentOptions(figure)}
             onToggle={() =>
               setExpandedFigureId((currentId) =>
                 currentId === figure.id ? null : figure.id,

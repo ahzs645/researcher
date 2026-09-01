@@ -4,9 +4,14 @@ import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptManualReferenceForm } from '@/local-db/research/components/composer/references/ManuscriptManualReferenceForm';
+import { ManuscriptRetractedReferenceWarnings } from '@/local-db/research/components/composer/references/ManuscriptRetractedReferenceWarnings';
+import { resolveReferenceIdentifiers } from '@/local-db/research/components/composer/references/manuscriptIdentifierFetch';
+import {
+  classifyReferenceIdentifiers,
+  REFERENCE_IDENTIFIER_LABELS,
+} from '@/local-db/research/manuscript/manuscriptReferenceIdentifiers';
 import {
   cslItemToReferenceDraft,
-  doiCslJsonUrl,
   parseReferences,
   type ReferenceDraft,
 } from '@/local-db/research/manuscript/manuscriptReferenceImport';
@@ -91,7 +96,7 @@ export const ManuscriptReferenceImportTools = ({
   });
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
   const [pasteText, setPasteText] = useState('');
-  const [doi, setDoi] = useState('');
+  const [identifierText, setIdentifierText] = useState('');
   const [zotero, setZotero] = useState<ZoteroConfig>({
     apiKey: '',
     libraryType: 'users',
@@ -151,25 +156,53 @@ export const ManuscriptReferenceImportTools = ({
     }
   };
 
-  const importDoi = async () => {
-    if (isBusy || doi.trim().length === 0) return;
+  // Cite by identifier, Manubot-style: whatever the author pasted is sniffed
+  // into a DOI / PMID / PMCID / arXiv ID / ISBN / URL and resolved to CSL JSON,
+  // so there is no bibliographic entry left for them to get wrong.
+  const importIdentifiers = async () => {
+    if (isBusy || identifierText.trim().length === 0) return;
+    const identifiers = classifyReferenceIdentifiers(identifierText);
+    if (identifiers.length === 0) return;
     setIsBusy(true);
     try {
-      const response = await fetch(doiCslJsonUrl(doi), {
-        headers: { Accept: 'application/vnd.citationstyles.csl+json' },
-      });
-      if (!response.ok) {
+      const resolutions = await resolveReferenceIdentifiers(identifiers);
+      const drafts = resolutions.flatMap((resolution) =>
+        resolution.item === null
+          ? []
+          : [cslItemToReferenceDraft(resolution.item)],
+      );
+      const errors = resolutions.flatMap((resolution) =>
+        resolution.error === null ? [] : [resolution.error],
+      );
+      // Report what failed even when the rest imported: a line silently
+      // dropped from a pasted batch is a citation the author will not notice
+      // is missing.
+      if (errors.length > 0) {
         enqueueErrorSnackBar({
-          message: `DOI lookup failed (${response.status})`,
+          message:
+            errors.slice(0, 3).join(' · ') +
+            (errors.length > 3 ? ` · and ${errors.length - 3} more` : ''),
         });
-        return;
       }
-      const item = (await response.json()) as Record<string, unknown>;
-      const result = await createFromDrafts([cslItemToReferenceDraft(item)]);
-      summarize(result.addedCount, result.duplicateCount, ' from DOI');
-      setDoi('');
-    } catch {
-      enqueueErrorSnackBar({ message: 'Could not reach doi.org' });
+      if (drafts.length === 0) return;
+      const kinds = [
+        ...new Set(
+          resolutions
+            .filter((resolution) => resolution.item !== null)
+            .map(
+              (resolution) =>
+                REFERENCE_IDENTIFIER_LABELS[resolution.identifier.kind],
+            ),
+        ),
+      ];
+      const result = await createFromDrafts(drafts);
+      summarize(
+        result.addedCount,
+        result.duplicateCount,
+        ` by ${kinds.join('/')}`,
+      );
+      // Only clear the box on a clean run, so the failed lines stay editable.
+      if (errors.length === 0) setIdentifierText('');
     } finally {
       setIsBusy(false);
     }
@@ -225,20 +258,21 @@ export const ManuscriptReferenceImportTools = ({
         />
       ) : null}
       <StyledTitle>Import references</StyledTitle>
-      <StyledActions>
-        <StyledInput
-          placeholder="Add by DOI (e.g. 10.1038/…)"
-          value={doi}
-          onChange={(event) => setDoi(event.target.value)}
-        />
-        <Button
-          title="Add"
-          variant="secondary"
-          size="small"
-          disabled={isBusy || doi.trim().length === 0}
-          onClick={importDoi}
-        />
-      </StyledActions>
+      <StyledTextarea
+        aria-label="Add by identifier"
+        placeholder={
+          'Add by identifier, one per line — DOI, PMID, PMCID, arXiv ID, ISBN or URL\n10.1038/s41586-020-2649-2\nPMID: 32109013\narXiv:2401.00001'
+        }
+        value={identifierText}
+        onChange={(event) => setIdentifierText(event.target.value)}
+      />
+      <Button
+        title={isBusy ? 'Looking up…' : 'Add by identifier'}
+        variant="secondary"
+        size="small"
+        disabled={isBusy || identifierText.trim().length === 0}
+        onClick={importIdentifiers}
+      />
       <StyledTextarea
         placeholder="Paste BibTeX or CSL-JSON…"
         value={pasteText}
@@ -294,6 +328,11 @@ export const ManuscriptReferenceImportTools = ({
           onClick={importZotero}
         />
       </StyledActions>
+      <StyledTitle>Check references</StyledTitle>
+      <ManuscriptRetractedReferenceWarnings
+        manuscriptId={manuscriptId}
+        references={references}
+      />
     </StyledCard>
   );
 };

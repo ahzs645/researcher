@@ -222,3 +222,176 @@ describe('figures in a submission package', () => {
     expect(Object.keys(files)).toEqual(['figures/Figure-1.png']);
   });
 });
+// Screening produced rows on a tab and nothing else; the package is where it
+// becomes something a coauthor or an editor can be handed.
+describe('screening in a submission package', () => {
+  const SECTIONS = [
+    {
+      id: 'abstract',
+      name: 'Abstract',
+      sectionType: 'ABSTRACT',
+      placement: 'FRONT_MATTER',
+      content: 'A concise abstract for screening verification.',
+      includeInExport: true,
+    },
+    {
+      id: 'availability',
+      name: 'Data availability',
+      sectionType: 'DATA_AVAILABILITY',
+      placement: 'BACK_MATTER',
+      content:
+        'All data are deposited in Zenodo at https://doi.org/10.5281/zenodo.1234567.',
+      includeInExport: true,
+    },
+  ];
+
+  const screenedBundle = () =>
+    buildManuscriptBundle({
+      manuscript: {
+        id: 'paper-2',
+        name: 'A screened manuscript',
+        authorLine: 'A. Researcher',
+      },
+      sections: SECTIONS,
+      figures: [],
+      references: [],
+      style: { name: 'Test journal' },
+    });
+
+  const unzipPackageBlob = async (blob: Blob) => {
+    const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.readAsArrayBuffer(blob);
+    });
+    return unzipSync(new Uint8Array(buffer));
+  };
+
+  it('ships a screening report and says the same thing the panel said', async () => {
+    const result = await createSubmissionPackage(
+      screenedBundle(),
+      { competingInterests: 'The authors declare no competing interests.' },
+      {
+        manuscript: { title: 'A screened manuscript' },
+        sections: SECTIONS,
+        figures: [],
+        references: [],
+      },
+      [
+        {
+          id: 'retraction-scan-not-run',
+          label: 'Retraction check',
+          detail:
+            '3 reference(s) with a DOI have not been checked against Crossref',
+          severity: 'WARNING',
+          target: 'references',
+        },
+      ],
+    );
+    const packageFiles = await unzipPackageBlob(result.blob);
+    const report = strFromU8(packageFiles['screening-report.txt']);
+    const manifest = strFromU8(packageFiles['submission-readiness.txt']);
+
+    expect(result.includedFiles).toContain('screening-report.txt');
+    expect(report).toContain('A screened manuscript');
+    expect(report).toContain('[PRESENT] Open data statement');
+    expect(report).toContain('[ABSENT] Open code statement');
+    expect(report).toContain('Does the paper say where the analysis code is?');
+    // The panel runs seventeen checks and declines the biomedical ones on a
+    // paper like this. A report that printed only the nine it scored would
+    // read as though the other eight did not exist, rather than as eight this
+    // manuscript was judged not to need.
+    expect(report).toContain('Not applicable to this manuscript');
+    expect(report).toContain('Cell line authentication');
+    expect(report).toContain('zenodo.1234567');
+
+    // The manifest carries both the screening line and the check the caller
+    // computed for the panel, so the ZIP and the screen agree.
+    expect(manifest).toContain('Automated screening');
+    expect(manifest).toContain('Open code statement');
+    expect(manifest).toContain('[WARNING] Retraction check');
+    expect(
+      result.readiness.checks.find(
+        (check) => check.id === 'automated-screening',
+      )?.severity,
+    ).toBe('WARNING');
+    // Screening reports; it never blocks.
+    expect(result.readiness.errorCount).toBe(0);
+  });
+
+  it('screens nothing when there is no manuscript source to screen', async () => {
+    const result = await createSubmissionPackage(screenedBundle(), {});
+
+    expect(result.includedFiles).not.toContain('screening-report.txt');
+    expect(
+      result.readiness.checks.some(
+        (check) => check.id === 'automated-screening',
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('a panelled figure in a submission package', () => {
+  const PIXEL =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  it('names each panel’s artwork after the reference that identifies it', () => {
+    const figures = manuscriptSubmissionFigures(
+      buildManuscriptBundle({
+        manuscript: { id: 'paper', name: 'Panelled paper' },
+        style: {},
+        sections: [
+          {
+            id: 'res',
+            name: 'Results',
+            placement: 'MAIN',
+            includeInExport: true,
+            content: 'Body.',
+          },
+        ],
+        figures: [
+          {
+            id: 'plume',
+            refKey: 'fig:plume',
+            name: 'Plume',
+            assetKind: 'FIGURE',
+            placement: 'MAIN',
+            orderIndex: 0,
+            imageUrl: PIXEL,
+          },
+          {
+            id: 'plume-left',
+            refKey: 'fig:plume-left',
+            name: 'Left',
+            assetKind: 'FIGURE',
+            placement: 'MAIN',
+            orderIndex: 0,
+            parentFigureId: 'plume',
+            imageUrl: PIXEL,
+          },
+          {
+            id: 'plume-right',
+            refKey: 'fig:plume-right',
+            name: 'Right',
+            assetKind: 'FIGURE',
+            placement: 'MAIN',
+            orderIndex: 1,
+            parentFigureId: 'plume',
+            imageUrl: PIXEL,
+          },
+        ],
+        references: [],
+      }),
+    );
+
+    // A panel prints "(a)" beside itself, and two figures' panels would both
+    // slug that to the same filename — so a panel's artwork is named by the
+    // reference that identifies it instead.
+    expect(Object.keys(figures.files).sort()).toEqual([
+      'figures/Figure-1.png',
+      'figures/Figure-1a.png',
+      'figures/Figure-1b.png',
+    ]);
+  });
+});

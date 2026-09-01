@@ -3,16 +3,24 @@ import {
   docxDefaultSchemaMappings,
 } from '@blocknote/xl-docx-exporter';
 import { BlockNoteEditor, type PartialBlock } from '@blocknote/core';
+import { isNonEmptyString } from '@sniptt/guards';
 import {
   AlignmentType,
+  Bookmark,
+  CommentRangeEnd,
+  CommentRangeStart,
+  CommentReference,
   ExternalHyperlink,
   Footer,
+  FootnoteReferenceRun,
   HeadingLevel,
+  type ICommentOptions,
   LineNumberRestartFormat,
   LineRuleType,
   Math as DocxMath,
   PageNumber,
   Paragraph,
+  SimpleField,
   Tab,
   TabStopType,
   TextRun,
@@ -26,9 +34,39 @@ import {
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { fitManuscriptFigureImages } from './manuscriptFigureFit';
+import { composeManuscriptFigurePanels } from './manuscriptPanelComposite';
 import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
 import { manuscriptAuthorLineSegments } from './manuscriptContributors';
 import { latexToMathComponents } from './manuscriptDocxMath';
+import {
+  assetBookmarkId,
+  assetSequenceName,
+  readAssetNumberAnchor,
+  SECTION_SEQUENCE_NAME,
+  splitAssetNumber,
+  stripAssetNumberAnchors,
+} from './manuscriptAssetAnchors';
+import {
+  anchorManuscriptComments,
+  hasManuscriptCommentAnchors,
+  splitManuscriptCommentAnchors,
+  stripManuscriptCommentAnchors,
+  type ManuscriptCommentAnchorSegment,
+  type ManuscriptExportComment,
+} from './manuscriptComments';
+import {
+  hasCrossReferenceAnchors,
+  splitCrossReferenceAnchors,
+} from './manuscriptCrossReference';
+import {
+  hasManuscriptFootnotes,
+  numberManuscriptFootnotes,
+  splitManuscriptFootnotes,
+  stripManuscriptFootnotes,
+  type ManuscriptFootnote,
+} from './manuscriptFootnotes';
+import { hasInlineMath, splitInlineMath } from './manuscriptInlineMath';
+import { hasAuthoredSectionKey } from './manuscriptNumbering';
 import {
   createManuscriptTableMapping,
   type ManuscriptTableStyle,
@@ -63,6 +101,7 @@ type ManuscriptDocxMappingOptions = {
   figureCaptionLineSpacing: number;
   figureCaptionGap: number;
   figureCaptionSpacingAfter: number;
+  findAsset: ManuscriptAssetLookup;
 };
 
 const inlineContentText = (value: unknown): string => {
@@ -117,25 +156,288 @@ const isLinkInlineContent = (
   Array.isArray(value.content) &&
   value.content.every(isTextInlineContent);
 
+type ManuscriptRunOptions = {
+  bold?: boolean;
+  italics?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  hyperlink?: boolean;
+  font?: string;
+  size?: number;
+};
+
+const scriptRuns = (text: string, options: ManuscriptRunOptions): TextRun[] =>
+  manuscriptScriptSegments(text).map(
+    (segment) =>
+      new TextRun({
+        text: segment.text,
+        bold: options.bold === true,
+        italics: options.italics === true,
+        underline: options.underline === true ? {} : undefined,
+        strike: options.strike === true,
+        style: options.hyperlink === true ? 'Hyperlink' : undefined,
+        ...(options.font !== undefined ? { font: options.font } : {}),
+        ...(options.size !== undefined ? { size: options.size } : {}),
+        superScript: segment.position === 'SUPERSCRIPT',
+        subScript: segment.position === 'SUBSCRIPT',
+      }),
+  );
+
+type ManuscriptParagraphChild =
+  | TextRun
+  | DocxMath
+  | Bookmark
+  | SimpleField
+  | FootnoteReferenceRun
+  | CommentRangeStart
+  | CommentRangeEnd;
+
+// A footnote is a real Word footnote: the run in the body is only the
+// reference mark, and the note itself is written into `word/footnotes.xml`
+// under the same id by `documentOptions.footnotes`. Word then draws it at the
+// foot of whatever page the mark lands on and renumbers it when the text
+// moves — which is the whole point of handing the author back their own
+// document rather than an approximation of it.
+const footnoteRuns = (
+  number: number | undefined,
+  text: string,
+  options: ManuscriptRunOptions,
+): ManuscriptParagraphChild[] =>
+  number === undefined
+    ? // Never numbered, so there is no note part to point at. Print it in the
+      // sentence instead of losing it.
+      scriptRuns(` (${text})`, options)
+    : [new FootnoteReferenceRun(number)];
+
+// Prose runs, with `$C_j$` becoming a real Word equation rather than three
+// literal characters and a baseline letter. Word sets an inline OMath run on
+// the text line, so the symbol in the sentence matches the display equation
+// that defines it.
+const mathAndScriptRuns = (
+  text: string,
+  options: ManuscriptRunOptions,
+): ManuscriptParagraphChild[] =>
+  splitManuscriptFootnotes(text).flatMap((footnoteSegment) =>
+    footnoteSegment.kind === 'footnote'
+      ? footnoteRuns(footnoteSegment.number, footnoteSegment.text, options)
+      : splitInlineMath(footnoteSegment.value).flatMap((segment) =>
+          segment.kind === 'math'
+            ? [new DocxMath({ children: latexToMathComponents(segment.latex) })]
+            : scriptRuns(segment.value, options),
+        ),
+  );
+
+// One thing in the document that carries a number Word can keep: a figure, a
+// table, an equation, a panel of a figure, a numbered section. They differ
+// only in which counter runs them and, for a panel, in the fact that part of
+// the number is not counted at all.
+type ManuscriptNumberedTarget = {
+  // What the bookmark is named after.
+  refKey: string;
+  // The number as it is printed.
+  number: string;
+  // The counter Word keeps for it.
+  sequenceName: string;
+  // Set on a panel: the figure whose bookmark the number is read out of, and
+  // the number that bookmark actually holds. A panel has no counter — its
+  // letter comes from where it sits in the figure, not from the document — so
+  // "Figure 3b" is the parent's live number with a literal "b" after it.
+  parentRefKey?: string;
+  parentNumber?: string;
+};
+
+// Where a number is printed: a Word SEQ field inside a bookmark. The number
+// Word calculates is cached in the field, so the document reads correctly
+// before anyone updates it, and every reference to it below can point at the
+// bookmark instead of repeating today's digits.
+const assetNumberRuns = (
+  printed: string,
+  target: ManuscriptNumberedTarget,
+  options: ManuscriptRunOptions,
+): ManuscriptParagraphChild[] => {
+  const number = target.number.trim();
+  const at = number.length === 0 ? -1 : printed.indexOf(number);
+  if (at === -1) return mathAndScriptRuns(printed, options);
+  const { prefix, counted } = splitAssetNumber(number);
+  return [
+    ...mathAndScriptRuns(printed.slice(0, at), options),
+    new Bookmark({
+      id: assetBookmarkId(target.refKey),
+      children:
+        counted === undefined
+          ? scriptRuns(number, options)
+          : [
+              ...(prefix.length > 0 ? scriptRuns(prefix, options) : []),
+              new SimpleField(`SEQ ${target.sequenceName} \\* ARABIC`, counted),
+            ],
+    }),
+    ...mathAndScriptRuns(printed.slice(at + number.length), options),
+  ];
+};
+
+// Where the prose names a number: a REF field pointing at that bookmark, so
+// moving an equation renumbers the sentence that refers to it. Only the number
+// is a field — the journal's own wording around it ("Eq.", "Fig.", "Section")
+// is the author's text and stays text.
+//
+// A panel splits in two. `REF` gives back whatever the bookmark holds, and the
+// only bookmark there is holds the figure's number, so "Figure 3b" is written
+// as a live field for the "3" and the character "b" typed after it. That is
+// the whole of the panel-letter decision: the half that renumbers is a field,
+// and the half that never renumbers is text. Reordering the panels in the
+// composer re-letters them on the next export; reordering them inside Word
+// does not, and nothing here pretends otherwise.
+const crossReferenceRuns = (
+  label: string,
+  target: ManuscriptNumberedTarget | undefined,
+  options: ManuscriptRunOptions,
+): ManuscriptParagraphChild[] => {
+  const number = target?.number.trim() ?? '';
+  const at =
+    target === undefined || number.length === 0 ? -1 : label.indexOf(number);
+  if (target === undefined || at === -1)
+    return mathAndScriptRuns(label, options);
+  const fieldNumber = target.parentNumber ?? number;
+  const split = number.indexOf(fieldNumber);
+  // A panel whose number does not visibly contain its parent's — a journal
+  // format nobody has asked for yet — has nothing live to point at, so it is
+  // written as plain text rather than as a field that would give back the
+  // wrong string.
+  if (split === -1) return mathAndScriptRuns(label, options);
+  const bookmark = assetBookmarkId(target.parentRefKey ?? target.refKey);
+  const beforeField = number.slice(0, split);
+  const afterField = number.slice(split + fieldNumber.length);
+  return [
+    ...mathAndScriptRuns(label.slice(0, at), options),
+    ...(beforeField.length > 0 ? scriptRuns(beforeField, options) : []),
+    new SimpleField(`REF ${bookmark} \\h`, fieldNumber),
+    ...(afterField.length > 0 ? scriptRuns(afterField, options) : []),
+    ...mathAndScriptRuns(label.slice(at + number.length), options),
+  ];
+};
+
+type ManuscriptAssetLookup = (
+  refKey: string,
+) => ManuscriptNumberedTarget | undefined;
+
+// Every asset whose number is actually printed somewhere in the document, read
+// back off the built blocks — including an image block, whose caption is a
+// prop rather than content.
+const collectAnchoredRefKeys = (blocks: unknown[]): Set<string> => {
+  const keys = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      const { refKey } = readAssetNumberAnchor(value);
+      if (refKey !== undefined) keys.add(refKey.trim().toLowerCase());
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    const record = value as Record<string, unknown>;
+    visit(record.content);
+    visit(record.children);
+    if (typeof record.props === 'object' && record.props !== null) {
+      visit((record.props as Record<string, unknown>).caption);
+    }
+    if ('text' in record) visit(record.text);
+  };
+  visit(blocks);
+  return keys;
+};
+
+// Whether a run needs our own builder rather than BlockNote's: it carries a
+// script sentinel, inline maths, or one of the numbering anchors — none of
+// which may reach the page as characters.
+const needsManuscriptRuns = (text: string): boolean =>
+  hasManuscriptScripts(text) ||
+  hasInlineMath(text) ||
+  hasCrossReferenceAnchors(text) ||
+  hasManuscriptFootnotes(text) ||
+  hasManuscriptCommentAnchors(text) ||
+  stripAssetNumberAnchors(text) !== text;
+
+// Where a comment's range opens and closes. Word draws the highlight between
+// the two and hangs the note off the reference mark, which is why the mark is
+// written immediately after the closing tag rather than anywhere the author
+// might see it: it prints nothing at all.
+const commentAnchorRuns = (
+  segment: ManuscriptCommentAnchorSegment,
+): ManuscriptParagraphChild[] => {
+  if (segment.kind === 'commentStart') {
+    return [new CommentRangeStart(segment.commentId)];
+  }
+  return [
+    new CommentRangeEnd(segment.commentId),
+    new TextRun({ children: [new CommentReference(segment.commentId)] }),
+  ];
+};
+
+const anchorlessInlineRuns = (
+  text: string,
+  options: ManuscriptRunOptions,
+  findAsset?: ManuscriptAssetLookup,
+): ManuscriptParagraphChild[] => {
+  const { refKey, text: printed } = readAssetNumberAnchor(text);
+  const target = refKey === undefined ? undefined : findAsset?.(refKey);
+  if (target !== undefined) return assetNumberRuns(printed, target, options);
+  return splitCrossReferenceAnchors(printed).flatMap((segment) =>
+    segment.kind === 'reference'
+      ? crossReferenceRuns(segment.label, findAsset?.(segment.refKey), options)
+      : mathAndScriptRuns(segment.value, options),
+  );
+};
+
+// Comment ranges are settled before anything else in the run: they are the one
+// marker that is not part of a word, so splitting on them first leaves every
+// other reader looking at prose exactly as it would have been.
+const manuscriptInlineRuns = (
+  text: string,
+  options: ManuscriptRunOptions,
+  findAsset?: ManuscriptAssetLookup,
+): ManuscriptParagraphChild[] =>
+  splitManuscriptCommentAnchors(text).flatMap((segment) =>
+    segment.kind === 'text'
+      ? anchorlessInlineRuns(segment.value, options, findAsset)
+      : commentAnchorRuns(segment),
+  );
+
 const manuscriptTextRuns = (
   text: string,
   styles: InlineTextStyles,
   forceItalics: boolean,
   hyperlink = false,
-): TextRun[] =>
-  manuscriptScriptSegments(text).map(
-    (segment) =>
-      new TextRun({
-        text: segment.text,
-        bold: styles.bold === true,
-        italics: forceItalics || styles.italic === true,
-        underline: styles.underline === true ? {} : undefined,
-        strike: styles.strike === true,
-        style: hyperlink ? 'Hyperlink' : undefined,
-        superScript: segment.position === 'SUPERSCRIPT',
-        subScript: segment.position === 'SUBSCRIPT',
-      }),
-  );
+  findAsset?: ManuscriptAssetLookup,
+): ManuscriptParagraphChild[] =>
+  // A link's label is text, never an equation, so its dollars stay literal.
+  hyperlink
+    ? // A comment range can open inside a link's label, and an unclosed range
+      // is a comment Word draws over the rest of the paragraph — so the
+      // markers are split out here too rather than being handed to a run
+      // builder that would print them as characters.
+      splitManuscriptCommentAnchors(text).flatMap((segment) =>
+        segment.kind === 'text'
+          ? scriptRuns(segment.value, {
+              bold: styles.bold === true,
+              italics: forceItalics || styles.italic === true,
+              underline: styles.underline === true,
+              strike: styles.strike === true,
+              hyperlink: true,
+            })
+          : commentAnchorRuns(segment),
+      )
+    : manuscriptInlineRuns(
+        text,
+        {
+          bold: styles.bold === true,
+          italics: forceItalics || styles.italic === true,
+          underline: styles.underline === true,
+          strike: styles.strike === true,
+        },
+        findAsset,
+      );
 
 const createManuscriptDocxMappings = ({
   bodyLineSpacing,
@@ -152,6 +454,7 @@ const createManuscriptDocxMappings = ({
   figureCaptionLineSpacing,
   figureCaptionGap,
   figureCaptionSpacingAfter,
+  findAsset,
 }: ManuscriptDocxMappingOptions): typeof docxDefaultSchemaMappings => ({
   ...docxDefaultSchemaMappings,
   blockMapping: {
@@ -164,14 +467,21 @@ const createManuscriptDocxMappings = ({
       children,
     ) => {
       const caption = block.props.caption;
+      // BlockNote reads the caption as the image's description too, so it gets
+      // the plain text — the markers are only for the caption paragraph below.
+      const plainCaption =
+        typeof caption === 'string'
+          ? stripManuscriptCommentAnchors(
+              stripManuscriptFootnotes(
+                stripAssetNumberAnchors(stripManuscriptScriptMarkers(caption)),
+              ),
+            )
+          : caption;
       const mappedImage = await docxDefaultSchemaMappings.blockMapping.image(
-        typeof caption === 'string' && hasManuscriptScripts(caption)
+        typeof caption === 'string' && caption !== plainCaption
           ? {
               ...block,
-              props: {
-                ...block.props,
-                caption: stripManuscriptScriptMarkers(caption),
-              },
+              props: { ...block.props, caption: plainCaption },
             }
           : block,
         exporter,
@@ -197,16 +507,14 @@ const createManuscriptDocxMappings = ({
             line: Math.round(240 * figureCaptionLineSpacing),
             lineRule: LineRuleType.AUTO,
           },
-          children: manuscriptScriptSegments(caption).map(
-            (segment) =>
-              new TextRun({
-                text: segment.text,
-                font: fontFamily,
-                size: figureCaptionFontSize * 2,
-                italics: true,
-                superScript: segment.position === 'SUPERSCRIPT',
-                subScript: segment.position === 'SUBSCRIPT',
-              }),
+          children: manuscriptInlineRuns(
+            caption,
+            {
+              font: fontFamily,
+              size: figureCaptionFontSize * 2,
+              italics: true,
+            },
+            findAsset,
           ),
         }),
       ];
@@ -239,15 +547,8 @@ const createManuscriptDocxMappings = ({
             : block.props.textAlignment === 'right'
               ? AlignmentType.RIGHT
               : AlignmentType.LEFT,
-        children: hasManuscriptScripts(text)
-          ? manuscriptScriptSegments(text).map(
-              (segment) =>
-                new TextRun({
-                  text: segment.text,
-                  superScript: segment.position === 'SUPERSCRIPT',
-                  subScript: segment.position === 'SUBSCRIPT',
-                }),
-            )
+        children: needsManuscriptRuns(text)
+          ? manuscriptInlineRuns(text, {}, findAsset)
           : exporter.transformInlineContent(block.content),
       });
     },
@@ -278,7 +579,11 @@ const createManuscriptDocxMappings = ({
             ? [
                 new TextRun({ children: [new Tab()] }),
                 new DocxMath({ children: latexToMathComponents(latex) }),
-                new TextRun({ children: [new Tab()], text: label.trim() }),
+                new TextRun({ children: [new Tab()] }),
+                // The number is the definition Word counts from, so it is a
+                // field in a bookmark rather than the digits we happen to
+                // have printed today.
+                ...manuscriptInlineRuns(label.trim(), {}, findAsset),
               ]
             : [new DocxMath({ children: latexToMathComponents(latex) })],
         });
@@ -323,21 +628,19 @@ const createManuscriptDocxMappings = ({
                 ? 1
                 : bodyLineSpacing;
       const children = isFigureCaption
-        ? manuscriptScriptSegments(equation).map(
-            (segment) =>
-              new TextRun({
-                text: segment.text,
-                font: fontFamily,
-                size: figureCaptionFontSize * 2,
-                italics: true,
-                superScript: segment.position === 'SUPERSCRIPT',
-                subScript: segment.position === 'SUBSCRIPT',
-              }),
+        ? manuscriptInlineRuns(
+            equation,
+            {
+              font: fontFamily,
+              size: figureCaptionFontSize * 2,
+              italics: true,
+            },
+            findAsset,
           )
-        : hasManuscriptScripts(equation)
+        : needsManuscriptRuns(equation)
           ? block.content.flatMap((content) => {
               const text = inlineContentText(content);
-              if (!hasManuscriptScripts(text)) {
+              if (!needsManuscriptRuns(text)) {
                 return exporter.transformInlineContent([content]);
               }
               if (isLinkInlineContent(content)) {
@@ -360,6 +663,8 @@ const createManuscriptDocxMappings = ({
                     content.text,
                     content.styles,
                     isAffiliation,
+                    false,
+                    findAsset,
                   )
                 : exporter.transformInlineContent([content]);
             })
@@ -403,15 +708,163 @@ const createManuscriptDocxMappings = ({
   },
 });
 
+// `word/footnotes.xml`, keyed by the number the export walk gave each note —
+// which is the id Word's reference marks point at. docx writes the separator
+// notes (ids -1 and 0) itself and adds the reference mark to the front of the
+// first paragraph, so a note is exactly its own prose.
+//
+// Notes are set two points smaller than the body, the convention every journal
+// template follows.
+const docxFootnoteParts = (
+  footnotes: readonly ManuscriptFootnote[],
+  fontFamily: string,
+  bodyFontSize: number,
+): Record<string, { children: Paragraph[] }> =>
+  Object.fromEntries(
+    footnotes.map((footnote) => [
+      String(footnote.number),
+      {
+        children: [
+          new Paragraph({
+            style: 'FootnoteText',
+            children: mathAndScriptRuns(` ${footnote.text}`, {
+              font: fontFamily,
+              size: Math.max(8, bodyFontSize - 2) * 2,
+            }),
+          }),
+        ],
+      },
+    ]),
+  );
+
+// `word/comments.xml`. A comment that came in from a co-author goes back out
+// as they wrote it — same author, same initials, same day — because the file
+// the author hands on is the file that co-author will open next, and a comment
+// that quietly changed hands on the way through is worse than one that was
+// dropped. The author's own answer is a second comment over the same words:
+// Word's reply threads are a Microsoft extension this writer does not speak,
+// and a reply that cannot be nested is still an answer if it is set beside the
+// question.
+//
+// Word records a comment's date as an instant and the notes field keeps only
+// the day, so a comment that has been through the composer comes back dated to
+// midnight. An unparseable date is left off entirely rather than turned into
+// today's.
+const docxCommentParts = (
+  comments: readonly ManuscriptExportComment[],
+  fontFamily: string,
+  bodyFontSize: number,
+): ICommentOptions[] =>
+  comments.map((comment) => {
+    const date =
+      comment.date === undefined ? undefined : new Date(comment.date);
+    const runOptions = {
+      font: fontFamily,
+      size: Math.max(8, bodyFontSize - 2) * 2,
+    };
+    return {
+      id: comment.commentId,
+      author: comment.author,
+      ...(comment.initials === undefined ? {} : { initials: comment.initials }),
+      ...(date === undefined || Number.isNaN(date.getTime()) ? {} : { date }),
+      children: [
+        new Paragraph({
+          children: scriptRuns(
+            comment.isReply ? `Reply: ${comment.text}` : comment.text,
+            runOptions,
+          ),
+        }),
+        // The words this was written about, when they are no longer in the
+        // section for the range to sit on. Without them the comment reads as a
+        // question about a whole section that was never asked about one.
+        ...(comment.orphanedAnchorText === undefined
+          ? []
+          : [
+              new Paragraph({
+                children: scriptRuns(
+                  `Originally on: “${comment.orphanedAnchorText}” — that text has since been edited.`,
+                  { ...runOptions, italics: true },
+                ),
+              }),
+            ]),
+      ],
+    };
+  });
+
 export const exportManuscriptToDocxBlob = async (
   bundle: ManuscriptBundle,
 ): Promise<Blob> => {
-  const formattedBundle = await prepareManuscriptBundleWithCsl(bundle);
-  // Diagrams are Mermaid source until export; Word embeds the raster.
-  bundle = await fitManuscriptFigureImages(
-    await prepareManuscriptDiagramImages(formattedBundle),
+  const formattedBundle = await prepareManuscriptBundleWithCsl(bundle, {
+    // Word can keep its own numbering, but only if it is told which asset each
+    // printed number and each in-text reference belongs to.
+    crossReferenceAnchors: true,
+  });
+  // Diagrams are Mermaid source until export; Word embeds the raster. Panels
+  // are drawn into one picture in the same breath, because the block model
+  // this and the PDF export share has nowhere to put two images side by side.
+  const drawnBundle = await fitManuscriptFigureImages(
+    await composeManuscriptFigurePanels(
+      await prepareManuscriptDiagramImages(formattedBundle),
+    ),
   );
+  // Numbered before the blocks are built, and before the document options are
+  // read: BlockNote spreads `documentOptions` into the `Document` constructor
+  // and only then transforms the blocks, so a note collected while mapping a
+  // paragraph would arrive too late to be written into the package.
+  const { bundle: numberedBundle, footnotes } =
+    numberManuscriptFootnotes(drawnBundle);
+  // And for the same reason: the ranges a comment needs have to be in the
+  // prose before the blocks are built, and the comment bodies have to be in
+  // `documentOptions` before docx is constructed.
+  const { bundle: commentedBundle, comments } =
+    anchorManuscriptComments(numberedBundle);
+  bundle = commentedBundle;
+  // Sections first, assets over the top: `resolveCrossReferences` looks an
+  // asset up before a section, so a key that is somehow both has to land on
+  // the same thing here that the reference text was resolved against.
+  const targetsByRefKey = new Map<string, ManuscriptNumberedTarget>();
+  for (const section of bundle.numberedSections) {
+    // A section the journal does not number has nothing for a counter to
+    // keep, so the reference to it is the section's own title — plain text,
+    // and plainly static.
+    if (section.number.length === 0 || !hasAuthoredSectionKey(section)) {
+      continue;
+    }
+    targetsByRefKey.set(section.referenceKey.trim().toLowerCase(), {
+      refKey: section.referenceKey,
+      number: section.number,
+      sequenceName: SECTION_SEQUENCE_NAME,
+    });
+  }
+  for (const figure of bundle.numberedFigures) {
+    targetsByRefKey.set((figure.refKey ?? figure.id).trim().toLowerCase(), {
+      refKey: figure.refKey ?? figure.id,
+      number: figure.number,
+      sequenceName: assetSequenceName(figure.assetKind, figure.placement),
+      ...(isNonEmptyString(figure.parentRefKey)
+        ? {
+            parentRefKey: figure.parentRefKey,
+            parentNumber: figure.parentNumber ?? '',
+          }
+        : {}),
+    });
+  }
   const { editor, blocks } = buildBlockNoteDocument(bundle);
+  // A REF field pointing at a bookmark that was never written reads as
+  // "Error! Reference source not found" in Word. Only the assets whose number
+  // actually appears in the document can be pointed at — an equation with no
+  // body, say, is never printed and so is never a target.
+  const bookmarkedRefKeys = collectAnchoredRefKeys(blocks);
+  const findAsset: ManuscriptAssetLookup = (refKey) => {
+    const target = targetsByRefKey.get(refKey.trim().toLowerCase());
+    if (target === undefined) return undefined;
+    // A panel points at its parent's bookmark, so it is the parent that has
+    // to have been written.
+    const anchored = (target.parentRefKey ?? target.refKey)
+      .trim()
+      .toLowerCase();
+    return bookmarkedRefKeys.has(anchored) ? target : undefined;
+  };
   const fontFamily = bundle.style.fontFamily?.trim() || 'Times New Roman';
   const bodyFontSize = bundle.style.bodyFontSize ?? 12;
   const titleFontSize = bundle.style.titleFontSize ?? 16;
@@ -484,6 +937,7 @@ export const exportManuscriptToDocxBlob = async (
       figureCaptionLineSpacing,
       figureCaptionGap,
       figureCaptionSpacingAfter,
+      findAsset,
     }),
   );
   const resolveExternalFile = exporter.options.resolveFileUrl;
@@ -507,6 +961,18 @@ export const exportManuscriptToDocxBlob = async (
       creator: bundle.metadata.authors,
       title: bundle.metadata.title,
       subject: bundle.metadata.journal,
+      ...(footnotes.length > 0
+        ? {
+            footnotes: docxFootnoteParts(footnotes, fontFamily, bodyFontSize),
+          }
+        : {}),
+      ...(comments.length > 0
+        ? {
+            comments: {
+              children: docxCommentParts(comments, fontFamily, bodyFontSize),
+            },
+          }
+        : {}),
       // Replace BlockNote's Inter-based template instead of appending duplicate
       // Heading/Normal definitions. The journal profile is the style authority
       // unless the author supplied a Word template.

@@ -1,3 +1,4 @@
+import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
 import { type CitationMode, type JournalStyle } from './manuscriptTypes';
 import { isVendoredCslStyleId } from './manuscriptCiteproc';
 
@@ -8,6 +9,7 @@ export const MANUSCRIPT_EXPORT_STYLE_OVERRIDE_KEYS = [
   'tableLabelFormat',
   'supplementPrefix',
   'numberingScope',
+  'keepSourceNumbers',
   'crossRefFormat',
   'figureCaptionPosition',
   'figureCaptionFontSize',
@@ -74,7 +76,10 @@ export type ManuscriptExportStyleOverrides = Partial<
   citationModeSettings?: CitationModeSettings;
 };
 
-const STRING_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
+// Exported so the journal-profile reader validates against the same field
+// types the override serializer already knows, rather than a second list that
+// would drift.
+export const STRING_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'citationMode',
   'citationStyleId',
   'figureLabelFormat',
@@ -98,7 +103,7 @@ const STRING_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'tableStyle',
 ]);
 
-const NUMBER_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
+export const NUMBER_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'figureCaptionFontSize',
   'figureCaptionLineSpacing',
   'figureCaptionGap',
@@ -116,7 +121,8 @@ const NUMBER_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
   'tableLineSpacing',
 ]);
 
-const BOOLEAN_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
+export const BOOLEAN_FIELDS = new Set<ManuscriptExportStyleOverrideKey>([
+  'keepSourceNumbers',
   'supplementCoverPage',
   'lineNumbering',
   'pageNumbering',
@@ -223,6 +229,27 @@ export const serializeManuscriptExportStyleOverrides = (
   JSON.stringify(
     parseManuscriptExportStyleOverrides(JSON.stringify(overrides)),
   );
+
+// An imported .docx brings its own Word styles. Adopting them as the export
+// style base is what makes the exported file a drop-in replacement for the
+// document the author already has — but only when they have not chosen a
+// template themselves, because an explicit choice outranks an inferred one.
+export const withImportedSourceStyles = (
+  serialized: string | null | undefined,
+  sourceStylesXml: string | null | undefined,
+  sourceDocumentName: string | null | undefined,
+): string | undefined => {
+  if (!isManuscriptDocxStylesXml(sourceStylesXml)) return undefined;
+  const overrides = parseManuscriptExportStyleOverrides(serialized);
+  if (isManuscriptDocxStylesXml(overrides.referenceDocStyles)) return undefined;
+
+  const name = sourceDocumentName?.trim();
+  return serializeManuscriptExportStyleOverrides({
+    ...overrides,
+    referenceDocStyles: sourceStylesXml,
+    ...(name !== undefined && name.length > 0 ? { referenceDocUrl: name } : {}),
+  });
+};
 
 export const citationSettingsForMode = (
   overrides: ManuscriptExportStyleOverrides,

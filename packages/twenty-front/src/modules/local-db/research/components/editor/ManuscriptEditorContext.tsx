@@ -18,18 +18,26 @@ import {
 } from '@/local-db/research/manuscript/manuscriptCiteproc';
 import {
   buildAssetLookup,
+  buildSectionLookup,
   numberAssets,
+  numberManuscriptSections,
 } from '@/local-db/research/manuscript/manuscriptNumbering';
 import {
   type FigureLike,
   type JournalStyle,
   type NumberedFigure,
+  type NumberedSection,
   type ReferenceLike,
   type SectionLike,
 } from '@/local-db/research/manuscript/manuscriptTypes';
 
 type ManuscriptEditorContextValue = {
   assetLookup: Map<string, NumberedFigure>;
+  // The sections a `[#sec:…]` can land on. Without it the editor drew every
+  // section reference as unresolved while the export resolved it perfectly —
+  // the chip saying the reference was broken when it was not.
+  sectionLookup: Map<string, NumberedSection>;
+  numberedSections: NumberedSection[];
   citationContext: CitationContext;
   citationLabelsByKey: Map<string, string>;
   figures: NumberedFigure[];
@@ -85,8 +93,13 @@ export const ManuscriptEditorContextProvider = ({
       style.citationMode,
     );
     const numberedFigures = numberAssets(figures, style, sections);
+    // Numbered off the sections as they stand, which is the closest the editor
+    // can get to the export's own ordering while the author is still writing.
+    const numberedSections = numberManuscriptSections(sections ?? [], style);
     return {
       assetLookup: buildAssetLookup(numberedFigures),
+      sectionLookup: buildSectionLookup(numberedSections),
+      numberedSections,
       citationContext: context,
       figures: numberedFigures,
       references,

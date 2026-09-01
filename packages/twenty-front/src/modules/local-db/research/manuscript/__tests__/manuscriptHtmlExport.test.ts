@@ -102,8 +102,12 @@ describe('exportManuscriptToHtml', () => {
   it('is self-contained: nothing to fetch from another host', () => {
     expect(html).not.toMatch(/<link\b[^>]*\bhref=["']https?:/i);
     expect(html).not.toMatch(/<script\b[^>]*\bsrc=/i);
-    // No script at all — the reader controls are pure CSS.
-    expect(html).not.toMatch(/<script/i);
+    // The only <script> in the file is the JSON-LD metadata block, which is
+    // data a harvester reads rather than code a browser runs; the reader
+    // controls stay pure CSS.
+    expect(
+      [...html.matchAll(/<script\b[^>]*>/gi)].map((match) => match[0]),
+    ).toEqual(['<script type="application/ld+json">']);
     const remoteUrls = [...html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)];
     expect(remoteUrls).toHaveLength(0);
   });

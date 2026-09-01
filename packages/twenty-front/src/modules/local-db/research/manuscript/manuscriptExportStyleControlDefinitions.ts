@@ -449,6 +449,17 @@ export const MANUSCRIPT_STYLE_CONTROL_GROUPS: ManuscriptStyleControlGroup[] = [
         ],
       },
       {
+        id: 'manuscript-export-keep-source-numbers-select',
+        label: 'Imported asset numbers',
+        field: 'keepSourceNumbers',
+        defaultValue: 'false',
+        valueType: 'BOOLEAN',
+        options: [
+          { value: 'true', label: 'Keep the source document’s' },
+          { value: 'false', label: 'Renumber in order' },
+        ],
+      },
+      {
         id: 'manuscript-export-line-numbering-select',
         label: 'Line numbering',
         field: 'lineNumbering',

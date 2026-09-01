@@ -4,8 +4,21 @@ import { useDebouncedCallback } from 'use-debounce';
 import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
-import { ManuscriptSubmissionRequirementRow } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementRow';
+import {
+  ManuscriptScreeningFindingRow,
+  ManuscriptSubmissionRequirementRow,
+  ManuscriptTrialVerificationCheck,
+} from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementRow';
 import { ManuscriptSubmissionRequirementPicker } from '@/local-db/research/components/composer/ManuscriptSubmissionRequirementPicker';
+import { type FigureColorSample } from '@/local-db/research/manuscript/manuscriptFigureColor';
+import { decodeFigureColorSamples } from '@/local-db/research/manuscript/manuscriptFigurePixels';
+import { isImageDataUrl } from '@/local-db/research/manuscript/manuscriptImages';
+import {
+  runManuscriptScreening,
+  summarizeScreeningFindings,
+} from '@/local-db/research/manuscript/manuscriptScreening';
+import { type FigureLike } from '@/local-db/research/manuscript/manuscriptTypes';
+import { splitTrialIdentifiers } from '@/local-db/research/manuscript/screening/trialVerification';
 import {
   collectSubmissionConflicts,
   collectSubmissionNotices,
@@ -22,6 +35,10 @@ import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 
 type ManuscriptSubmissionRequirementsPanelProps = {
   manuscript: SubmissionRequirementManuscript;
+  // The figure axis. Screening reads figures as well as sections, and a panel
+  // handed none simply screens the sections — which is what every caller did
+  // before figures existed here.
+  figures?: FigureLike[];
   template?: SubmissionRequirementTemplate & { name?: string | null };
   isExplicitTarget: boolean;
   onConfirmTargetJournal: () => Promise<void>;
@@ -73,8 +90,23 @@ const StyledWarning = styled.div`
   font-size: ${themeCssVariables.font.size.xs};
 `;
 
+const StyledScreening = styled.section`
+  border-top: 1px solid ${themeCssVariables.border.color.light};
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
+  padding-top: ${themeCssVariables.spacing[3]};
+`;
+
+const StyledScreeningNote = styled.p`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+  margin: 0;
+`;
+
 export const ManuscriptSubmissionRequirementsPanel = ({
   manuscript,
+  figures,
   template,
   isExplicitTarget,
   onConfirmTargetJournal,
@@ -85,6 +117,126 @@ export const ManuscriptSubmissionRequirementsPanel = ({
 }: ManuscriptSubmissionRequirementsPanelProps) => {
   const { enqueueDialog } = useDialogManager();
   const { enqueueErrorSnackBar } = useSnackBar();
+  // The rainbow-colour-map check reads pixels, and decoding an image is
+  // asynchronous where screening is not. Rather than make the other seventeen
+  // checks wait on a canvas, the figures are decoded here and the result is
+  // handed to the synchronous run — see `manuscriptFigurePixels.ts`. Until
+  // that finishes the colour check declines, which is the honest answer:
+  // nothing has been read yet. The samples and the signature of the figures
+  // they were taken from live in one piece of state, so a half-updated pair
+  // can never be read as a complete one.
+  const [decodedFigures, setDecodedFigures] = useState<{
+    signature: string;
+    samples: Record<string, FigureColorSample>;
+  }>({ signature: '', samples: {} });
+  // Length and tail rather than the data URL itself: these are megabyte
+  // strings and this runs on every render, but an edited image changes both.
+  const figureSignature = useMemo(
+    () =>
+      (figures ?? [])
+        .filter((figure) => isImageDataUrl(figure.imageUrl))
+        .map(
+          (figure) =>
+            `${figure.id}:${(figure.imageUrl ?? '').length}:${(
+              figure.imageUrl ?? ''
+            ).slice(-16)}`,
+        )
+        .join('|'),
+    [figures],
+  );
+
+  useEffect(() => {
+    // Nothing to decode is already decoded — an empty signature matches the
+    // initial state, so a manuscript with no images never schedules work and
+    // never re-renders for it.
+    if (figureSignature === '' || figureSignature === decodedFigures.signature)
+      return () => {};
+
+    let isStale = false;
+    void decodeFigureColorSamples(
+      (figures ?? [])
+        .filter((figure) => isImageDataUrl(figure.imageUrl))
+        .map(({ id, imageUrl }) => ({ id, imageUrl })),
+    ).then((samples) => {
+      if (isStale) return;
+      setDecodedFigures({ signature: figureSignature, samples });
+    });
+
+    return () => {
+      isStale = true;
+    };
+  }, [figures, figureSignature, decodedFigures.signature]);
+
+  // Screening reads the manuscript itself, so it does not depend on a target
+  // journal and is rendered whether or not one is picked.
+  const screeningRun = useMemo(
+    () =>
+      runManuscriptScreening({
+        sections: manuscript.sections,
+        competingInterests: manuscript.competingInterests,
+        figures,
+        // Withheld while a decode is in flight or out of date, so the colour
+        // check declines rather than reporting figures nobody has read yet.
+        figurePixels:
+          decodedFigures.signature === figureSignature
+            ? decodedFigures.samples
+            : undefined,
+      }),
+    [
+      manuscript.sections,
+      manuscript.competingInterests,
+      figures,
+      decodedFigures,
+      figureSignature,
+    ],
+  );
+  const screeningFindings = screeningRun.findings;
+  const screeningSummary = summarizeScreeningFindings(screeningFindings);
+  const screeningPanel = (
+    <StyledScreening aria-label="Automated screening">
+      <StyledHeader>
+        <StyledTitle>Automated screening</StyledTitle>
+        <StyledMeta>
+          {screeningSummary.present} found · {screeningSummary.weak} weak ·{' '}
+          {screeningSummary.absent} not found
+        </StyledMeta>
+      </StyledHeader>
+      <StyledScreeningNote>
+        What the BIH Charité screening tools look for in a finished paper, run
+        over the manuscript text and over the colours of its figures. These are
+        screening findings, not journal requirements, and none of them blocks an
+        export — a journal that does not ask for a data statement is not a
+        reason to submit without one.
+      </StyledScreeningNote>
+      {screeningFindings.map((finding) => (
+        <ManuscriptScreeningFindingRow
+          key={finding.key}
+          finding={finding}
+          footer={
+            finding.key === 'TRIAL_REGISTRATION' &&
+            splitTrialIdentifiers(finding.identifiers ?? []).verifiable.length >
+              0 ? (
+              <ManuscriptTrialVerificationCheck
+                identifiers={finding.identifiers ?? []}
+              />
+            ) : undefined
+          }
+        />
+      ))}
+      {screeningRun.declinations.length === 0 ? null : (
+        // Named rather than dropped. Seven grey "not found" rows on an aerosol
+        // paper would teach the author to stop reading the panel, and silence
+        // would hide that the checks ran at all.
+        <StyledScreeningNote>
+          Not applicable to this manuscript:{' '}
+          {screeningRun.declinations
+            .map((declination) => declination.label)
+            .join(', ')}
+          .
+        </StyledScreeningNote>
+      )}
+    </StyledScreening>
+  );
   const [requirements, setRequirements] = useState(() =>
     parseJournalSubmissionRequirements(template?.submissionRequirements),
   );
@@ -163,6 +315,7 @@ export const ManuscriptSubmissionRequirementsPanel = ({
             />
           </div>
         </StyledEmpty>
+        {screeningPanel}
       </StyledPanel>
     );
   }
@@ -311,6 +464,7 @@ export const ManuscriptSubmissionRequirementsPanel = ({
           void saveRequirements([...requirements, requirement])
         }
       />
+      {screeningPanel}
     </StyledPanel>
   );
 };

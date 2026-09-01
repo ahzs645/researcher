@@ -94,4 +94,3 @@ export const manuscriptTablePlacement = (
   });
   return { rows: placed, covered };
 };
-

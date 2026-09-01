@@ -1,6 +1,7 @@
 import { styled } from '@linaria/react';
+import { isNonEmptyString } from '@sniptt/guards';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
-import { isDefined } from 'twenty-shared/utils';
+import { isDefined, isNonEmptyArray } from 'twenty-shared/utils';
 import { H1Title, H2Title } from 'twenty-ui/display';
 import { Button, type SelectOption } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
@@ -59,6 +60,32 @@ const StyledHint = styled.span`
   font-size: ${themeCssVariables.font.size.xs};
 `;
 
+const StyledWarningPanel = styled.section`
+  border: 1px solid ${themeCssVariables.border.color.medium};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
+  padding: ${themeCssVariables.spacing[2]};
+`;
+
+const StyledWarningTitle = styled.h3`
+  color: ${themeCssVariables.font.color.secondary};
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.medium};
+  margin: 0;
+`;
+
+const StyledWarnings = styled.ul`
+  color: ${themeCssVariables.color.orange};
+  display: flex;
+  flex-direction: column;
+  font-size: ${themeCssVariables.font.size.xs};
+  gap: ${themeCssVariables.spacing[2]};
+  margin: 0;
+  padding-left: ${themeCssVariables.spacing[4]};
+`;
+
 const StyledTextarea = styled.textarea`
   background: ${themeCssVariables.background.primary};
   border: 1px solid ${themeCssVariables.border.color.medium};
@@ -87,6 +114,10 @@ export const ApplicationImportPage = () => {
   const [applicationId, setApplicationId] = useState<string | null>(null);
   const [pasteText, setPasteText] = useState('');
   const [isBusy, setIsBusy] = useState(false);
+  // What the parser said about the document currently on screen — tracked
+  // changes, comments, anything else. It belongs to that one file, so every
+  // import attempt starts by dropping what the last one said.
+  const [documentWarnings, setDocumentWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isDefined(applicationId) && applications.length > 0) {
@@ -113,20 +144,31 @@ export const ApplicationImportPage = () => {
         content: draft.content,
         wordCount: draft.wordCount,
         status: draft.status,
+        // Only when the source had comments — an empty notes field would read
+        // as "reviewed and nothing said" on every other section.
+        ...(isNonEmptyString(draft.notes) ? { notes: draft.notes } : {}),
       });
     }
+    // Deliberately silent about comments: the warnings below say how many the
+    // document had and where they went, and stay on screen to be re-read. A
+    // second count in a snackbar that outlives nothing could only disagree.
     enqueueSuccessSnackBar({
       message: `Imported ${drafts.length} section(s) into the application`,
     });
   };
 
-  const importDocument = (document: ImportedDocument) =>
-    createDrafts(applicationSectionDraftsFromDocument(document));
+  const importDocument = (document: ImportedDocument) => {
+    setDocumentWarnings(document.warnings ?? []);
+    return createDrafts(applicationSectionDraftsFromDocument(document));
+  };
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!isDefined(file) || isBusy) return;
     setIsBusy(true);
+    // Cleared before the read, not after it: a file that fails to parse must
+    // not leave the previous file's warnings standing as if they were its own.
+    setDocumentWarnings([]);
     try {
       await importDocument(await readImportedDocumentFile(file));
     } catch {
@@ -142,6 +184,7 @@ export const ApplicationImportPage = () => {
   const handlePaste = async () => {
     if (isBusy || pasteText.trim().length === 0) return;
     setIsBusy(true);
+    setDocumentWarnings([]);
     try {
       await importDocument(parseMarkdownDocument(pasteText));
       setPasteText('');
@@ -183,7 +226,8 @@ export const ApplicationImportPage = () => {
               <StyledHint>
                 Import an existing proposal — Word (.docx), Markdown or plain
                 text. Headings become application sections (Lay summary,
-                Objectives, Budget justification, …).
+                Objectives, Budget justification, …). Reviewer comments in a
+                .docx are kept in the notes of the section they sit in.
               </StyledHint>
               <Button
                 title={isBusy ? 'Importing…' : 'Import file…'}
@@ -199,6 +243,18 @@ export const ApplicationImportPage = () => {
                 hidden
                 onChange={handleFile}
               />
+              {isNonEmptyArray(documentWarnings) && (
+                <StyledWarningPanel aria-labelledby="application-import-warnings">
+                  <StyledWarningTitle id="application-import-warnings">
+                    Warnings
+                  </StyledWarningTitle>
+                  <StyledWarnings>
+                    {documentWarnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </StyledWarnings>
+                </StyledWarningPanel>
+              )}
               <StyledTextarea
                 placeholder={
                   '…or paste proposal text here:\n\n## Lay summary\n…\n\n## Objectives\n…'

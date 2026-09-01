@@ -4,6 +4,7 @@ import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptImportWizardRoot } from '@/local-db/research/import-wizard/components/ManuscriptImportWizardRoot';
 import { useOpenManuscriptImportWizard } from '@/local-db/research/import-wizard/hooks/useOpenManuscriptImportWizard';
+import { type ExistingJournalTemplate } from '@/local-db/research/import-wizard/hooks/useManuscriptImportCommit';
 import { type ManuscriptTableStyle } from '@/local-db/research/manuscript/manuscriptDocxTable';
 import { type ExistingImportReference } from '@/local-db/research/manuscript/manuscriptImportPrepare';
 import { type ExistingSectionShape } from '@/local-db/research/manuscript/manuscriptSectionDedupe';
@@ -22,6 +23,8 @@ type ManuscriptImportPanelProps = {
   existingFigureRefKeys: string[];
   onChanged: () => void;
   exportTableStyle?: ManuscriptTableStyle;
+  exportStyleOverrides?: string | null;
+  existingJournals?: ExistingJournalTemplate[];
   targetJournal?: SubmissionRequirementTemplate & { name?: string | null };
   submissionExtras?: string | null;
   competingInterests?: string | null;
@@ -49,6 +52,8 @@ export const ManuscriptImportPanel = ({
   existingFigureRefKeys,
   onChanged,
   exportTableStyle,
+  exportStyleOverrides,
+  existingJournals,
   targetJournal,
   submissionExtras,
   competingInterests,
@@ -60,7 +65,8 @@ export const ManuscriptImportPanel = ({
       {!compact ? (
         <StyledHint>
           Import a Word/PDF manuscript, Markdown or text, or a portable research
-          ZIP. Nothing is saved until you review and confirm the result.
+          ZIP. A document is yours to review before anything is saved; a
+          portable ZIP came from here, so it restores as it stands.
         </StyledHint>
       ) : null}
       <Button
@@ -78,6 +84,8 @@ export const ManuscriptImportPanel = ({
             existingFigureRefKeys,
             onChanged,
             exportTableStyle,
+            exportStyleOverrides,
+            existingJournals,
             targetJournal,
             submissionExtras,
             competingInterests,

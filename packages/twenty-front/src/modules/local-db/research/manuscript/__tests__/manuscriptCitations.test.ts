@@ -50,6 +50,17 @@ describe('cross references', () => {
 });
 
 describe('citation extraction', () => {
+  it('never reads an email address as a citation', () => {
+    // A title page's correspondence line is not a citation of "unbc.ca" — and
+    // a phantom key with no reference shifts every rendered label after it.
+    expect(
+      extractCitationKeys('Correspondence: Ahmad Jalil (ajalil@unbc.ca)'),
+    ).toEqual([]);
+    expect(
+      extractCitationKeys('Mail a@b.com about [@smith2020] and [-@doe2019]'),
+    ).toEqual(['smith2020', 'doe2019']);
+  });
+
   it('extracts keys in first-use order, deduped', () => {
     expect(
       extractCitationKeys('text [@doe2019] more [@smith2020; @doe2019]'),
@@ -109,6 +120,34 @@ describe('author-date citations', () => {
     );
     expect(orderedKeys).toEqual(['doe2019', 'smith2020']);
     expect(formatInTextCitation(['smith2020'], context)).toBe('(Smith, 2020)');
+  });
+
+  it('renders a suppressed author as the year alone', () => {
+    const { context } = buildCitationContext(
+      ['smith2020', 'doe2019'],
+      byKey,
+      'AUTHOR_DATE',
+    );
+    // "Smith (2020) showed …" — the prose carries the name already.
+    expect(renderCitationsInText('Smith [-@smith2020] showed', context)).toBe(
+      'Smith (2020) showed',
+    );
+    expect(
+      extractCitationClusters('Smith [-@smith2020] and [@doe2019]'),
+    ).toEqual([['-smith2020'], ['doe2019']]);
+    // The key still counts toward the bibliography.
+    expect(extractCitationKeys('Smith [-@smith2020]')).toEqual(['smith2020']);
+  });
+
+  it('ignores author suppression in numeric modes', () => {
+    const { context } = buildCitationContext(
+      ['smith2020', 'doe2019'],
+      byKey,
+      'NUMERIC',
+    );
+    expect(renderCitationsInText('Smith [-@smith2020]', context)).toBe(
+      'Smith [1]',
+    );
   });
 });
 

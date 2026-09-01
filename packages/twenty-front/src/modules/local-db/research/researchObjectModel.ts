@@ -1373,6 +1373,14 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         description: 'Name and active email address',
       },
       {
+        name: 'contributorMetadata',
+        label: 'Contributor metadata',
+        type: 'TEXT',
+        icon: 'IconIdBadge2',
+        description:
+          'Optional JSON layered on the author line: ORCIDs, CRediT roles, ROR affiliations, funding',
+      },
+      {
         name: 'supplementTitle',
         label: 'Supplement cover title',
         type: 'TEXT',
@@ -1831,6 +1839,38 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         type: 'BOOLEAN',
         icon: 'IconFileExport',
       },
+      {
+        name: 'refKey',
+        label: 'Reference key',
+        type: 'TEXT',
+        icon: 'IconHash',
+        description:
+          'Slug used in cross-refs, e.g. methods → [#sec:methods] renders "Section 3"',
+      },
+      {
+        name: 'variantOfId',
+        label: 'Alternative version of',
+        type: 'TEXT',
+        icon: 'IconVersions',
+        description:
+          'Id of the section this rewords. A version never exports on its own — it stands in for its base when exporting to its journal.',
+      },
+      {
+        name: 'variantProfileKey',
+        label: 'Version for journal',
+        type: 'TEXT',
+        icon: 'IconBuildingBank',
+        description:
+          'Journal profile key this version is written for, e.g. myst:tex/myst/mdpi:atmosphere',
+      },
+      {
+        name: 'variantRules',
+        label: 'Version rules',
+        type: 'TEXT',
+        icon: 'IconRuler2',
+        description:
+          'The requirement this version satisfies, as JSON, e.g. {"maxWords":200}. Any journal asking for no more than that can use it, so one 200-word abstract serves every journal capping at 200.',
+      },
       { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
     ],
     defaultColumns: [
@@ -1945,6 +1985,30 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
         label: 'Width (%)',
         type: 'NUMBER',
         icon: 'IconRulerMeasure',
+      },
+      {
+        name: 'numbered',
+        label: 'Numbered',
+        type: 'BOOLEAN',
+        icon: 'IconListNumbers',
+        description:
+          'Off for a display equation set without a number; it takes none from the sequence and cannot be cross-referenced',
+      },
+      {
+        name: 'parentFigureId',
+        label: 'Panel of',
+        type: 'TEXT',
+        icon: 'IconLayoutGrid',
+        description:
+          'Id of the figure this is a panel of. The parent takes the number, the panel takes a letter — Figure 3 with panels 3a and 3b.',
+      },
+      {
+        name: 'panelColumns',
+        label: 'Panel columns',
+        type: 'NUMBER',
+        icon: 'IconColumns',
+        description:
+          'How many panels sit side by side before the layout wraps. Unset puts them all in one row.',
       },
       {
         name: 'orderIndex',
@@ -2605,5 +2669,62 @@ export const RESEARCH_OBJECT_SPECS: ResearchObjectSpec[] = [
       { name: 'notes', label: 'Notes', type: 'TEXT', icon: 'IconNotes' },
     ],
     defaultColumns: ['obligation', 'documentKind', 'fileType', 'uploadedAt'],
+  },
+  {
+    nameSingular: 'reviewRound',
+    namePlural: 'reviewRounds',
+    labelSingular: 'Review round',
+    labelPlural: 'Review rounds',
+    navSection: 'WORK',
+    icon: 'IconMessage',
+    description:
+      "A journal's decision on a submitted manuscript, with the reviewer points to answer",
+    navColor: 'purple',
+    nameFieldLabel: 'Round',
+    nameFieldIcon: 'IconMessage',
+    fields: [
+      {
+        name: 'journal',
+        label: 'Journal',
+        type: 'TEXT',
+        icon: 'IconBuildingBank',
+        description:
+          'The journal that sent this decision — a manuscript can be reviewed by more than one',
+      },
+      {
+        name: 'decision',
+        label: 'Decision',
+        type: 'SELECT',
+        icon: STATUS_ICON,
+        options: [
+          { value: 'MAJOR_REVISION', label: 'Major revision', color: 'orange' },
+          { value: 'MINOR_REVISION', label: 'Minor revision', color: 'yellow' },
+          { value: 'REJECT', label: 'Reject', color: 'red' },
+          { value: 'ACCEPT', label: 'Accept', color: 'green' },
+        ],
+      },
+      {
+        name: 'decisionDate',
+        label: 'Decision date',
+        type: 'DATE_TIME',
+        icon: CALENDAR_ICON,
+      },
+      {
+        name: 'letter',
+        label: 'Decision letter',
+        type: 'TEXT',
+        icon: TEXT_ICON,
+        description: 'The letter as received, kept so points can be re-parsed',
+      },
+      {
+        name: 'points',
+        label: 'Reviewer points',
+        type: 'TEXT',
+        icon: 'IconListNumbers',
+        description:
+          'Ordered JSON: each parsed reviewer point with the response and the section it changed',
+      },
+    ],
+    defaultColumns: ['manuscript', 'journal', 'decision', 'decisionDate'],
   },
 ];

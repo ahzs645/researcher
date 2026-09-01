@@ -13,10 +13,21 @@ import {
 } from './manuscriptImages';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { buildJatsArticle } from './manuscriptJatsExport';
+import { isFigurePanel } from './manuscriptNumbering';
 import { type PortableManuscriptSource } from './manuscriptPortableManifest';
 import { addPortableResearchPaperFiles } from './manuscriptPortableZip';
 import {
+  runManuscriptScreening,
+  type ScreeningFinding,
+  type ScreeningRun,
+} from './manuscriptScreening';
+import {
+  buildScreeningReport,
+  screeningSubmissionChecks,
+} from './manuscriptScreeningChecks';
+import {
   buildSubmissionManifest,
+  type SubmissionCheck,
   type SubmissionMaterials,
   type SubmissionReadiness,
   validateSubmission,
@@ -26,6 +37,7 @@ import {
   parseManuscriptSubmissionExtras,
   submissionJournalKey,
 } from './manuscriptSubmissionRequirements';
+import { type NumberedFigure } from './manuscriptTypes';
 
 type Zippable = Record<string, Uint8Array>;
 
@@ -116,10 +128,12 @@ const MECA_TYPE_BY_FILENAME = (filename: string, base: string): string => {
   if (filename.startsWith('figures/')) return 'figure';
   if (filename.startsWith('portable-assets/')) return 'figure';
   if (filename === 'cover-letter.docx') return 'cover-letter';
+  if (filename === 'response-to-reviewers.docx') return 'response-to-reviewer';
   if (filename === 'metadata.json') return 'metadata';
   if (filename === 'references.json') return 'metadata';
   if (filename === 'research-paper.json') return 'metadata';
   if (filename === 'submission-readiness.txt') return 'metadata';
+  if (filename === 'screening-report.txt') return 'metadata';
   return 'supporting-information';
 };
 
@@ -204,19 +218,27 @@ export const manuscriptSubmissionFigures = (
   bundle: ManuscriptBundle,
 ): ManuscriptSubmissionFigures => {
   const result: ManuscriptSubmissionFigures = { files: {}, linked: [] };
+  // What the artwork file is called. A panel's printed label is the letter
+  // alone — "(a)" — which two different figures would both slug to the same
+  // filename, so a panel is named by the reference that identifies it
+  // ("Fig. 1a") instead.
+  const artworkName = (figure: NumberedFigure): string =>
+    isFigurePanel(figure) && figure.crossRefLabel.length > 0
+      ? figure.crossRefLabel
+      : figure.label;
   for (const figure of bundle.numberedFigures) {
     if (figure.assetKind === 'TABLE') continue;
     if (isImageDataUrl(figure.imageUrl)) {
       const decoded = dataUrlToBytes(figure.imageUrl as string);
       if (decoded !== null) {
         result.files[
-          `figures/${figure.label.replace(/[^a-z0-9]+/gi, '-')}.${decoded.extension}`
+          `figures/${artworkName(figure).replace(/[^a-z0-9]+/gi, '-')}.${decoded.extension}`
         ] = decoded.bytes;
       }
       continue;
     }
     if (isHttpUrl(figure.imageUrl)) {
-      result.linked.push(`${figure.label}: ${figure.imageUrl}`);
+      result.linked.push(`${artworkName(figure)}: ${figure.imageUrl}`);
       continue;
     }
     const image = resolveFigureImage(figure);
@@ -280,9 +302,34 @@ export const createSubmissionPackage = async (
   bundle: ManuscriptBundle,
   materials: SubmissionMaterials,
   portableSource?: PortableManuscriptSource,
+  // What the panel added to the readiness list on screen — the retraction scan
+  // it alone can see. Passed through so the manifest in the ZIP says the same
+  // thing the author was shown before they pressed the button.
+  extraChecks: SubmissionCheck[] = [],
 ): Promise<SubmissionPackage> => {
   const files: Zippable = {};
-  const readiness = validateSubmission(bundle, materials);
+  // Screening needs the manuscript's sections, which only the portable source
+  // carries; without it the package simply ships no screening, rather than a
+  // report built from nothing that would read as an all-clear.
+  // The whole run, not just its findings: a report that printed nine checks
+  // while the panel showed seventeen would read as though the other eight did
+  // not exist, rather than as eight the paper was judged not to need. Figures
+  // travel too, so the figure-shaped checks run here as well — the colour-map
+  // one has no decoded pixels outside the browser and declines, which is the
+  // honest answer rather than a silent pass.
+  const screening: ScreeningRun =
+    portableSource === undefined
+      ? { findings: [], declinations: [] }
+      : runManuscriptScreening({
+          sections: portableSource.sections,
+          figures: portableSource.figures,
+          competingInterests: materials.competingInterests,
+        });
+  const screeningFindings: ScreeningFinding[] = screening.findings;
+  const readiness = validateSubmission(bundle, materials, [
+    ...extraChecks,
+    ...screeningSubmissionChecks(screeningFindings),
+  ]);
   const base = slugifyTitle(bundle.metadata.title);
   // Draw every Mermaid diagram once, so the manuscript, the JATS article, and
   // the figure files all carry the same picture instead of dropping it.
@@ -301,6 +348,17 @@ export const createSubmissionPackage = async (
     'submission-readiness.txt',
     buildSubmissionManifest(bundle, readiness, submissionExtraFiles),
   );
+  // The screening in a form a coauthor or an editor can be handed: until now it
+  // existed only as rows on a tab that nobody outside the app ever sees.
+  if (screeningFindings.length > 0) {
+    addText(
+      files,
+      'screening-report.txt',
+      buildScreeningReport(screeningFindings, bundle.metadata.title, {
+        declinations: screening.declinations,
+      }),
+    );
+  }
   addText(
     files,
     'metadata.json',
@@ -341,6 +399,15 @@ export const createSubmissionPackage = async (
     'suggested-reviewers.docx',
     'Suggested reviewers',
     materials.suggestedReviewers,
+  );
+  // A resubmission is expected to carry the point-by-point response, so it
+  // ships in the package next to the cover letter rather than as a file the
+  // author has to remember to attach in the portal.
+  await addDocx(
+    files,
+    'response-to-reviewers.docx',
+    'Response to reviewers',
+    materials.responseToReviewers,
   );
   addFigures(files, bundle);
   if (portableSource !== undefined) {

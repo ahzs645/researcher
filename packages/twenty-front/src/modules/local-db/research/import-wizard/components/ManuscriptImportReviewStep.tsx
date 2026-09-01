@@ -135,15 +135,23 @@ export const ManuscriptImportReviewStep = ({
     onClose,
     registerCommitState,
   });
-  // A portable package was produced by this app, so its classification is
-  // already correct — confirm what arrived instead of re-asking for it.
+  // A structured file needs no re-classification — confirm what arrived
+  // instead of re-asking for it. Only one this app wrote commits itself.
   const isPortable = preparedImport.portable;
+  const isRestoring =
+    preparedImport.portable && preparedImport.autoRestore === true;
 
   return (
     <StyledContainer>
       <StyledHeader>
         <StyledTitle>
-          {isPortable ? 'Here’s what was imported' : 'Review & commit'}
+          {isRestoring
+            ? isCommitting
+              ? 'Restoring your research package…'
+              : 'Here’s what was restored'
+            : isPortable
+              ? 'Here’s what this article contains'
+              : 'Review & commit'}
         </StyledTitle>
         <StyledHint>
           {sourceName}
@@ -153,8 +161,13 @@ export const ManuscriptImportReviewStep = ({
           <StyledSummary>
             {preparedImport.sections.length} sections ·{' '}
             {preparedImport.tableCount} tables · {preparedImport.imageCount}{' '}
-            figures · {document.stats?.equationCount ?? 0} equations ·{' '}
-            {preparedImport.references.length} references ·{' '}
+            figures ·{' '}
+            {/* Equations set as layout tables become numbered assets, so the
+                source document's own inline-math count is not the total. */}
+            {preparedImport.figures.filter(
+              (figure) => figure.assetKind === 'EQUATION',
+            ).length + (document.stats?.equationCount ?? 0)}{' '}
+            equations · {preparedImport.references.length} references ·{' '}
             {preparedImport.linkedCount} linked citations
           </StyledSummary>
         )}
@@ -180,7 +193,10 @@ export const ManuscriptImportReviewStep = ({
         ) : null}
         {isPortable ? (
           <>
-            <ManuscriptImportSummaryPanel summary={summary} />
+            <ManuscriptImportSummaryPanel
+              summary={summary}
+              sourceLabel={isRestoring ? 'package' : 'article'}
+            />
             <StyledDisclosureButton
               type="button"
               aria-expanded={areSectionsExpanded}
@@ -224,33 +240,46 @@ export const ManuscriptImportReviewStep = ({
           </div>
         ) : (
           <StyledSummary>
-            Nothing is written until you confirm this import.
+            {isRestoring
+              ? isCommitting
+                ? 'Restoring sections, assets, references and journal…'
+                : 'Restored into this manuscript.'
+              : 'Nothing is written until you confirm this import.'}
           </StyledSummary>
         )}
         <div>
-          <Button
-            title="Back"
-            variant="secondary"
-            size="small"
-            disabled={isCommitting || failed}
-            onClick={onBack}
-          />
-          <Button
-            title={
-              isCommitting
-                ? 'Importing…'
-                : isPortable
-                  ? 'Import'
-                  : 'Confirm import'
-            }
-            variant="primary"
-            accent="blue"
-            size="small"
-            disabled={
-              isCommitting || failed || preparedImport.sections.length === 0
-            }
-            onClick={() => void confirmImport()}
-          />
+          {isRestoring ? null : (
+            <Button
+              title="Back"
+              variant="secondary"
+              size="small"
+              disabled={isCommitting || failed}
+              onClick={onBack}
+            />
+          )}
+          {/* A first-party package restores itself; the only button it needs
+              is the one that gets you out if the restore fails. */}
+          {isRestoring && !failed ? (
+            <Button
+              title={isCommitting ? 'Restoring…' : 'Done'}
+              variant="primary"
+              accent="blue"
+              size="small"
+              disabled={isCommitting}
+              onClick={onClose}
+            />
+          ) : (
+            <Button
+              title={isCommitting ? 'Importing…' : 'Confirm import'}
+              variant="primary"
+              accent="blue"
+              size="small"
+              disabled={
+                isCommitting || failed || preparedImport.sections.length === 0
+              }
+              onClick={() => void confirmImport()}
+            />
+          )}
         </div>
       </StyledFooter>
     </StyledContainer>

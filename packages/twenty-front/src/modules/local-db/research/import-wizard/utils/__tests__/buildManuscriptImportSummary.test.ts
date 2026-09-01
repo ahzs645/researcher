@@ -52,6 +52,7 @@ const portablePrepared = (
   tableCount: 0,
   imageCount: 0,
   portable: true as const,
+  autoRestore: true,
 });
 
 describe('buildManuscriptImportSummary', () => {

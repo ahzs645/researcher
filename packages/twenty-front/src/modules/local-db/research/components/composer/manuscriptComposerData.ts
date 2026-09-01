@@ -40,6 +40,9 @@ export type ManuscriptRecord = {
   affiliations?: string | null;
   titlePageExtraLines?: string | null;
   correspondingAuthor?: string | null;
+  // Optional structured contributor layer (ORCIDs, CRediT roles, ROR
+  // affiliations, funding) as JSON, keyed to the author line's own authors.
+  contributorMetadata?: string | null;
   supplementTitle?: string | null;
   supplementAuthorLine?: string | null;
   supplementAffiliations?: string | null;
@@ -87,6 +90,7 @@ export const MANUSCRIPT_GQL = {
   affiliations: true,
   titlePageExtraLines: true,
   correspondingAuthor: true,
+  contributorMetadata: true,
   supplementTitle: true,
   supplementAuthorLine: true,
   supplementAffiliations: true,
@@ -102,6 +106,7 @@ export const MANUSCRIPT_GQL = {
 export const SECTION_GQL = {
   id: true,
   name: true,
+  refKey: true,
   sectionType: true,
   placement: true,
   content: true,
@@ -111,9 +116,18 @@ export const SECTION_GQL = {
   wordCount: true,
   includeInExport: true,
   status: true,
+  variantOfId: true,
+  variantProfileKey: true,
+  variantRules: true,
+  // Carries the co-author comments a Word import left here, so the composer
+  // can show them and the DOCX export can write them back out.
+  notes: true,
   manuscript: { id: true },
 };
 
+// The landing list's lighter selection. It carries the version fields too, so
+// a manuscript's section count on that screen is not inflated by versions it
+// has no way of telling apart from sections.
 export const SECTION_SUMMARY_GQL = {
   id: true,
   name: true,
@@ -124,6 +138,9 @@ export const SECTION_SUMMARY_GQL = {
   wordCount: true,
   includeInExport: true,
   status: true,
+  variantOfId: true,
+  variantProfileKey: true,
+  variantRules: true,
   manuscript: { id: true },
 };
 
@@ -140,6 +157,9 @@ export const FIGURE_GQL = {
   altText: true,
   credit: true,
   widthPercent: true,
+  numbered: true,
+  parentFigureId: true,
+  panelColumns: true,
   orderIndex: true,
   tableData: true,
   equationLatex: true,

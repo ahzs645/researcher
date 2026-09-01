@@ -4,6 +4,7 @@ import { reconcileImportedCitations } from './manuscriptCitationReconcile';
 import {
   extractCaptionOnlyFigures,
   extractImagesToFigures,
+  extractLayoutTables,
   extractTablesToFigures,
   linkImportedAssetReferences,
   type ImportedDocument,
@@ -144,6 +145,7 @@ export const prepareManuscriptImport = (
       preparePortableResearchPaperImport(
         document.portablePackage,
         document.sections,
+        document.portableSourceKind !== 'JATS',
       ),
       existingFigureRefKeys,
     );
@@ -163,25 +165,30 @@ export const prepareManuscriptImport = (
   const suppressedAssetLineSignatures = new Set(
     document.suppressedAssetLineSignatures ?? [],
   );
+  // Equations and callouts first: they are laid out as tables, and lifting
+  // them here is what keeps a numbered display equation from being imported as
+  // the paper's "Table 3".
+  const equations = extractLayoutTables(document.sections, 0, usedRefKeys);
   const images = extractImagesToFigures(
-    document.sections,
-    0,
+    equations.sections,
+    equations.figures.length,
     usedRefKeys,
     suppressedAssetLineSignatures,
   );
   const tables = extractTablesToFigures(
     images.sections,
-    images.figures.length,
+    equations.figures.length + images.figures.length,
     usedRefKeys,
     suppressedAssetLineSignatures,
   );
   const captionFigures = extractCaptionOnlyFigures(
     tables.sections,
-    images.figures.length + tables.figures.length,
+    equations.figures.length + images.figures.length + tables.figures.length,
     usedRefKeys,
     suppressedAssetLineSignatures,
   );
   const linkedAssets = linkImportedAssetReferences(captionFigures.sections, [
+    ...equations.figures,
     ...images.figures,
     ...tables.figures,
     ...captionFigures.figures,

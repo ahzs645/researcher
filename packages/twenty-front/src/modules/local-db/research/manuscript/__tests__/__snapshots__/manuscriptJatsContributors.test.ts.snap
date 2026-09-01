@@ -1,0 +1,50 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`JATS without structured contributor metadata emits byte-identical output to the pre-metadata exporter 1`] = `
+"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Archiving and Interchange DTD v1.3 20210610//EN" "JATS-archivearticle1-3.dtd">
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article">
+  <front>
+   <journal-meta>
+    <journal-title>Journal of Tests</journal-title>
+   </journal-meta>
+   <article-meta>
+    <article-id pub-id-type="doi">10.1000/test</article-id>
+    <title-group>
+     <article-title>Trace metals in northern rivers</article-title>
+    </title-group>
+    <contrib-group>
+     <contrib contrib-type="author"><string-name>Ahmad Jalil [1*]</string-name></contrib>
+     <contrib contrib-type="author"><string-name>Hossein Kazemian [1,2]</string-name></contrib>
+    </contrib-group>
+    <aff>1 Northern Analytical Lab</aff>
+    <aff>2 Natural Resources</aff>
+    <author-notes>
+     <corresp>Ahmad Jalil (ahmad@example.ca)</corresp>
+    </author-notes>
+    <abstract>
+     <p>We test things.</p>
+    </abstract>
+    <kwd-group>
+     <kwd>testing</kwd>
+     <kwd>xml</kwd>
+    </kwd-group>
+   </article-meta>
+  </front>
+  <body>
+   <sec>
+    <title>Abstract</title>
+    <p>We test things.</p>
+   </sec>
+   <sec>
+    <title>Keywords</title>
+    <p>testing; xml</p>
+   </sec>
+   <sec>
+    <title>Results</title>
+    <p>It works.</p>
+   </sec>
+  </body>
+</article>
+"
+`;

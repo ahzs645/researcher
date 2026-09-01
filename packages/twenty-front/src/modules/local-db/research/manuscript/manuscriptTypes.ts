@@ -20,6 +20,11 @@ export type CitationMode =
 export type SectionLike = {
   id: string;
   name?: string | null;
+  // The slug a `[#sec:methods]` in prose points at. It lives on the base
+  // section, never on one of its per-journal versions: a version substitutes
+  // the base's words but keeps the base's identity, so a reference written
+  // against the base keeps resolving whichever version ships.
+  refKey?: string | null;
   sectionType?: string | null;
   placement?: string | null;
   content?: string | null;
@@ -28,7 +33,24 @@ export type SectionLike = {
   level?: number | null;
   wordLimit?: number | null;
   wordCount?: number | null;
+  // A section may carry alternative versions of itself: an abstract cut to
+  // 200 words next to the 320-word one arXiv takes. `variantOfId` names the
+  // section this rewords. A version is an ordinary section record that never
+  // exports on its own — it stands in for its base.
+  //
+  // What it stands in for is said in one of two ways. `variantProfileKey` pins
+  // it to a single journal profile, which then receives it whatever else is
+  // true. `variantRules` is JSON declaring the requirement it satisfies —
+  // `{"maxWords":200}` — and every journal that asks for no more than that can
+  // use it, so one 200-word abstract serves every journal capping at 200.
+  variantOfId?: string | null;
+  variantProfileKey?: string | null;
+  variantRules?: string | null;
   includeInExport?: boolean | null;
+  // Free text about the section, and the field a co-author's comments live in:
+  // one attributed line each, with the author's answer under it. See
+  // `manuscriptComments` for why the rendering is also the store.
+  notes?: string | null;
 };
 
 export type FigureLike = {
@@ -54,8 +76,21 @@ export type FigureLike = {
   tableData?: string | null;
   // For EQUATION assets: the body as LaTeX, without delimiters.
   equationLatex?: string | null;
+  // Whether this asset is numbered at all. Unset means yes, which is what
+  // every asset was before the flag existed. An unnumbered display equation
+  // is set without a number and takes none from the sequence — so turning off
+  // Eq. (5) makes what was (6) become (5), and nothing may cross-reference it.
+  numbered?: boolean | null;
   // For diagram figures: the Mermaid source, rendered to an image at export.
   diagramSource?: string | null;
+  // A panel of another figure: the id of the figure this is one cell of. The
+  // parent takes the number, the panel takes a letter — Figure 3 with panels
+  // 3a and 3b — and the panel never appears in the figure sequence itself.
+  parentFigureId?: string | null;
+  // On a parent: how many panels sit side by side before the layout wraps.
+  // One column is a stack, two a pair, and unset means "all of them in one
+  // row", which is what a two- or three-panel figure almost always wants.
+  panelColumns?: number | null;
 };
 
 export type ReferenceLike = {
@@ -89,7 +124,19 @@ export type JournalStyle = {
   tableLabelFormat?: string | null;
   supplementPrefix?: string | null;
   numberingScope?: string | null;
+  // Keep the numbers the source document used ("Eq. (11a)", "Table B1")
+  // instead of renumbering continuously. An author re-exporting their own
+  // submitted draft wants their numbering back, not ours.
+  keepSourceNumbers?: boolean | null;
   crossRefFormat?: string | null;
+  // How a panel's number is spelled from its parent's: `{n}` is the parent's
+  // number, `{p}` the panel letter and `{P}` its capital. "1a", "1(a)" and
+  // "1A" are all in print, so the journal says which.
+  panelLabelFormat?: string | null;
+  // How an in-text reference to a section renders — "Section {n}". A section
+  // the journal does not number has no number to put there, so the reference
+  // prints the section's own heading instead.
+  sectionRefFormat?: string | null;
   figureCaptionPosition?: string | null;
   figureCaptionFontSize?: number | null;
   figureCaptionLineSpacing?: number | null;
@@ -108,6 +155,10 @@ export type JournalStyle = {
   keywordMaximum?: number | null;
   requiredArtifacts?: string[] | null;
   submissionRequirements?: string | null;
+  // Free text about the profile itself — where it came from, what it does and
+  // does not carry. A column on the record since the seeds were written; the
+  // type simply never declared it.
+  notes?: string | null;
   lineNumbering?: boolean | null;
   pageNumbering?: boolean | null;
   sectionNumbering?: boolean | null;
@@ -145,10 +196,40 @@ export type JournalStyle = {
 };
 
 export type NumberedFigure = FigureLike & {
-  // "1", "2", "S1" — includes the supplement prefix.
+  // "1", "2", "S1" — includes the supplement prefix. A panel carries its
+  // parent's number and its own letter together: "3b".
   number: string;
-  // "Figure 1", "Table S1" — the rendered caption label.
+  // "Figure 1", "Table S1" — the rendered caption label. A panel's label is
+  // the letter alone, "(a)", because that is what is printed beside the panel
+  // while the parent's caption carries "Figure 3".
   label: string;
   // How an in-text cross-reference to this asset renders (per crossRefFormat).
   crossRefLabel: string;
+  // Set on a panel: its letter, and the parent it counts from. The parent's
+  // number is kept beside the letter because that is the half a target with a
+  // live counter can still compute for itself.
+  panelLetter?: string;
+  parentRefKey?: string;
+  parentNumber?: string;
+  // Set on a figure that has panels: those panels, in the order they lay out.
+  // The panels are also in the flat numbered list, so a lookup finds them; the
+  // nesting is what lets a renderer draw one figure instead of several.
+  panels?: NumberedFigure[];
+};
+
+export type NumberedSection = SectionLike & {
+  // "3" — empty when this section is not part of the numbered sequence, which
+  // is every section when the journal does not number them and the front and
+  // back matter even when it does.
+  number: string;
+  // The heading text, before the number is put in front of it.
+  heading: string;
+  // The level this section's heading prints at, so whatever renders the
+  // heading and whatever numbered it cannot disagree about which headings are
+  // in the sequence.
+  headingLevel: 2 | 3 | 4;
+  // "Section 3" when it has a number; the heading text when it has not.
+  crossRefLabel: string;
+  // The key a `[#…]` resolves through: the section's own, or its id.
+  referenceKey: string;
 };

@@ -6,6 +6,7 @@ import {
   withCitationMode,
   withCitationModeSetting,
   withCitationStyle,
+  withImportedSourceStyles,
 } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 
 describe('manuscript export style overrides', () => {
@@ -171,5 +172,40 @@ describe('manuscript export style overrides', () => {
       citationStyleId: 'apa',
       crossRefFormat: 'Figure {n}',
     });
+  });
+});
+
+describe('withImportedSourceStyles', () => {
+  const stylesXml =
+    '<w:styles><w:style w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>';
+
+  it('adopts the imported document’s own Word styles', () => {
+    const serialized = withImportedSourceStyles(
+      JSON.stringify({ bodyFontSize: 11 }),
+      stylesXml,
+      'AETH_Modular_AMT_editable_master.docx',
+    );
+    expect(parseManuscriptExportStyleOverrides(serialized)).toEqual({
+      bodyFontSize: 11,
+      referenceDocStyles: stylesXml,
+      referenceDocUrl: 'AETH_Modular_AMT_editable_master.docx',
+    });
+  });
+
+  it('never overwrites a template the author chose', () => {
+    expect(
+      withImportedSourceStyles(
+        JSON.stringify({ referenceDocStyles: stylesXml }),
+        '<w:styles><w:style w:styleId="Other"/></w:styles>',
+        'other.docx',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('ignores a source with no usable style table', () => {
+    expect(withImportedSourceStyles(null, undefined, 'x.docx')).toBeUndefined();
+    expect(
+      withImportedSourceStyles(null, '<not-styles/>', 'x.docx'),
+    ).toBeUndefined();
   });
 });

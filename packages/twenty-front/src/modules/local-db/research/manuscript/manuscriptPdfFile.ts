@@ -18,6 +18,11 @@ const inflateZlib = async (bytes: Uint8Array): Promise<Uint8Array> => {
   return new Uint8Array(await stream.arrayBuffer());
 };
 
+// Streams that never carry page text: images, embedded font programs, and the
+// image-only compression filters.
+const NON_TEXT_STREAM =
+  /\/Subtype\s*\/(?:Image|Type1C|CIDFontType0C|OpenType)\b|\/FontFile\d?\b|\/(?:DCTDecode|JPXDecode|CCITTFaxDecode|JBIG2Decode|RunLengthDecode)\b/;
+
 // Pull and (if needed) inflate every content stream, concatenated in file order.
 const collectContentStreams = async (buffer: ArrayBuffer): Promise<string> => {
   const bytes = new Uint8Array(buffer);
@@ -39,6 +44,14 @@ const collectContentStreams = async (buffer: ArrayBuffer): Promise<string> => {
     const dictStart = text.lastIndexOf('<<', match.index);
     const dict = dictStart >= 0 ? text.slice(dictStart, match.index) : '';
     const isFlate = /\/FlateDecode\b/.test(dict);
+
+    // An image or an embedded font inflates to megabytes of binary that has no
+    // text operators in it. Scanning that for `(…) Tj` cost minutes on a real
+    // 30-page paper — the dictionary says what the stream is, so skip it.
+    if (NON_TEXT_STREAM.test(dict)) {
+      streamKeyword.lastIndex = endIndex + 'endstream'.length;
+      continue;
+    }
 
     const raw = bytes.subarray(dataStart, dataEnd);
     try {

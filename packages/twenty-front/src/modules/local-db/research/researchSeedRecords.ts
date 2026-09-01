@@ -1,5 +1,12 @@
 import { researchDeterministicUuid } from './researchMetadataBuilder';
 import { RESEARCH_GRANT_SOURCE_SEEDS } from './researchGrantSourceData';
+import { parseDecisionLetter } from './manuscript/manuscriptReviewLetter';
+import {
+  reviewPointsFromLetter,
+  serializeReviewPoints,
+  updateReviewPoint,
+  type ReviewPoint,
+} from './manuscript/manuscriptReviewRound';
 import { serializeJournalSubmissionRequirements } from './manuscript/manuscriptSubmissionRequirements';
 
 // Demo seed records for the research objects. Mirrors how the bridge seeds the
@@ -1164,6 +1171,56 @@ const ARCHIVES_ENVIRONMENTAL_CONTAMINATION_SUBMISSION_REQUIREMENTS =
     ['CONSENT_FOR_PUBLICATION', true],
   ]);
 
+const ATMOSPHERIC_MEASUREMENT_TECHNIQUES_SUBMISSION_REQUIREMENTS =
+  journalSubmissionRequirements([
+    ['FULL_TITLE', true],
+    ['ARTICLE_TYPE', true],
+    ['ABSTRACT', true],
+    ['KEYWORDS', false],
+    ['AUTHOR_ORDER', true],
+    ['CORRESPONDING_AUTHOR', true],
+    ['CORRESPONDING_AUTHOR_INSTITUTION', true],
+    ['CORRESPONDING_AUTHOR_COUNTRY', true],
+    ['AFFILIATIONS', true],
+    ['FUNDING_INFORMATION', false],
+    ['MANUSCRIPT_FILE', true],
+    ['ACKNOWLEDGMENTS', true],
+    ['COMPETING_INTERESTS', true],
+    ['DATA_AVAILABILITY', true],
+  ]);
+
+const ATMOSPHERIC_MEASUREMENT_TECHNIQUES_SECTION_SKELETON = JSON.stringify([
+  { name: 'Title page', sectionType: 'TITLE_PAGE', placement: 'FRONT_MATTER' },
+  { name: 'Abstract', sectionType: 'ABSTRACT', placement: 'FRONT_MATTER' },
+  { name: 'Introduction', sectionType: 'INTRODUCTION', placement: 'MAIN' },
+  { name: 'Methods', sectionType: 'METHODS', placement: 'MAIN' },
+  { name: 'Results', sectionType: 'RESULTS', placement: 'MAIN' },
+  { name: 'Discussion', sectionType: 'DISCUSSION', placement: 'MAIN' },
+  { name: 'Conclusions', sectionType: 'CONCLUSION', placement: 'MAIN' },
+  {
+    name: 'Code and data availability',
+    sectionType: 'DATA_AVAILABILITY',
+    placement: 'BACK_MATTER',
+  },
+  {
+    name: 'Author contributions',
+    sectionType: 'AUTHOR_CONTRIBUTIONS',
+    placement: 'BACK_MATTER',
+  },
+  {
+    name: 'Competing interests',
+    sectionType: 'CONFLICTS',
+    placement: 'BACK_MATTER',
+  },
+  {
+    name: 'Acknowledgements',
+    sectionType: 'ACKNOWLEDGMENTS',
+    placement: 'BACK_MATTER',
+  },
+  { name: 'References', sectionType: 'REFERENCES', placement: 'BACK_MATTER' },
+  { name: 'Appendix A', sectionType: 'APPENDIX', placement: 'SUPPLEMENT' },
+]);
+
 const ATMOSPHERIC_ENVIRONMENT_SUBMISSION_REQUIREMENTS =
   journalSubmissionRequirements([
     ['FULL_TITLE', true],
@@ -1289,18 +1346,46 @@ const journalTemplateRecords = (): SeedRecord[] => [
     tableCaptionPosition: 'ABOVE',
     abstractWordLimit: 250,
     sectionSkeleton: JSON.stringify([
-      { name: 'Title page', sectionType: 'TITLE_PAGE', placement: 'FRONT_MATTER' },
+      {
+        name: 'Title page',
+        sectionType: 'TITLE_PAGE',
+        placement: 'FRONT_MATTER',
+      },
       { name: 'Abstract', sectionType: 'ABSTRACT', placement: 'FRONT_MATTER' },
       { name: 'Keywords', sectionType: 'KEYWORDS', placement: 'FRONT_MATTER' },
       { name: 'Introduction', sectionType: 'INTRODUCTION', placement: 'MAIN' },
-      { name: 'Results and discussion', sectionType: 'RESULTS', placement: 'MAIN' },
+      {
+        name: 'Results and discussion',
+        sectionType: 'RESULTS',
+        placement: 'MAIN',
+      },
       { name: 'Methods', sectionType: 'METHODS', placement: 'MAIN' },
-      { name: 'Acknowledgements', sectionType: 'ACKNOWLEDGMENTS', placement: 'BACK_MATTER' },
-      { name: 'Author contributions', sectionType: 'AUTHOR_CONTRIBUTIONS', placement: 'BACK_MATTER' },
+      {
+        name: 'Acknowledgements',
+        sectionType: 'ACKNOWLEDGMENTS',
+        placement: 'BACK_MATTER',
+      },
+      {
+        name: 'Author contributions',
+        sectionType: 'AUTHOR_CONTRIBUTIONS',
+        placement: 'BACK_MATTER',
+      },
       { name: 'Funding', sectionType: 'FUNDING', placement: 'BACK_MATTER' },
-      { name: 'Conflicts of interest', sectionType: 'CONFLICTS', placement: 'BACK_MATTER' },
-      { name: 'Data availability', sectionType: 'DATA_AVAILABILITY', placement: 'BACK_MATTER' },
-      { name: 'References', sectionType: 'REFERENCES', placement: 'BACK_MATTER' },
+      {
+        name: 'Conflicts of interest',
+        sectionType: 'CONFLICTS',
+        placement: 'BACK_MATTER',
+      },
+      {
+        name: 'Data availability',
+        sectionType: 'DATA_AVAILABILITY',
+        placement: 'BACK_MATTER',
+      },
+      {
+        name: 'References',
+        sectionType: 'REFERENCES',
+        placement: 'BACK_MATTER',
+      },
     ]),
     twoColumn: true,
     referenceDocUrl: '',
@@ -1571,6 +1656,45 @@ const journalTemplateRecords = (): SeedRecord[] => [
     outputFormats: ['DOCX', 'PDF', 'ZIP'],
     notes:
       'Co-author review layout derived from the Addis Ababa working draft: compact title and abstract, tightly stacked left-aligned affiliations, justified double-spaced body, and single-spaced academic tables.',
+  }),
+  makeRecord('journalTemplate', 'amt-copernicus', 15, {
+    name: 'Atmospheric Measurement Techniques (Copernicus)',
+    profileKey: 'copernicus-atmospheric-measurement-techniques',
+    citationMode: 'AUTHOR_DATE',
+    citationStyleId: 'copernicus-publications',
+    figureLabelFormat: 'Figure {n}',
+    tableLabelFormat: 'Table {n}',
+    supplementPrefix: 'S',
+    numberingScope: 'CONTINUOUS',
+    crossRefFormat: 'Fig. {n}',
+    // Copernicus sets figure captions under the artwork and table captions over
+    // the grid, and numbers its display equations on the right margin.
+    figureCaptionPosition: 'BELOW',
+    tableCaptionPosition: 'ABOVE',
+    abstractWordLimit: 350,
+    keywordMinimum: 0,
+    keywordMaximum: 12,
+    sectionSkeleton: ATMOSPHERIC_MEASUREMENT_TECHNIQUES_SECTION_SKELETON,
+    requiredArtifacts: ['COVER_LETTER', 'SUGGESTED_REVIEWERS'],
+    submissionRequirements:
+      ATMOSPHERIC_MEASUREMENT_TECHNIQUES_SUBMISSION_REQUIREMENTS,
+    lineNumbering: true,
+    pageNumbering: true,
+    sectionNumbering: true,
+    twoColumn: false,
+    frontMatterLayout: 'TITLE_WITH_ABSTRACT',
+    fontFamily: 'Times New Roman',
+    bodyFontSize: 12,
+    titleFontSize: 18,
+    headingFontSize: 13,
+    subheadingFontSize: 12,
+    lineSpacing: 1.5,
+    abstractLineSpacing: 1.5,
+    bodyAlignment: 'JUSTIFIED',
+    referenceDocUrl: '',
+    outputFormats: ['DOCX', 'PDF', 'ZIP'],
+    notes:
+      'Copernicus author-date profile (AMT, ACP, ESSD): numbered sections, numbered display equations, and a code-and-data availability statement.',
   }),
 ];
 
@@ -2119,6 +2243,72 @@ const obligationDocumentRecords = (): SeedRecord[] => [
   }),
 ];
 
+// A decision letter in the shape journals send them: two referees, numbered
+// points, and major/minor subheadings. The seeded points are derived from this
+// text rather than written out beside it, so the letter and the points a demo
+// workspace opens with cannot drift apart.
+const TI_DECISION_LETTER = `Dear Dr Reyes,
+
+Your manuscript has been assessed by two referees. We are prepared to consider a
+revised version that responds to the points below.
+
+Reviewer #1 (Remarks to the Author):
+
+The growth protocol is clearly described and the ARPES data are convincing.
+
+1. The introduction spends two pages on qubit architectures that are never
+   returned to. Please shorten it and state the substrate question earlier.
+
+2. Figure 2 is unreadable at print size: the Dirac cone labels are smaller than
+   the axis ticks.
+
+Reviewer #2 (Remarks to the Author):
+
+Major comments
+
+1. The film thickness is reported without an uncertainty. How reproducible is
+   the 12 nm figure across the six growths?
+
+2. No comparison is drawn with the bismuth selenide substrates in the recent
+   literature, which reach comparable mobilities.
+
+Minor comments
+
+- Table 1 is missing units on the mobility column.
+- "sublattice" is misspelt throughout the discussion.
+`;
+
+const tiReviewPoints = (): ReviewPoint[] =>
+  updateReviewPoint(
+    updateReviewPoint(
+      reviewPointsFromLetter(parseDecisionLetter(TI_DECISION_LETTER)),
+      'reviewer-1-1',
+      {
+        response:
+          'The introduction is now two paragraphs. The qubit-architecture survey has been cut to three sentences and the substrate question is stated in the opening paragraph.',
+        sectionId: SECTION('ti-intro'),
+      },
+    ),
+    'reviewer-2-1',
+    {
+      response:
+        'Thickness is now reported as 12.4 ± 0.6 nm across the six growths, with the per-growth values added to the methods table.',
+      sectionId: SECTION('ti-methods'),
+    },
+  );
+
+const reviewRoundRecords = (): SeedRecord[] => [
+  makeRecord('reviewRound', 'ti-qubit-round-1', 0, {
+    name: 'Round 1',
+    manuscriptId: MANUSCRIPT,
+    journal: 'Nature Materials',
+    decision: 'MAJOR_REVISION',
+    decisionDate: '2026-06-18T00:00:00.000Z',
+    letter: TI_DECISION_LETTER,
+    points: serializeReviewPoints(tiReviewPoints()),
+  }),
+];
+
 // Seed map keyed by object `nameSingular`, matching the DataSource seed shape.
 export const getResearchSeedRecords = (): Record<string, SeedRecord[]> => ({
   researchTeam: researchTeamRecords(),
@@ -2143,6 +2333,7 @@ export const getResearchSeedRecords = (): Record<string, SeedRecord[]> => ({
   projectMembership: projectMembershipRecords(),
   obligation: obligationRecords(),
   obligationDocument: obligationDocumentRecords(),
+  reviewRound: reviewRoundRecords(),
 });
 
 // The subset seeded into a BLANK workspace too — formatting scaffolding the user

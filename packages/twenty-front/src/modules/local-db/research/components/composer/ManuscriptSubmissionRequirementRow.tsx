@@ -1,6 +1,22 @@
 import { styled } from '@linaria/react';
+import { useState, type ReactNode } from 'react';
+import { Button } from 'twenty-ui/input';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
+import { runTrialVerification } from '@/local-db/research/components/composer/references/manuscriptTrialVerificationFetch';
+import {
+  manuscriptTrialVerificationState,
+  manuscriptTrialVerificationSummary,
+} from '@/local-db/research/components/composer/references/manuscriptTrialVerificationState';
+import {
+  type ScreeningFinding,
+  type ScreeningVerdict,
+} from '@/local-db/research/manuscript/manuscriptScreening';
+import {
+  clinicalTrialsRecordUrl,
+  type TrialVerificationStatus,
+} from '@/local-db/research/manuscript/screening/trialVerification';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 import {
   type ResolvedSubmissionRequirementItem,
   type SubmissionConflict,
@@ -173,5 +189,210 @@ export const ManuscriptSubmissionRequirementRow = ({
         </StyledConflict>
       ) : null}
     </StyledRow>
+  );
+};
+
+type ManuscriptScreeningFindingRowProps = {
+  finding: ScreeningFinding;
+  // Where a check that can do more than match text hangs its own controls —
+  // the registry lookup on the trial-registration row, today.
+  footer?: ReactNode;
+};
+
+const VERDICT_LABELS: Record<ScreeningVerdict, string> = {
+  PRESENT: 'Found',
+  WEAK: 'Weak',
+  ABSENT: 'Not found',
+};
+
+// A screening finding is read, not edited: the row is a verdict, the sentence
+// it matched and where that sentence lives, so the author can disagree with it.
+const StyledScreeningRow = styled.div`
+  border: 1px solid ${themeCssVariables.border.color.light};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[1]};
+  padding: ${themeCssVariables.spacing[2]} ${themeCssVariables.spacing[3]};
+`;
+
+const StyledScreeningHeading = styled.div`
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${themeCssVariables.spacing[2]};
+`;
+
+// Absent is deliberately not red: most manuscripts are not clinical trials, and
+// an alarm colour on an expected absence trains the author to ignore the panel.
+const StyledVerdict = styled.span<{ verdict: ScreeningVerdict }>`
+  background: ${({ verdict }) =>
+    verdict === 'PRESENT'
+      ? themeCssVariables.background.transparent.success
+      : verdict === 'WEAK'
+        ? themeCssVariables.background.transparent.orange
+        : themeCssVariables.background.transparent.light};
+  border-radius: ${themeCssVariables.border.radius.pill};
+  color: ${({ verdict }) =>
+    verdict === 'PRESENT'
+      ? themeCssVariables.color.green
+      : verdict === 'WEAK'
+        ? themeCssVariables.color.orange
+        : themeCssVariables.font.color.secondary};
+  font-size: ${themeCssVariables.font.size.xs};
+  padding: 1px ${themeCssVariables.spacing[2]};
+`;
+
+const StyledScreeningLabel = styled.span`
+  color: ${themeCssVariables.font.color.primary};
+  flex: 1;
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.medium};
+`;
+
+const StyledTool = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
+const StyledEvidence = styled.blockquote`
+  border-left: 2px solid ${themeCssVariables.border.color.medium};
+  color: ${themeCssVariables.font.color.secondary};
+  font-size: ${themeCssVariables.font.size.xs};
+  margin: 0;
+  padding-left: ${themeCssVariables.spacing[2]};
+`;
+
+const StyledDetail = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
+export const ManuscriptScreeningFindingRow = ({
+  finding,
+  footer,
+}: ManuscriptScreeningFindingRowProps) => {
+  // A section finding points at a section and a figure finding points at a
+  // figure; the row says which without caring how the check found it.
+  const place = finding.sectionName ?? finding.figureLabel;
+
+  return (
+    <StyledScreeningRow>
+      <StyledScreeningHeading>
+        <StyledVerdict verdict={finding.verdict}>
+          {VERDICT_LABELS[finding.verdict]}
+        </StyledVerdict>
+        <StyledScreeningLabel>{finding.label}</StyledScreeningLabel>
+        <StyledTool>{finding.tool}</StyledTool>
+      </StyledScreeningHeading>
+      {finding.evidence.length > 0 ? (
+        <StyledEvidence>
+          “{finding.evidence}”{place === undefined ? null : ` — ${place}`}
+        </StyledEvidence>
+      ) : null}
+      <StyledDetail>{finding.detail}</StyledDetail>
+      {footer}
+    </StyledScreeningRow>
+  );
+};
+
+type ManuscriptTrialVerificationCheckProps = {
+  identifiers: string[];
+};
+
+const VERIFICATION_LABELS: Record<TrialVerificationStatus, string> = {
+  REGISTERED: 'Registered',
+  NOT_FOUND: 'Not found',
+  UNKNOWN: 'Not checked',
+};
+
+const StyledVerification = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[1]};
+  padding-top: ${themeCssVariables.spacing[1]};
+`;
+
+const StyledVerificationLine = styled.span<{ status: TrialVerificationStatus }>`
+  color: ${({ status }) =>
+    status === 'NOT_FOUND'
+      ? themeCssVariables.font.color.danger
+      : status === 'REGISTERED'
+        ? themeCssVariables.font.color.secondary
+        : themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
+const StyledVerificationLink = styled.a`
+  color: ${themeCssVariables.font.color.secondary};
+  font-size: ${themeCssVariables.font.size.xs};
+`;
+
+// A button, never a fetch on render: this app works offline by design, and a
+// panel that reached the network every time it opened would be both slow and
+// a surprise. The result lives in a shared atom rather than component state so
+// the answer survives a tab switch, and in memory rather than storage so a
+// confirmation can never outlive the identifier it was about.
+export const ManuscriptTrialVerificationCheck = ({
+  identifiers,
+}: ManuscriptTrialVerificationCheckProps) => {
+  const [manuscriptTrialVerification, setManuscriptTrialVerification] =
+    useAtomState(manuscriptTrialVerificationState);
+  const [isChecking, setIsChecking] = useState(false);
+  const summary = manuscriptTrialVerificationSummary({
+    verification: manuscriptTrialVerification,
+    identifiers,
+  });
+
+  const verify = async () => {
+    if (isChecking) return;
+    setIsChecking(true);
+    try {
+      setManuscriptTrialVerification({
+        identifiers,
+        summary: await runTrialVerification(identifiers),
+      });
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  return (
+    <StyledVerification>
+      <div>
+        <Button
+          title={isChecking ? 'Checking…' : 'Verify with ClinicalTrials.gov'}
+          variant="secondary"
+          size="small"
+          disabled={isChecking}
+          onClick={verify}
+        />
+      </div>
+      {summary === null ? null : (
+        <StyledVerificationLine status="UNKNOWN">
+          {summary.message}
+        </StyledVerificationLine>
+      )}
+      {(summary?.verifications ?? []).map((verification) => (
+        <StyledVerificationLine
+          key={verification.identifier}
+          status={verification.status}
+        >
+          {VERIFICATION_LABELS[verification.status]} ·{' '}
+          {verification.status === 'REGISTERED' ? (
+            <StyledVerificationLink
+              href={clinicalTrialsRecordUrl(verification.identifier)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {verification.identifier}
+            </StyledVerificationLink>
+          ) : (
+            verification.identifier
+          )}{' '}
+          — {verification.summary}
+        </StyledVerificationLine>
+      ))}
+    </StyledVerification>
   );
 };

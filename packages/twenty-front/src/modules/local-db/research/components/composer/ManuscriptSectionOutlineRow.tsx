@@ -1,9 +1,14 @@
 import { styled } from '@linaria/react';
+import { isNonEmptyString } from '@sniptt/guards';
+import { isDefined } from 'twenty-shared/utils';
 import { IconChevronDown, IconChevronRight } from 'twenty-ui/display';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { type ManuscriptSectionOutlineNode } from '@/local-db/research/components/composer/manuscriptSectionOutlineTree';
-import { type SectionPlacement } from '@/local-db/research/manuscript/manuscriptTypes';
+import {
+  type SectionLike,
+  type SectionPlacement,
+} from '@/local-db/research/manuscript/manuscriptTypes';
 
 const PLACEMENTS: Array<{ value: SectionPlacement; label: string }> = [
   { value: 'FRONT_MATTER', label: 'Front matter' },
@@ -86,6 +91,25 @@ const StyledMeta = styled.span`
   gap: ${themeCssVariables.spacing[1]};
 `;
 
+// Only rows that actually have a per-journal version render this line, so a
+// paper that never uses versions — most of them — sees the outline it always
+// saw, to the pixel.
+const StyledVersionNote = styled.span`
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const StyledWordCount = styled.span<{ over: boolean }>`
+  color: ${({ over }) =>
+    over ? themeCssVariables.font.color.danger : 'inherit'};
+  font-weight: ${({ over }) =>
+    over ? themeCssVariables.font.weight.medium : 'inherit'};
+`;
+
 const StyledBadge = styled.span`
   background: ${themeCssVariables.background.transparent.light};
   border-radius: ${themeCssVariables.border.radius.pill};
@@ -129,6 +153,11 @@ type ManuscriptSectionOutlineRowProps = {
   depth: number;
   expandedSectionIds: Set<string>;
   selectedSectionId?: string;
+  // Per-journal versions of the sections in this subtree, keyed by base id.
+  // Empty for a paper that has none, which is the common case.
+  variantsByBaseId: Map<string, SectionLike[]>;
+  activeVariantKey: string | null;
+  activeJournalLabel: string | null;
   onChangePlacement: (sectionId: string, placement: SectionPlacement) => void;
   onSelectSection: (sectionId: string) => void;
   onReorderSection: (sourceId: string, targetId: string) => void;
@@ -140,6 +169,9 @@ export const ManuscriptSectionOutlineRow = ({
   depth,
   expandedSectionIds,
   selectedSectionId,
+  variantsByBaseId,
+  activeVariantKey,
+  activeJournalLabel,
   onChangePlacement,
   onSelectSection,
   onReorderSection,
@@ -148,6 +180,24 @@ export const ManuscriptSectionOutlineRow = ({
   const { section, children } = node;
   const hasChildren = children.length > 0;
   const isExpanded = hasChildren && expandedSectionIds.has(section.id);
+  const variants = variantsByBaseId.get(section.id) ?? [];
+  const activeVariant = isNonEmptyString(activeVariantKey)
+    ? variants.find((variant) => variant.variantProfileKey === activeVariantKey)
+    : undefined;
+  // The row reports what this section will actually be when exported to the
+  // journal now selected — so when a version stands in, its count against its
+  // own cap is the honest number, not the paper's.
+  const shownSection = activeVariant ?? section;
+  const wordCount = shownSection.wordCount ?? 0;
+  const wordLimit =
+    isDefined(activeVariant) &&
+    isDefined(activeVariant.wordLimit) &&
+    activeVariant.wordLimit > 0
+      ? activeVariant.wordLimit
+      : null;
+  const versionNote = isDefined(activeVariant)
+    ? `Exports as ${activeJournalLabel ?? 'journal'} version`
+    : `Has ${variants.length} journal ${variants.length === 1 ? 'version' : 'versions'}, none for ${activeJournalLabel ?? 'this journal'}`;
 
   return (
     <StyledNode depth={depth}>
@@ -192,8 +242,20 @@ export const ManuscriptSectionOutlineRow = ({
           <StyledTitle>{section.name ?? 'Untitled section'}</StyledTitle>
           <StyledMeta>
             <StyledBadge>{sectionTypeLabel(section.sectionType)}</StyledBadge>
-            <span>{section.wordCount ?? 0} words</span>
+            <StyledWordCount over={wordLimit !== null && wordCount > wordLimit}>
+              {wordLimit === null
+                ? `${wordCount} words`
+                : `${wordCount} / ${wordLimit} words`}
+            </StyledWordCount>
           </StyledMeta>
+          {variants.length > 0 ? (
+            // Journal names are long and this column is narrow, so the line
+            // leads with what it means and lets the name be the part that
+            // ellipsises; the title carries it in full.
+            <StyledVersionNote title={versionNote}>
+              {versionNote}
+            </StyledVersionNote>
+          ) : null}
         </StyledSectionButton>
         <StyledPlacementSelect
           aria-label={`Move ${section.name ?? 'section'} to another group`}
@@ -220,6 +282,9 @@ export const ManuscriptSectionOutlineRow = ({
               depth={depth + 1}
               expandedSectionIds={expandedSectionIds}
               selectedSectionId={selectedSectionId}
+              variantsByBaseId={variantsByBaseId}
+              activeVariantKey={activeVariantKey}
+              activeJournalLabel={activeJournalLabel}
               onChangePlacement={onChangePlacement}
               onSelectSection={onSelectSection}
               onReorderSection={onReorderSection}

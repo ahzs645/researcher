@@ -1,9 +1,37 @@
 import { isNonEmptyString } from '@sniptt/guards';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
+import {
+  CREDIT_VOCABULARY_IDENTIFIER,
+  classifyFunderIdentifier,
+  creditRoleUri,
+  orcidUri,
+  orderCreditRoles,
+  rorUri,
+} from './manuscriptContributorIdentifiers';
+import {
+  isEmptyManuscriptContributorMetadata,
+  joinManuscriptAffiliationDetails,
+  joinManuscriptContributorDetails,
+  readManuscriptContributorMetadata,
+  renderManuscriptFundingStatement,
+  type ManuscriptAffiliationWithDetail,
+  type ManuscriptAuthorWithDetail,
+  type ManuscriptContributorMetadata,
+} from './manuscriptContributorMetadata';
+import {
+  parseManuscriptAffiliations,
+  parseManuscriptAuthors,
+} from './manuscriptContributors';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
+import { hasAuthoredSectionKey } from './manuscriptNumbering';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
+import {
+  numberManuscriptFootnotes,
+  splitManuscriptFootnotes,
+  type ManuscriptFootnote,
+} from './manuscriptFootnotes';
 import {
   parseManuscriptTableGrid,
   type ManuscriptTableCell,
@@ -24,7 +52,7 @@ const escapeXml = (value: string): string =>
 
 // Inline Markdown → JATS inline elements. Citations/cross-refs are already
 // rendered to their final labels by the bundle, so they stay plain text.
-const inlineToJats = (markdown: string): string => {
+const inlineMarkupToJats = (markdown: string): string => {
   let out = escapeXml(markdown);
   out = out.replace(/\*\*([^*]+)\*\*/g, '<bold>$1</bold>');
   out = out.replace(/\*([^*]+)\*/g, '<italic>$1</italic>');
@@ -39,6 +67,26 @@ const inlineToJats = (markdown: string): string => {
   );
   return out;
 };
+
+// A footnote is the one inline construct that is not spelled out where it
+// stands: the anchor is an <xref> and the note itself goes to a <fn-group> in
+// the back matter, which is what a publisher's ingest expects to find. A note
+// that never went through the numbering step has no id to point at, so it is
+// written inline as a bare <fn> — legal inside a <p>, and the alternative
+// would be to drop it.
+const footnoteToJats = (number: number | undefined, text: string): string =>
+  number === undefined
+    ? `<fn><p>${inlineMarkupToJats(text)}</p></fn>`
+    : `<xref ref-type="fn" rid="fn${number}">${number}</xref>`;
+
+const inlineToJats = (markdown: string): string =>
+  splitManuscriptFootnotes(markdown)
+    .map((segment) =>
+      segment.kind === 'text'
+        ? inlineMarkupToJats(segment.value)
+        : footnoteToJats(segment.number, segment.text),
+    )
+    .join('');
 
 const proseToJats = (markdown: string): string =>
   markdown
@@ -112,6 +160,37 @@ const figureToJats = (figure: NumberedFigure): string => {
       .filter((line) => line.length > 0)
       .join('\n');
   }
+  // A figure made of panels is a <fig-group>: JATS models exactly this — one
+  // labelled, captioned group whose children are the panels, each with its own
+  // id and its own "(a)" label. That id is what a publisher's tooling points a
+  // panel-level <xref> at.
+  const panels = figure.panels ?? [];
+  if (panels.length > 0) {
+    return [
+      `   <fig-group id="${escapeXml(figure.refKey ?? figure.id)}">`,
+      `    <label>${escapeXml(figure.label)}</label>`,
+      caption,
+      ...panels.flatMap((panel) => {
+        const panelHref = figureHref(panel);
+        const panelCaption = isNonEmptyString(panel.caption)
+          ? `<caption><p>${inlineToJats(panel.caption)}</p></caption>`
+          : '';
+        return [
+          `    <fig id="${escapeXml(panel.refKey ?? panel.id)}">`,
+          `     <label>${escapeXml(panel.label)}</label>`,
+          panelCaption,
+          ...(panelHref !== null
+            ? [`     <graphic xlink:href="${escapeXml(panelHref)}"/>`]
+            : []),
+          '    </fig>',
+        ].filter((line) => line.length > 0);
+      }),
+      '   </fig-group>',
+    ]
+      .filter((line) => line.length > 0)
+      .join('\n');
+  }
+
   const href = figureHref(figure);
   return [
     `   <fig id="${escapeXml(figure.refKey ?? figure.id)}">`,
@@ -205,6 +284,25 @@ const cslItemToRefJats = (item: Record<string, unknown>): string => {
   return lines.join('\n');
 };
 
+// The back matter's notes, one <fn> per anchor, carrying the printed number as
+// its <label> so a reader that does not renumber still shows what the body's
+// <xref> says.
+const footnoteGroupToJats = (
+  footnotes: readonly ManuscriptFootnote[],
+): string[] =>
+  footnotes.length === 0
+    ? []
+    : [
+        '   <fn-group>',
+        ...footnotes.flatMap((footnote) => [
+          `    <fn id="fn${footnote.number}">`,
+          `     <label>${footnote.number}</label>`,
+          `     <p>${inlineToJats(footnote.text)}</p>`,
+          '    </fn>',
+        ]),
+        '   </fn-group>',
+      ];
+
 const SUPPLEMENT_HEADING = 'Supplementary Material';
 
 type JatsPart = { body: string[]; back: string[]; supplement: string[] };
@@ -238,13 +336,12 @@ const nodesToJats = (bundle: ManuscriptBundle): JatsPart => {
     if (node.kind === 'bibliography') {
       closeTo(0);
       inBack = true;
-      part.back.push(
-        '  <back>',
-        '   <ref-list>',
-        '    <title>References</title>',
-      );
+      // The <back> wrapper is added by the caller: the reference list is no
+      // longer the only thing that lives in it, and a paper with footnotes but
+      // no references still needs one.
+      part.back.push('   <ref-list>', '    <title>References</title>');
       part.back.push(...bundle.cslJson.map(cslItemToRefJats));
-      part.back.push('   </ref-list>', '  </back>');
+      part.back.push('   </ref-list>');
       return;
     }
     if (inBack && !inSupplement) return;
@@ -260,7 +357,19 @@ const nodesToJats = (bundle: ManuscriptBundle): JatsPart => {
       }
       closeTo(node.level);
       openLevels.push(node.level);
-      target().push('   <sec>', `    <title>${escapeXml(node.text)}</title>`);
+      // The section's own key becomes the <sec> id, so the thing a
+      // `[#sec:methods]` names in the composer is the thing an ingest can
+      // point at here.
+      const sectionId =
+        node.section !== undefined && hasAuthoredSectionKey(node.section)
+          ? node.section.referenceKey
+          : '';
+      target().push(
+        sectionId.length === 0
+          ? '   <sec>'
+          : `   <sec id="${escapeXml(sectionId)}">`,
+        `    <title>${escapeXml(node.text)}</title>`,
+      );
       return;
     }
     if (node.kind === 'prose') {
@@ -274,18 +383,239 @@ const nodesToJats = (bundle: ManuscriptBundle): JatsPart => {
   return part;
 };
 
-export const buildJatsArticle = (bundle: ManuscriptBundle): string => {
+// JATS4R asks for the resolvable ORCID URI, the CRediT term paired with both
+// vocabulary URIs, and a ROR carried inside <institution-wrap> beside the
+// institution it identifies.
+const contribToJats = (
+  author: ManuscriptAuthorWithDetail,
+  affiliationXmlIdById: ReadonlyMap<string, string>,
+): string[] => {
+  const { detail } = author;
+  const orcid = orcidUri(detail.orcid);
+  const attributes = [
+    ' contrib-type="author"',
+    author.isCorresponding ? ' corresp="yes"' : '',
+    detail.isEqualContributor === true ? ' equal-contrib="yes"' : '',
+    detail.isDeceased === true ? ' deceased="yes"' : '',
+  ].join('');
+  return [
+    `     <contrib${attributes}>`,
+    // A mistyped ORCID is emitted as no ORCID at all: publishing one that
+    // fails its checksum attaches the paper to a stranger.
+    ...(orcid !== null
+      ? [
+          `      <contrib-id contrib-id-type="orcid">${escapeXml(orcid)}</contrib-id>`,
+        ]
+      : []),
+    `      <string-name>${escapeXml(author.name)}</string-name>`,
+    ...(isNonEmptyString(detail.email)
+      ? [`      <email>${escapeXml(detail.email)}</email>`]
+      : []),
+    ...orderCreditRoles(detail.creditRoles).map(
+      (role) =>
+        `      <role vocab="credit" vocab-identifier="${CREDIT_VOCABULARY_IDENTIFIER}" vocab-term="${escapeXml(role)}" vocab-term-identifier="${creditRoleUri(role)}">${escapeXml(role)}</role>`,
+    ),
+    ...author.affiliationIds.flatMap((affiliationId) => {
+      const xmlId = affiliationXmlIdById.get(affiliationId);
+      return xmlId === undefined
+        ? []
+        : [`      <xref ref-type="aff" rid="${xmlId}"/>`];
+    }),
+    ...(isNonEmptyString(detail.note)
+      ? [
+          `      <author-comment><p>${escapeXml(detail.note)}</p></author-comment>`,
+        ]
+      : []),
+    '     </contrib>',
+  ];
+};
+
+const affiliationToJats = (
+  affiliation: ManuscriptAffiliationWithDetail,
+  xmlId: string,
+): string[] => {
+  const { detail } = affiliation;
+  const ror = rorUri(detail.ror);
+  const addressLine = (tag: string, value: string | undefined): string[] =>
+    isNonEmptyString(value)
+      ? [`     <${tag}>${escapeXml(value)}</${tag}>`]
+      : [];
+  return [
+    `    <aff id="${xmlId}">`,
+    '     <institution-wrap>',
+    ...(isNonEmptyString(detail.department)
+      ? [
+          `      <institution content-type="dept">${escapeXml(detail.department)}</institution>`,
+        ]
+      : []),
+    `      <institution>${escapeXml(affiliation.name)}</institution>`,
+    ...(ror !== null
+      ? [
+          `      <institution-id institution-id-type="ror">${escapeXml(ror)}</institution-id>`,
+        ]
+      : []),
+    '     </institution-wrap>',
+    ...addressLine('city', detail.city),
+    ...addressLine('state', detail.state),
+    ...addressLine('country', detail.country),
+    '    </aff>',
+  ];
+};
+
+const fundingGroupToJats = (
+  contributorMetadata: ManuscriptContributorMetadata,
+  authors: ManuscriptAuthorWithDetail[],
+): string[] => {
+  const awards = contributorMetadata.funding.filter(
+    (award) =>
+      isNonEmptyString(award.funder) || isNonEmptyString(award.awardId),
+  );
+  if (awards.length === 0) return [];
+  const statement = renderManuscriptFundingStatement(
+    authors,
+    contributorMetadata,
+  );
+  return [
+    '    <funding-group>',
+    ...awards.flatMap((award) => {
+      const funderIdentifier = classifyFunderIdentifier(award.funderIdentifier);
+      const recipients = [
+        ...(award.recipientAuthorIds ?? []).flatMap((id) => {
+          const author = authors.find((candidate) => candidate.id === id);
+          return author === undefined ? [] : [author.name];
+        }),
+        ...(isNonEmptyString(award.recipient) ? [award.recipient] : []),
+      ];
+      return [
+        `     <award-group id="${escapeXml(award.id)}">`,
+        ...(isNonEmptyString(award.funder)
+          ? [
+              '      <funding-source>',
+              '       <institution-wrap>',
+              `        <institution>${escapeXml(award.funder)}</institution>`,
+              ...(funderIdentifier !== null
+                ? [
+                    `        <institution-id institution-id-type="${funderIdentifier.type}">${escapeXml(funderIdentifier.value)}</institution-id>`,
+                  ]
+                : []),
+              '       </institution-wrap>',
+              '      </funding-source>',
+            ]
+          : []),
+        ...(isNonEmptyString(award.awardId)
+          ? [`      <award-id>${escapeXml(award.awardId)}</award-id>`]
+          : []),
+        ...recipients.map((recipient) =>
+          [
+            '      <principal-award-recipient>',
+            `       <string-name>${escapeXml(recipient)}</string-name>`,
+            '      </principal-award-recipient>',
+          ].join('\n'),
+        ),
+        '     </award-group>',
+      ];
+    }),
+    ...(statement.length > 0
+      ? [`     <funding-statement>${escapeXml(statement)}</funding-statement>`]
+      : []),
+    '    </funding-group>',
+  ];
+};
+
+type ContributorFrontMatter = {
+  contribGroup: string[];
+  affiliations: string[];
+  funding: string[];
+};
+
+// Without structured metadata this reproduces exactly what the exporter always
+// wrote — one flat <contrib> per byline chunk and one <aff> per affiliation
+// line. Nothing about an existing manuscript's output may move just because
+// the structured layer now exists.
+const contributorFrontMatter = (
+  bundle: ManuscriptBundle,
+  contributorMetadata: ManuscriptContributorMetadata,
+): ContributorFrontMatter => {
   const { metadata } = bundle;
-  const part = nodesToJats(bundle);
-  const authors = metadata.authors
-    .split(';')
-    .map((author) => author.trim())
-    .filter((author) => author.length > 0);
-  const affiliations = metadata.affiliations
-    .split('\n')
-    .map((affiliation) => affiliation.trim())
-    .filter((affiliation) => affiliation.length > 0);
-  const doi = bundle.sourceInput.manuscript.doi;
+  if (isEmptyManuscriptContributorMetadata(contributorMetadata)) {
+    const authors = metadata.authors
+      .split(';')
+      .map((author) => author.trim())
+      .filter((author) => author.length > 0);
+    const affiliations = metadata.affiliations
+      .split('\n')
+      .map((affiliation) => affiliation.trim())
+      .filter((affiliation) => affiliation.length > 0);
+    return {
+      contribGroup:
+        authors.length > 0
+          ? [
+              '    <contrib-group>',
+              ...authors.map(
+                (author) =>
+                  `     <contrib contrib-type="author"><string-name>${escapeXml(author)}</string-name></contrib>`,
+              ),
+              '    </contrib-group>',
+            ]
+          : [],
+      affiliations: affiliations.map(
+        (affiliation) => `    <aff>${escapeXml(affiliation)}</aff>`,
+      ),
+      funding: [],
+    };
+  }
+
+  // With metadata in hand the byline is parsed rather than split, so the
+  // affiliation markers become real <xref>s instead of riding along inside
+  // the printed name.
+  const parsedAffiliations = parseManuscriptAffiliations(metadata.affiliations);
+  const affiliations = joinManuscriptAffiliationDetails(
+    parsedAffiliations,
+    contributorMetadata,
+  );
+  const authors = joinManuscriptContributorDetails(
+    parseManuscriptAuthors(metadata.authors, parsedAffiliations),
+    contributorMetadata,
+  );
+  const affiliationXmlIdById = new Map(
+    affiliations.map((affiliation, index) => [
+      affiliation.id,
+      `aff${index + 1}`,
+    ]),
+  );
+  return {
+    contribGroup:
+      authors.length > 0
+        ? [
+            '    <contrib-group>',
+            ...authors.flatMap((author) =>
+              contribToJats(author, affiliationXmlIdById),
+            ),
+            '    </contrib-group>',
+          ]
+        : [],
+    affiliations: affiliations.flatMap((affiliation, index) =>
+      affiliationToJats(affiliation, `aff${index + 1}`),
+    ),
+    funding: fundingGroupToJats(contributorMetadata, authors),
+  };
+};
+
+export const buildJatsArticle = (
+  bundle: ManuscriptBundle,
+  // Defaults to whatever the manuscript record carries, so every existing
+  // caller picks the structured block up without changing its call.
+  contributorMetadata: ManuscriptContributorMetadata = readManuscriptContributorMetadata(
+    bundle.sourceInput.manuscript,
+  ),
+): string => {
+  // Numbered first, so every <xref ref-type="fn"> below points at an <fn> that
+  // is actually written, and the numbers run in the order the article reads.
+  const { bundle: numbered, footnotes } = numberManuscriptFootnotes(bundle);
+  const { metadata } = numbered;
+  const part = nodesToJats(numbered);
+  const contributors = contributorFrontMatter(numbered, contributorMetadata);
+  const doi = numbered.sourceInput.manuscript.doi;
 
   const front = [
     '  <front>',
@@ -303,19 +633,8 @@ export const buildJatsArticle = (bundle: ManuscriptBundle): string => {
     '    <title-group>',
     `     <article-title>${escapeXml(metadata.title)}</article-title>`,
     '    </title-group>',
-    ...(authors.length > 0
-      ? [
-          '    <contrib-group>',
-          ...authors.map(
-            (author) =>
-              `     <contrib contrib-type="author"><string-name>${escapeXml(author)}</string-name></contrib>`,
-          ),
-          '    </contrib-group>',
-        ]
-      : []),
-    ...affiliations.map(
-      (affiliation) => `    <aff>${escapeXml(affiliation)}</aff>`,
-    ),
+    ...contributors.contribGroup,
+    ...contributors.affiliations,
     ...(isNonEmptyString(metadata.correspondingAuthor)
       ? [
           '    <author-notes>',
@@ -339,6 +658,9 @@ export const buildJatsArticle = (bundle: ManuscriptBundle): string => {
           '    </kwd-group>',
         ]
       : []),
+    // <funding-group> sits after the keywords, where the JATS article-meta
+    // content model puts it.
+    ...contributors.funding,
     '   </article-meta>',
     '  </front>',
   ];
@@ -353,6 +675,10 @@ export const buildJatsArticle = (bundle: ManuscriptBundle): string => {
         ]
       : [];
 
+  const backContent = [...part.back, ...footnoteGroupToJats(footnotes)];
+  const back =
+    backContent.length > 0 ? ['  <back>', ...backContent, '  </back>'] : [];
+
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Archiving and Interchange DTD v1.3 20210610//EN" "JATS-archivearticle1-3.dtd">',
@@ -361,7 +687,7 @@ export const buildJatsArticle = (bundle: ManuscriptBundle): string => {
     '  <body>',
     ...part.body,
     '  </body>',
-    ...part.back,
+    ...back,
     ...supplement,
     '</article>',
     '',

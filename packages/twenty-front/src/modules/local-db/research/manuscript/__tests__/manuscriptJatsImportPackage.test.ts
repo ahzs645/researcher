@@ -197,6 +197,46 @@ describe('a JATS package arriving as a zip', () => {
     expect(document.warnings?.join(' ')).toMatch(/too large/i);
   });
 
+  it('opens a research output bundle through its package, not the JATS beside it', async () => {
+    const reader = await loadDocumentFileReader();
+    const source: PortableManuscriptSource = {
+      manuscript: { title: 'Portable aerosol paper' },
+      sections: [
+        {
+          id: 'intro',
+          name: 'Introduction',
+          sectionType: 'INTRODUCTION',
+          placement: 'MAIN',
+          content: 'One paragraph.',
+          orderIndex: 0,
+          wordCount: 2,
+          includeInExport: true,
+        },
+      ],
+      figures: [],
+      references: [],
+    };
+    // What an export bundle looks like: the package that restores the paper
+    // whole, beside the rendered views of it. The JATS is a lossy view, and
+    // sniffing for an <article> root would have found it first.
+    const bundle = zipSync({
+      'package/paper-portable-research.zip': zipSync({
+        [PORTABLE_MANUSCRIPT_FILENAME]: strToU8(
+          JSON.stringify(buildPortableResearchPaperManifest(source, {}, {})),
+        ),
+      }),
+      'outputs/paper.jats.xml': strToU8(PACKAGE_ARTICLE),
+      'outputs/readme.txt': strToU8('Rendered outputs.'),
+    });
+
+    const document = await reader.readImportedDocumentFile(
+      await zipFile(bundle, 'paper-research-output.zip'),
+    );
+
+    expect(document.portableSourceKind).toBe('PACKAGE');
+    expect(document.title).toBe('Portable aerosol paper');
+  });
+
   it('still reads a portable research package the old way', async () => {
     const reader = await loadDocumentFileReader();
     const source: PortableManuscriptSource = {

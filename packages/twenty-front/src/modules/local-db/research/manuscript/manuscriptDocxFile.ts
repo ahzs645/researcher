@@ -523,6 +523,30 @@ const isPortableResearchPaperZip = (bytes: Uint8Array): boolean =>
     }),
   ).length > 0;
 
+// A research output bundle carries the portable package beside the rendered
+// outputs — the Word file, the PDF, and the JATS article. Every one of those is
+// a view of the same paper, but only the package restores it whole, so a
+// bundle is opened through the package it contains rather than through the
+// JATS beside it. Without this the sniffing below would find `outputs/*.jats.xml`
+// and silently import the lossy view of a file that had the complete one in it.
+const nestedPortableResearchPaperZip = (
+  bytes: Uint8Array,
+): Uint8Array | null => {
+  const nested = unzipSync(bytes, {
+    filter: (entry) => fileExtension(entry.name) === 'zip',
+  });
+  const candidates = Object.entries(nested)
+    .filter(([, entryBytes]) => isPortableResearchPaperZip(entryBytes))
+    // The shallowest wins, for the same reason it does among JATS articles:
+    // a package nested deeper is a companion, not what the bundle is about.
+    .sort(
+      ([left], [right]) =>
+        left.split('/').length - right.split('/').length ||
+        left.localeCompare(right),
+    );
+  return candidates[0]?.[1] ?? null;
+};
+
 const readImportedZip = async (
   bytes: Uint8Array,
 ): Promise<ImportedDocument> => {
@@ -532,10 +556,17 @@ const readImportedZip = async (
       'PACKAGE',
     );
   }
+  const nested = nestedPortableResearchPaperZip(bytes);
+  if (nested !== null) {
+    return importedDocumentFromManifest(
+      readPortableResearchPaperZip(nested),
+      'PACKAGE',
+    );
+  }
   const jatsPackage = await readJatsPackage(bytes);
   if (jatsPackage === null) {
     throw new Error(
-      `This ZIP is neither a research package (no ${PORTABLE_MANUSCRIPT_FILENAME}) nor a JATS package (no XML file inside it has an <article> root)`,
+      `This ZIP is neither a research package (no ${PORTABLE_MANUSCRIPT_FILENAME}, at the top level or inside a ZIP within it) nor a JATS package (no XML file inside it has an <article> root)`,
     );
   }
   return importedDocumentFromManifest(

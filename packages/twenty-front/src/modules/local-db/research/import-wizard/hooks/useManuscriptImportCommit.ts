@@ -12,6 +12,7 @@ import {
   portableManuscriptRecordUpdate,
   portableSectionVariantUpdates,
 } from '@/local-db/research/manuscript/manuscriptPortableImport';
+import { portableReviewRoundRecords } from '@/local-db/research/manuscript/manuscriptPortableReviewRounds';
 import { type SubmissionTransposeUpdate } from '@/local-db/research/manuscript/manuscriptSubmissionTranspose';
 import { withImportedSourceStyles } from '@/local-db/research/manuscript/manuscriptExportStyleOverrides';
 import { serializeManuscriptTitlePageExtraLines } from '@/local-db/research/manuscript/manuscriptTitlePage';
@@ -50,12 +51,14 @@ type ManuscriptImportCreatedRecords = {
   references: string[];
   sections: string[];
   figures: string[];
+  reviewRounds: string[];
 };
 
 const emptyCreatedRecords = (): ManuscriptImportCreatedRecords => ({
   references: [],
   sections: [],
   figures: [],
+  reviewRounds: [],
 });
 
 const emptyCreatedCounts = (): ManuscriptImportCreatedCounts => ({
@@ -108,6 +111,9 @@ export const useManuscriptImportCommit = ({
   const { createOneRecord: createJournalTemplate } = useCreateOneRecord({
     objectNameSingular: 'journalTemplate',
   });
+  const { createOneRecord: createReviewRound } = useCreateOneRecord({
+    objectNameSingular: 'reviewRound',
+  });
   const { deleteOneRecord: deleteSection } = useDeleteOneRecord({
     objectNameSingular: 'manuscriptSection',
   });
@@ -116,6 +122,9 @@ export const useManuscriptImportCommit = ({
   });
   const { deleteOneRecord: deleteFigure } = useDeleteOneRecord({
     objectNameSingular: 'figure',
+  });
+  const { deleteOneRecord: deleteReviewRound } = useDeleteOneRecord({
+    objectNameSingular: 'reviewRound',
   });
   const { updateOneRecord } = useUpdateOneRecord();
   const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
@@ -291,6 +300,28 @@ export const useManuscriptImportCommit = ({
           });
         }
 
+        // A round's points name the sections its answers changed, so the
+        // rounds are built after every section exists — the same wait the
+        // version links and the panel links take above. A round has no id of
+        // its own until now either, so its points are written once, resolved,
+        // rather than created empty and patched afterwards.
+        for (const round of portableReviewRoundRecords(
+          'reviewRounds' in preparedImport
+            ? (preparedImport.reviewRounds ?? [])
+            : [],
+          sectionIdsByOrder,
+        )) {
+          const created = await createReviewRound({ ...round, manuscriptId });
+          const createdId = (created as { id?: string } | undefined)?.id;
+          if (isDefined(createdId)) {
+            currentCreatedRecords.reviewRounds.push(createdId);
+          }
+          setCreatedRecords({
+            ...currentCreatedRecords,
+            reviewRounds: [...currentCreatedRecords.reviewRounds],
+          });
+        }
+
         const manuscriptUpdate: ManuscriptMetadataUpdate = {};
         if (
           isDefined(document.title) &&
@@ -361,8 +392,14 @@ export const useManuscriptImportCommit = ({
           });
         }
 
+        // Rounds are named only when there are some: an ordinary import would
+        // otherwise report "0 review rounds" on every paper never reviewed.
+        const restoredRounds =
+          currentCreatedRecords.reviewRounds.length === 0
+            ? ''
+            : ` · ${currentCreatedRecords.reviewRounds.length} review rounds`;
         enqueueSuccessSnackBar({
-          message: `${preparedImport.portable ? 'Reconstructed' : 'Imported'} ${totalSectionCount} sections · ${referencesToCreate.length} references · ${preparedImport.linkedCount} citations · ${preparedImport.linkedAssetCount} figure/table links · ${preparedImport.figures.length} figures/tables`,
+          message: `${preparedImport.portable ? 'Reconstructed' : 'Imported'} ${totalSectionCount} sections · ${referencesToCreate.length} references · ${preparedImport.linkedCount} citations · ${preparedImport.linkedAssetCount} figure/table links · ${preparedImport.figures.length} figures/tables${restoredRounds}`,
         });
         return true;
       } catch (error) {
@@ -383,6 +420,7 @@ export const useManuscriptImportCommit = ({
     [
       createFigure,
       createReference,
+      createReviewRound,
       createSection,
       enqueueErrorSnackBar,
       createJournalTemplate,
@@ -403,6 +441,10 @@ export const useManuscriptImportCommit = ({
     commitMutexRef.current = true;
     setIsCommitting(true);
     try {
+      // Newest first, so the rounds go before the sections their points name.
+      for (const roundId of [...createdRecords.reviewRounds].reverse()) {
+        await deleteReviewRound(roundId);
+      }
       for (const figureId of [...createdRecords.figures].reverse()) {
         await deleteFigure(figureId);
       }
@@ -432,6 +474,7 @@ export const useManuscriptImportCommit = ({
     createdRecords,
     deleteFigure,
     deleteReference,
+    deleteReviewRound,
     deleteSection,
     enqueueErrorSnackBar,
     enqueueSuccessSnackBar,

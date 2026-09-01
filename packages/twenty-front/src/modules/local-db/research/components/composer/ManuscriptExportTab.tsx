@@ -1,4 +1,5 @@
 import { styled } from '@linaria/react';
+import { useMemo } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptExportPanel } from '@/local-db/research/components/ManuscriptExportPanel';
@@ -49,6 +50,13 @@ export const ManuscriptExportTab = ({
   onNavigateToFix,
 }: ManuscriptExportTabProps) => {
   const { rounds } = useManuscriptReviewRounds(manuscript.id);
+  // The rounds ride along in the portable package, so a paper restored on
+  // another machine comes back with the answers written to its reviewers
+  // rather than an empty Prepare-submission tab.
+  const portableSourceWithRounds = useMemo(
+    () => ({ ...portableSource, reviewRounds: rounds }),
+    [portableSource, rounds],
+  );
 
   return (
     <StyledTab>
@@ -78,7 +86,7 @@ export const ManuscriptExportTab = ({
             bundle.metadata.title,
           ),
         }}
-        portableSource={portableSource}
+        portableSource={portableSourceWithRounds}
         onNavigateToFix={onNavigateToFix}
       />
       <ManuscriptBibliographyPreview

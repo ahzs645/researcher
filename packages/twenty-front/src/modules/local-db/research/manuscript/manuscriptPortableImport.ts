@@ -10,6 +10,10 @@ import {
   type PortableJournalTemplate,
   type PortableResearchPaperManifest,
 } from './manuscriptPortableManifest';
+import {
+  resolvePortableReviewRounds,
+  type PortableReviewRoundDraft,
+} from './manuscriptPortableReviewRounds';
 import { parseSectionVariantRules } from './manuscriptSectionVariants';
 import { type ReferenceDraft } from './manuscriptReferenceImport';
 import { serializeManuscriptTitlePageExtraLines } from './manuscriptTitlePage';
@@ -60,6 +64,11 @@ export type PreparedPortableResearchPaperImport = {
   // `preparePortableResearchPaperImport` always sets both; they are optional
   // so that a prepared import assembled by hand still describes one.
   sectionVariants?: PortableSectionVariantLink[];
+  // The rounds of review to re-create once the sections exist, each point's
+  // section given as an `orderIndex` for the same reason a version's base is.
+  // Optional alongside the two above, and for the same reason: a prepared
+  // import assembled by hand still describes one.
+  reviewRounds?: PortableReviewRoundDraft[];
   warnings?: string[];
   // The journal template the package carries (v2+), so the restore can link
   // or re-create it.
@@ -207,6 +216,12 @@ export const preparePortableResearchPaperImport = (
     ]),
   );
   const variants = resolvePortableSectionVariants(manifest, sectionOrderByKey);
+  // Rounds resolve against the same key→place map the versions and figures
+  // use, so a point, a figure and a version all name a section the one way.
+  const reviewRounds = resolvePortableReviewRounds(
+    manifest.reviewRounds,
+    sectionOrderByKey,
+  );
   // The drafts are this manifest's sections, so `orderIndex` identifies the
   // same section on both sides. A package with nothing to drop keeps the
   // caller's list untouched, including callers that pass sections of their own.
@@ -265,7 +280,8 @@ export const preparePortableResearchPaperImport = (
   return {
     sections: importedSections,
     sectionVariants: variants.links,
-    warnings: variants.warnings,
+    reviewRounds: reviewRounds.rounds,
+    warnings: [...variants.warnings, ...reviewRounds.warnings],
     references: manifest.references.map(
       ({ key: _key, ...reference }) => reference,
     ),

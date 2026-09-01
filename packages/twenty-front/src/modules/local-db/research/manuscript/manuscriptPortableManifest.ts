@@ -4,6 +4,11 @@ import {
   parseManuscriptAffiliations,
   parseManuscriptAuthors,
 } from './manuscriptContributors';
+import {
+  portableReviewRoundEntries,
+  type PortableReviewRound,
+} from './manuscriptPortableReviewRounds';
+import { type ReviewRoundLike } from './manuscriptReviewRound';
 import { type SubmissionMaterials } from './manuscriptSubmission';
 import {
   type FigureLike,
@@ -48,6 +53,17 @@ export const PORTABLE_MANUSCRIPT_FORMAT = 'researcher-manuscript' as const;
 // package outright, so an author carrying a paper to a machine that has not
 // updated yet would lose the whole paper rather than a few versions of one
 // section.
+//
+// Review rounds arrive last so far and stay on 2 for exactly that reason,
+// though the loss they would cause is the larger one. `reviewRounds` is a new
+// optional top-level array: a package written before rounds travelled simply
+// has no such key and imports as it always did, and a build that predates them
+// reads a package that has one, restores the manuscript whole and ignores the
+// key it does not know. Bumping to 3 would invert that — the older build would
+// refuse the file outright, so an author moving a revised paper to a machine
+// still on the previous release would lose the manuscript *and* the responses
+// rather than just the responses. The version guards what a reader must
+// understand to make sense of the paper, and nothing here changes that.
 export const PORTABLE_MANUSCRIPT_VERSION = 2 as const;
 export const PORTABLE_MANUSCRIPT_READABLE_VERSIONS = [1, 2];
 export const PORTABLE_MANUSCRIPT_FILENAME = 'research-paper.json';
@@ -81,6 +97,10 @@ export type PortableManuscriptSource = {
   figures: FigureLike[];
   references: ReferenceLike[];
   journal?: PortableJournalTemplate;
+  // The rounds of peer review this manuscript has been through. Optional, so a
+  // caller assembling a source by hand (a JATS article, a .docx preview) is
+  // unchanged by their arrival.
+  reviewRounds?: ReviewRoundLike[];
 };
 
 export type PortableResearchPaperManifest = {
@@ -174,6 +194,11 @@ export type PortableResearchPaperManifest = {
   // The manuscript's target journal record (v2+). `exportStyle` is the
   // resolved style used for this export; this is the template itself.
   journal?: PortableJournalTemplate;
+  // Every round of review the manuscript has been through, with the decision
+  // letter as received and the author's answer to each point. Absent on a
+  // manuscript that has never been reviewed, which is most of them and every
+  // package written before rounds travelled.
+  reviewRounds?: PortableReviewRound[];
   submissionMaterials: SubmissionMaterials;
 };
 
@@ -257,6 +282,10 @@ export const buildPortableResearchPaperManifest = (
   );
   const figureKeyById = new Map(
     source.figures.map((figure, index) => [figure.id, `figure-${index + 1}`]),
+  );
+  const reviewRounds = portableReviewRoundEntries(
+    source.reviewRounds ?? [],
+    sectionKeyById,
   );
 
   return {
@@ -393,6 +422,9 @@ export const buildPortableResearchPaperManifest = (
     })),
     exportStyle,
     ...(source.journal !== undefined ? { journal: source.journal } : {}),
+    // Left out entirely on a manuscript with no rounds, so a paper that has
+    // never been reviewed is written exactly as it was before.
+    ...(reviewRounds.length > 0 ? { reviewRounds } : {}),
     submissionMaterials,
   };
 };

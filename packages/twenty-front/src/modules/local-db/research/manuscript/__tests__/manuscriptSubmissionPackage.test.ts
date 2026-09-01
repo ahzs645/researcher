@@ -298,6 +298,12 @@ describe('screening in a submission package', () => {
     expect(report).toContain('[PRESENT] Open data statement');
     expect(report).toContain('[ABSENT] Open code statement');
     expect(report).toContain('Does the paper say where the analysis code is?');
+    // The panel runs seventeen checks and declines the biomedical ones on a
+    // paper like this. A report that printed only the nine it scored would
+    // read as though the other eight did not exist, rather than as eight this
+    // manuscript was judged not to need.
+    expect(report).toContain('Not applicable to this manuscript');
+    expect(report).toContain('Cell line authentication');
     expect(report).toContain('zenodo.1234567');
 
     // The manifest carries both the screening line and the check the caller

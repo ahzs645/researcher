@@ -16,7 +16,11 @@ import { buildJatsArticle } from './manuscriptJatsExport';
 import { isFigurePanel } from './manuscriptNumbering';
 import { type PortableManuscriptSource } from './manuscriptPortableManifest';
 import { addPortableResearchPaperFiles } from './manuscriptPortableZip';
-import { screenManuscript, type ScreeningFinding } from './manuscriptScreening';
+import {
+  runManuscriptScreening,
+  type ScreeningFinding,
+  type ScreeningRun,
+} from './manuscriptScreening';
 import {
   buildScreeningReport,
   screeningSubmissionChecks,
@@ -307,13 +311,21 @@ export const createSubmissionPackage = async (
   // Screening needs the manuscript's sections, which only the portable source
   // carries; without it the package simply ships no screening, rather than a
   // report built from nothing that would read as an all-clear.
-  const screeningFindings: ScreeningFinding[] =
+  // The whole run, not just its findings: a report that printed nine checks
+  // while the panel showed seventeen would read as though the other eight did
+  // not exist, rather than as eight the paper was judged not to need. Figures
+  // travel too, so the figure-shaped checks run here as well — the colour-map
+  // one has no decoded pixels outside the browser and declines, which is the
+  // honest answer rather than a silent pass.
+  const screening: ScreeningRun =
     portableSource === undefined
-      ? []
-      : screenManuscript({
+      ? { findings: [], declinations: [] }
+      : runManuscriptScreening({
           sections: portableSource.sections,
+          figures: portableSource.figures,
           competingInterests: materials.competingInterests,
         });
+  const screeningFindings: ScreeningFinding[] = screening.findings;
   const readiness = validateSubmission(bundle, materials, [
     ...extraChecks,
     ...screeningSubmissionChecks(screeningFindings),
@@ -342,7 +354,9 @@ export const createSubmissionPackage = async (
     addText(
       files,
       'screening-report.txt',
-      buildScreeningReport(screeningFindings, bundle.metadata.title),
+      buildScreeningReport(screeningFindings, bundle.metadata.title, {
+        declinations: screening.declinations,
+      }),
     );
   }
   addText(

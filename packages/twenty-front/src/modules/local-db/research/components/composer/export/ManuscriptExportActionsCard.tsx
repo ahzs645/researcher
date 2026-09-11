@@ -17,6 +17,9 @@ import {
 
 type ManuscriptExportActionsCardProps = {
   activeExportId: string | null;
+  isPreparing?: boolean;
+  preparationError?: string | null;
+  onRetryCitationFormatting?: () => void;
   exporters: ManuscriptExporter[];
   readiness: SubmissionReadiness;
   warnings: string[];
@@ -111,6 +114,9 @@ const StyledWarningList = styled.div`
 
 export const ManuscriptExportActionsCard = ({
   activeExportId,
+  isPreparing = false,
+  preparationError = null,
+  onRetryCitationFormatting,
   exporters,
   readiness,
   warnings,
@@ -119,6 +125,9 @@ export const ManuscriptExportActionsCard = ({
   onSubmissionPackageExport,
   onNavigateToFix,
 }: ManuscriptExportActionsCardProps) => {
+  const citationCheck = readiness.checks.find(
+    (check) => check.id === 'citation-style',
+  );
   const actions: ExportAction[] = [
     ...exporters.map((exporter) => ({
       id: exporter.id,
@@ -158,6 +167,25 @@ export const ManuscriptExportActionsCard = ({
           submission.
         </StyledExportCardDescription>
       </StyledExportCardHeader>
+      {preparationError !== null ? (
+        <div role="alert">Could not prepare export: {preparationError}</div>
+      ) : isPreparing ? (
+        <div role="status">Checking requested citation style…</div>
+      ) : citationCheck !== undefined ? (
+        <div role={citationCheck.severity === 'ERROR' ? 'alert' : 'status'}>
+          {citationCheck.detail}
+        </div>
+      ) : null}
+      {(citationCheck?.severity === 'ERROR' || preparationError !== null) &&
+      onRetryCitationFormatting !== undefined ? (
+        <Button
+          title="Recheck citation formatting"
+          variant="secondary"
+          size="small"
+          disabled={isPreparing || activeExportId !== null}
+          onClick={onRetryCitationFormatting}
+        />
+      ) : null}
       <ManuscriptSubmissionReadinessPanel
         readiness={readiness}
         onNavigate={onNavigateToFix}
@@ -178,7 +206,12 @@ export const ManuscriptExportActionsCard = ({
               variant="primary"
               accent="blue"
               size="small"
-              disabled={activeExportId !== null || action.disabled === true}
+              disabled={
+                activeExportId !== null ||
+                isPreparing ||
+                preparationError !== null ||
+                action.disabled === true
+              }
               onClick={action.onClick}
             />
           </StyledAction>

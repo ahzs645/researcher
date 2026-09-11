@@ -142,10 +142,10 @@ const emptyCitationModeSettings = (): CitationModeSettings => ({
   AUTHOR_NUMBER: {},
 });
 
+// Preserve a failed request in the picker instead of displaying it as an
+// intentional generic mode; choosing that mode must clear the request.
 export const citationStyleKeyFromStyle = (style: JournalStyle): string =>
-  isVendoredCslStyleId(style.citationStyleId)
-    ? style.citationStyleId
-    : citationModeFromStyle(style.citationMode);
+  style.citationStyleId?.trim() || citationModeFromStyle(style.citationMode);
 
 const sanitizeCitationStyleSettings = (
   value: unknown,

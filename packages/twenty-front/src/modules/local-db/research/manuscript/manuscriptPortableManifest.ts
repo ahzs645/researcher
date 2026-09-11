@@ -3,6 +3,7 @@ import {
   parseManuscriptAuthors,
 } from './manuscriptContributors';
 import { allocatePortableFigureAssets } from './manuscriptPortableAssetPaths';
+import { type ManuscriptCitationProvenance } from './manuscriptCitationProvenance';
 import { type SubmissionMaterials } from './manuscriptSubmission';
 import {
   type FigureLike,
@@ -102,6 +103,7 @@ export type PortableResearchPaperManifest = {
     notes?: string;
   }>;
   exportStyle: JournalStyle;
+  citationProvenance?: ManuscriptCitationProvenance;
   submissionMaterials: SubmissionMaterials;
 };
 
@@ -109,6 +111,7 @@ export const buildPortableResearchPaperManifest = (
   source: PortableManuscriptSource,
   exportStyle: JournalStyle,
   submissionMaterials: SubmissionMaterials,
+  citationProvenance?: ManuscriptCitationProvenance,
 ): PortableResearchPaperManifest => {
   const affiliations = parseManuscriptAffiliations(
     source.manuscript.affiliations,
@@ -241,6 +244,7 @@ export const buildPortableResearchPaperManifest = (
         : {}),
     })),
     exportStyle,
+    ...(citationProvenance === undefined ? {} : { citationProvenance }),
     submissionMaterials,
   };
 };

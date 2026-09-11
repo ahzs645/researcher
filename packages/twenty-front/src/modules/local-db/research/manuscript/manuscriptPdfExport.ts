@@ -17,6 +17,7 @@ import {
   EQUATION_LABEL_SEPARATOR,
 } from './manuscriptBlocks';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { withCitationFormattingReport } from './manuscriptExportProvenance';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { fitManuscriptFigureImages } from './manuscriptFigureFit';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
@@ -333,11 +334,14 @@ export const blocknotePdfExporter: ManuscriptExporter = {
   label: 'PDF',
   formats: ['PDF'],
   offline: true,
-  export: async (bundle): Promise<ExportFile[]> => [
-    {
-      filename: `${slugifyTitle(bundle.metadata.title)}.pdf`,
-      mimeType: 'application/pdf',
-      content: await exportManuscriptToPdfBlob(bundle),
-    },
-  ],
+  export: async (bundle): Promise<ExportFile[]> => {
+    const prepared = await prepareManuscriptBundleWithCsl(bundle);
+    return withCitationFormattingReport(prepared, [
+      {
+        filename: `${slugifyTitle(prepared.metadata.title)}.pdf`,
+        mimeType: 'application/pdf',
+        content: await exportManuscriptToPdfBlob(prepared),
+      },
+    ]);
+  },
 };

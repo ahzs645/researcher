@@ -286,3 +286,15 @@ describe('exportManuscriptToHtml', () => {
     expect(withMarkup).not.toContain('onerror=alert(1)>');
   });
 });
+
+describe('HTML citation fallback visibility', () => {
+  it('retains the unavailable request as a visible alert in the exported HTML', async () => {
+    const bundle = buildManuscriptBundle({
+      ...input,
+      style: { ...input.style, citationStyleId: 'not-vendored' },
+    });
+    const html = await exportManuscriptToHtml(bundle);
+    expect(html).toMatch(/<aside role="alert">[^<]*not-vendored/);
+    expect(html).toContain('built-in fallback formatter');
+  });
+});

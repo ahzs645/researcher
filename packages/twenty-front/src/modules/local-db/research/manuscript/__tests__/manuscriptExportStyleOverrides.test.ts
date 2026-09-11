@@ -1,5 +1,6 @@
 import {
   citationSettingsForMode,
+  citationStyleKeyFromStyle,
   citationSettingsForStyle,
   parseManuscriptExportStyleOverrides,
   serializeManuscriptExportStyleOverrides,
@@ -171,5 +172,29 @@ describe('manuscript export style overrides', () => {
       citationStyleId: 'apa',
       crossRefFormat: 'Figure {n}',
     });
+  });
+});
+
+describe('requested citation style selection', () => {
+  it('does not display an unsupported request as deliberately generic', () => {
+    expect(
+      citationStyleKeyFromStyle({
+        citationStyleId: ' not-vendored ',
+        citationMode: 'NUMERIC',
+      }),
+    ).toBe('not-vendored');
+    expect(
+      citationStyleKeyFromStyle({
+        citationStyleId: '',
+        citationMode: 'NUMERIC',
+      }),
+    ).toBe('NUMERIC');
+    const selected = withCitationStyle(
+      { citationStyleId: 'not-vendored' },
+      'not-vendored',
+      'NUMERIC',
+    );
+    expect(selected.citationStyleId).toBe('');
+    expect(selected.citationMode).toBe('NUMERIC');
   });
 });

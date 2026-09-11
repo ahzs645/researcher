@@ -1,11 +1,20 @@
 import { styled } from '@linaria/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 import { ManuscriptExportActionsCard } from '@/local-db/research/components/composer/export/ManuscriptExportActionsCard';
 import { ManuscriptExportStyleCard } from '@/local-db/research/components/composer/export/ManuscriptExportStyleCard';
+import { useManuscriptCitationPreparation } from '@/local-db/research/components/composer/export/useManuscriptCitationPreparation';
 import { ManuscriptJournalFormatCard } from '@/local-db/research/components/composer/export/ManuscriptJournalFormatCard';
-import { type ManuscriptBundle } from '@/local-db/research/manuscript/manuscriptAssembly';
+import {
+  buildManuscriptBundle,
+  type ManuscriptBundle,
+} from '@/local-db/research/manuscript/manuscriptAssembly';
+import {
+  citationFormattingFailed,
+  describeCitationProvenance,
+  type ManuscriptCitationProvenance,
+} from '@/local-db/research/manuscript/manuscriptCitationProvenance';
 import {
   citationStyleKeyFromStyle,
   CITATION_MODE_SETTING_KEYS,
@@ -64,17 +73,47 @@ export const ManuscriptExportPanel = ({
   portableSource,
   onNavigateToFix,
 }: ManuscriptExportPanelProps) => {
-  const { enqueueSuccessSnackBar, enqueueErrorSnackBar } = useSnackBar();
+  const {
+    enqueueSuccessSnackBar,
+    enqueueErrorSnackBar,
+    enqueueWarningSnackBar,
+  } = useSnackBar();
   const { markUnsaved, trackSave } = useManuscriptSaveStatus();
   const [activeExportId, setActiveExportId] = useState<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [styleOverrides, setStyleOverrides] =
     useState<ManuscriptExportStyleOverrides>(initialStyleOverrides);
-  const effectiveStyle = { ...bundle.style, ...styleOverrides };
-  const exportBundle = { ...bundle, style: effectiveStyle };
+  const sourceBundle = useMemo(
+    () =>
+      buildManuscriptBundle({
+        ...bundle.sourceInput,
+        style: { ...bundle.style, ...styleOverrides },
+      }),
+    [bundle, styleOverrides],
+  );
+  const {
+    bundle: exportBundle,
+    isPreparing,
+    preparationError,
+    retry: retryCitationFormatting,
+  } = useManuscriptCitationPreparation(sourceBundle);
+  const effectiveStyle = sourceBundle.style;
   const citationStyleKey = citationStyleKeyFromStyle(effectiveStyle);
   const exporters = getManuscriptExporters();
   const readiness = validateSubmission(exportBundle, materials);
+  const exportBlocked = isPreparing || preparationError !== null;
+  const notifyExport = (
+    message: string,
+    provenance: ManuscriptCitationProvenance,
+  ) => {
+    if (citationFormattingFailed(provenance)) {
+      enqueueWarningSnackBar({
+        message: `${message}. ${describeCitationProvenance(provenance)}`,
+      });
+    } else {
+      enqueueSuccessSnackBar({ message });
+    }
+  };
 
   const updateStyleOverrides = (updates: ManuscriptExportStyleOverrides) => {
     markUnsaved();
@@ -136,16 +175,17 @@ export const ManuscriptExportPanel = ({
   };
 
   const runExport = async (exporterId: string) => {
-    if (activeExportId !== null) return;
+    if (activeExportId !== null || exportBlocked) return;
     const exporter = exporters.find((candidate) => candidate.id === exporterId);
     if (exporter === undefined) return;
     setActiveExportId(exporterId);
     try {
       const files = await exporter.export(exportBundle);
       for (const file of files) downloadExportFile(file);
-      enqueueSuccessSnackBar({
-        message: `Exported ${files.length} file(s) via ${exporter.label}`,
-      });
+      notifyExport(
+        `Exported ${files.length} file(s) via ${exporter.label}`,
+        files[0]?.citationProvenance ?? exportBundle.citationProvenance,
+      );
     } catch (error) {
       enqueueErrorSnackBar({
         message: `Export via ${exporter.label} failed${
@@ -158,7 +198,7 @@ export const ManuscriptExportPanel = ({
   };
 
   const runPortableResearchExport = async () => {
-    if (activeExportId !== null) return;
+    if (activeExportId !== null || exportBlocked) return;
     setActiveExportId('portable-research');
     try {
       const portablePackage = await createPortableResearchPackage(
@@ -171,9 +211,10 @@ export const ManuscriptExportPanel = ({
         mimeType: 'application/zip',
         content: portablePackage.blob,
       });
-      enqueueSuccessSnackBar({
-        message: `Portable research ZIP created with ${portablePackage.includedFiles.length} files`,
-      });
+      notifyExport(
+        `Portable research ZIP created with ${portablePackage.includedFiles.length} files`,
+        portablePackage.citationProvenance,
+      );
     } catch {
       enqueueErrorSnackBar({
         message: 'Could not create the portable research ZIP',
@@ -184,7 +225,7 @@ export const ManuscriptExportPanel = ({
   };
 
   const runSubmissionPackageExport = async () => {
-    if (activeExportId !== null || !readiness.ready) return;
+    if (activeExportId !== null || exportBlocked || !readiness.ready) return;
     setActiveExportId('submission-package');
     try {
       const submissionPackage = await createSubmissionPackage(
@@ -200,9 +241,12 @@ export const ManuscriptExportPanel = ({
       enqueueSuccessSnackBar({
         message: `Submission package created with ${submissionPackage.includedFiles.length} files`,
       });
-    } catch {
+    } catch (error) {
       enqueueErrorSnackBar({
-        message: 'Could not create the submission package',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Could not create the submission package',
       });
     } finally {
       setActiveExportId(null);
@@ -213,9 +257,12 @@ export const ManuscriptExportPanel = ({
     <StyledPanel>
       <ManuscriptExportActionsCard
         activeExportId={activeExportId}
+        isPreparing={isPreparing}
+        preparationError={preparationError}
+        onRetryCitationFormatting={retryCitationFormatting}
         exporters={exporters}
         readiness={readiness}
-        warnings={bundle.warnings}
+        warnings={exportBundle.warnings}
         onExport={(exporterId) => void runExport(exporterId)}
         onPortableResearchExport={() => void runPortableResearchExport()}
         onSubmissionPackageExport={() => void runSubmissionPackageExport()}

@@ -61,7 +61,14 @@ export const ManuscriptCitationStylePicker = ({
       label="Citation style"
       fullWidth
       disabled={disabled}
-      options={CITATION_STYLE_OPTIONS}
+      options={
+        CITATION_STYLE_OPTIONS.some((option) => option.value === value)
+          ? CITATION_STYLE_OPTIONS
+          : [
+              { value, label: `Unavailable CSL: ${value}`, disabled: true },
+              ...CITATION_STYLE_OPTIONS,
+            ]
+      }
       value={value}
       onChange={onChange}
     />

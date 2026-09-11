@@ -150,6 +150,35 @@ Vancouver, AMA, Elsevier-Harvard, Springer and four air-quality/environmental
 journal styles are also bundled. See
 [`paper-format-assessment/citation-formats-and-storage.md`](paper-format-assessment/citation-formats-and-storage.md).
 
+**Requested style is not proof of application.** Every assembled
+`ManuscriptBundle` carries `citationProvenance`: `requestedStyleId`,
+`appliedStyleId`, and `engineOutcome`. `appliedStyleId: "built-in"` explicitly
+identifies the generic formatter, rather than labeling its output as APA or
+another requested CSL style. CSL preparation records one of these outcomes:
+
+| Configuration / result                            | Outcome              | Submission package          | Draft exports                                           |
+| ------------------------------------------------- | -------------------- | --------------------------- | ------------------------------------------------------- |
+| Empty, absent, or whitespace-only style ID        | `not-requested`      | No citation-style error     | Generic formatting by configuration; no failure warning |
+| Nonempty ID, not yet checked                      | `not-prepared`       | Blocked pending preparation | UI waits for preparation                                |
+| Requested ID is not bundled                       | `style-not-vendored` | Blocked                     | Built-in fallback with a visible warning                |
+| Engine could not be created                       | `engine-unavailable` | Blocked                     | Built-in fallback with a visible warning                |
+| Engine or citation/bibliography formatting throws | `engine-error`       | Blocked                     | Built-in fallback with the captured `errorMessage`      |
+| Bundled style applies successfully                | `applied`            | No citation-style error     | Requested and applied IDs match                         |
+
+A nonempty unsupported ID is a failed request, **not** deliberate generic
+formatting. To choose the latter, select a lightweight citation mode; this
+clears `citationStyleId`. The picker retains unsupported IDs as unavailable
+requests instead of displaying them as a selected lightweight mode.
+
+The Export panel shows the outcome before download. Preparation is tied to
+the selected manuscript and style: an older asynchronous result cannot make a
+new selection ready. A failed attempt can be retried with **Recheck citation
+formatting**. Renderers reuse the prepared result checked by preflight; they
+do not silently retry a different formatter after a successful check.
+Caption and table-grid citations participate in the same CSL preparation.
+This records formatter application, not a guarantee of journal compliance or
+lossless rendering.
+
 ## 5. Export targets
 
 | Target                  | Use                                                                                                  |
@@ -164,6 +193,26 @@ journal styles are also bundled. See
 The portable ZIP is the editable handoff. When fidelity matters, re-import it
 into a clean workspace and confirm counts, keys, content and links survive.
 
+Built-in DOCX, PDF, HTML, JATS, and Markdown export adapters attach the
+outcome to their returned `ExportFile` objects and download a companion
+`citation-formatting.json`. Keep that report with the presentation file: its
+requested/applied IDs, outcome, captured message (if any), and warnings describe
+what the app applied. The document body is not rewritten to hide or correct a
+failed style. Standalone HTML also includes a visible fallback alert inside the
+page. The low-level Blob/string helpers still return just their document;
+integrations using those helpers directly must retain the prepared bundle's
+provenance and expose the warning, as the built-in adapters do.
+
+The submission ZIP includes the outcome in `metadata.json` and its readiness
+manifest. When a portable source is supplied, `research-paper.json` records it
+as optional top-level `citationProvenance`, adjacent to `exportStyle` rather
+than overriding the requested configuration. Standalone portable backups
+remain available after a style failure and record that failure too. Older
+version-1 archives without the field still read. This historical field is not
+imported as current readiness: rebuilding the manuscript requires fresh
+citation preparation. No style bytes, renderer hash, or guide digest are
+asserted by the outcome record.
+
 **Word style import is styles, not a whole template.** Supplying your own
 `.docx` lifts `word/styles.xml` — fonts and heading styles — and uses it as the
 export's style base. It does not carry over the donor document's page geometry,
@@ -176,14 +225,27 @@ not "reproduce my template".
 Hard errors, which must block the submission package export:
 
 - unresolved citations;
+- a requested citation style that is pending or failed to apply (unsupported
+  style, unavailable engine, or engine error);
 - unknown cross-references;
 - unknown asset placements;
 - missing figure images;
 - empty or invalid equations;
 - missing required title, author, abstract, keyword, journal or submission data.
 
-Draft DOCX/PDF exports may still be produced **with visible warnings**. Do not
-suppress warnings to show a clean status.
+The existing `validateSubmission` check list contains the citation-formatting
+check; it is not a second readiness system. `createSubmissionPackage` prepares
+citations, validates the prepared bundle, and rejects any hard errors **before
+rendering or writing package members**. This guards direct API calls as well as
+the disabled UI button. Successful CSL application does not bypass other hard
+errors.
+
+Draft DOCX/PDF exports may still be produced **with visible warnings**. A failed
+requested style is shown as a persistent Export-panel alert and a warning
+notification when a draft is downloaded, not a clean success notification.
+The companion JSON records the same failure. Deliberate generic formatting
+shows informational status rather than a failure. Do not suppress warnings to
+show a clean status.
 
 ## 7. Drafting outside the app
 
@@ -251,13 +313,12 @@ the inventory, link reconciliation, preflight and export verification.
 
 Recorded here so the rest of this document can be read as accurate.
 
-| Limit                                                        | Effect                                                                                                                                                                                                                         |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Numbered display equations are not extracted into assets     | §7 item 4. An author's `[#key]` and `[[asset:key]]` for a numbered equation resolve to nothing, which §6 counts as two hard preflight errors. Two `it.failing` tests stand as tripwires.                                       |
-| A requested citation style can fall back silently            | If a journal template names a style that is not vendored, or the citation engine throws, the export still succeeds using the built-in formatter and nothing records that the requested style was not applied.                  |
-| Word template import is styles only                          | Fonts and heading styles carry over; page geometry, headers, footers, numbering and theme parts do not. See §5.                                                                                                                |
-| The portable manifest records content, not format provenance | It carries the schema version, content and export style, but not the identity or digest of the guide, CSL bytes or renderer that produced a given export. A re-import restores the paper, not a proof of how it was formatted. |
-| The §7 contract covers import only                           | File reader, wizard commit, export rendering and fresh-workspace re-import are not exercised by that suite.                                                                                                                    |
+| Limit                                                                  | Effect                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Numbered display equations are not extracted into assets               | §7 item 4. An author's `[#key]` and `[[asset:key]]` for a numbered equation resolve to nothing, which §6 counts as two hard preflight errors. Two `it.failing` tests stand as tripwires.                                                                        |
+| Word template import is styles only                                    | Fonts and heading styles carry over; page geometry, headers, footers, numbering and theme parts do not. See §5.                                                                                                                                                 |
+| Format provenance is an outcome record, not a reproducible environment | The manifest records requested/applied citation style and engine outcome, but not the guide identity/digest, CSL bytes or renderer version/hash. Re-import restores content and requested configuration, not proof that the current renderer applied the style. |
+| The §7 contract covers import only                                     | File reader, wizard commit, export rendering and fresh-workspace re-import are not exercised by that suite.                                                                                                                                                     |
 
 Do not describe an export as "lossless", "exactly formatted" or "submission
 ready" while these stand.

@@ -11,6 +11,10 @@ import {
 } from './manuscriptCitations';
 import { referenceToCslItem } from './manuscriptCiteproc';
 import {
+  initialCitationProvenance,
+  type ManuscriptCitationProvenance,
+} from './manuscriptCitationProvenance';
+import {
   extractCitationKeys,
   resolveCrossReferences,
 } from './manuscriptCrossReference';
@@ -137,6 +141,7 @@ export type BuildBundleInput = {
 };
 
 export type ManuscriptBundle = {
+  citationProvenance: ManuscriptCitationProvenance;
   metadata: {
     title: string;
     authors: string;
@@ -504,6 +509,7 @@ export const buildManuscriptBundle = (
     .join('\n\n');
 
   return {
+    citationProvenance: initialCitationProvenance(style.citationStyleId),
     metadata: {
       title: manuscript.name ?? 'Untitled manuscript',
       authors: input.authors ?? manuscript.authorLine ?? '',

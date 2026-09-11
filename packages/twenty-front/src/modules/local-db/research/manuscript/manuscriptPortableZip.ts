@@ -10,6 +10,7 @@ import {
 } from './manuscriptPortableManifest';
 import { type SubmissionMaterials } from './manuscriptSubmission';
 import { type JournalStyle } from './manuscriptTypes';
+import { type ManuscriptCitationProvenance } from './manuscriptCitationProvenance';
 
 export type PortableZipFiles = Record<string, Uint8Array>;
 
@@ -76,8 +77,14 @@ export const addPortableResearchPaperFiles = (
   source: PortableManuscriptSource,
   style: JournalStyle,
   materials: SubmissionMaterials,
+  citationProvenance?: ManuscriptCitationProvenance,
 ): PortableResearchPaperManifest => {
-  const manifest = buildPortableResearchPaperManifest(source, style, materials);
+  const manifest = buildPortableResearchPaperManifest(
+    source,
+    style,
+    materials,
+    citationProvenance,
+  );
   // The manifest is the single path allocation: its figures are built by
   // mapping over source.figures, so entry i is source.figures[i], and reading
   // imagePath from it makes an archive that contradicts its own manifest

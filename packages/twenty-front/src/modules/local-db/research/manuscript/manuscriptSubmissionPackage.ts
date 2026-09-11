@@ -2,6 +2,8 @@ import { isNonEmptyString } from '@sniptt/guards';
 import { strToU8, zip } from 'fflate';
 
 import { type ManuscriptBundle, slugifyTitle } from './manuscriptAssembly';
+import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { type ManuscriptCitationProvenance } from './manuscriptCitationProvenance';
 import {
   exportManuscriptToDocxBlob,
   exportStandaloneMarkdownToDocxBlob,
@@ -30,6 +32,7 @@ import {
 type Zippable = Record<string, Uint8Array>;
 
 export type SubmissionPackage = {
+  citationProvenance: ManuscriptCitationProvenance;
   filename: string;
   blob: Blob;
   readiness: SubmissionReadiness;
@@ -37,6 +40,7 @@ export type SubmissionPackage = {
 };
 
 export type PortableResearchPackage = {
+  citationProvenance: ManuscriptCitationProvenance;
   filename: string;
   blob: Blob;
   includedFiles: string[];
@@ -180,9 +184,17 @@ export const createPortableResearchPackage = async (
   portableSource: PortableManuscriptSource,
 ): Promise<PortableResearchPackage> => {
   const files: Zippable = {};
-  addPortableResearchPaperFiles(files, portableSource, bundle.style, materials);
+  bundle = await prepareManuscriptBundleWithCsl(bundle);
+  addPortableResearchPaperFiles(
+    files,
+    portableSource,
+    bundle.style,
+    materials,
+    bundle.citationProvenance,
+  );
   const zipped = await zipFiles(files);
   return {
+    citationProvenance: bundle.citationProvenance,
     filename: `${slugifyTitle(bundle.metadata.title)}-portable-research.zip`,
     blob: new Blob([new Uint8Array(zipped).buffer], {
       type: 'application/zip',
@@ -281,16 +293,23 @@ export const createSubmissionPackage = async (
   materials: SubmissionMaterials,
   portableSource?: PortableManuscriptSource,
 ): Promise<SubmissionPackage> => {
-  const files: Zippable = {};
+  bundle = await prepareManuscriptBundleWithCsl(bundle);
   const readiness = validateSubmission(bundle, materials);
+  // Guard the API as well as the button, before rendering or writing any files.
+  if (!readiness.ready) {
+    const failures = readiness.checks
+      .filter((check) => check.severity === 'ERROR')
+      .map((check) => `${check.label}: ${check.detail}`);
+    throw new Error(`Submission package blocked. ${failures.join(' ')}`);
+  }
+  const files: Zippable = {};
   const base = slugifyTitle(bundle.metadata.title);
-  // Draw every Mermaid diagram once, so the manuscript, the JATS article, and
-  // the figure files all carry the same picture instead of dropping it.
-  bundle = await prepareManuscriptDiagramImages(bundle);
-
   files[`${base}-manuscript.docx`] = await blobToBytes(
     await exportManuscriptToDocxBlob(bundle),
   );
+  // JATS and separate figure files need rasterized diagrams too; citation
+  // formatting is already complete and must not be attempted again.
+  bundle = await prepareManuscriptDiagramImages(bundle);
   // The machine-readable article instance: publisher systems ingest JATS,
   // humans edit the DOCX. Both are the same manuscript.
   files[`${base}.jats.xml`] = strToU8(buildJatsArticle(bundle));
@@ -314,6 +333,7 @@ export const createSubmissionPackage = async (
         profileKey: bundle.style.profileKey,
         keywords: bundle.metadata.keywords,
         citationStyleId: bundle.metadata.citationStyleId,
+        citationProvenance: bundle.citationProvenance,
       },
       null,
       2,
@@ -349,6 +369,7 @@ export const createSubmissionPackage = async (
       portableSource,
       bundle.style,
       materials,
+      bundle.citationProvenance,
     );
   }
   files['manifest.xml'] = strToU8(
@@ -357,6 +378,7 @@ export const createSubmissionPackage = async (
 
   const zipped = await zipFiles(files);
   return {
+    citationProvenance: bundle.citationProvenance,
     filename: `${base}-${slugifyTitle(bundle.metadata.journal || 'submission')}.zip`,
     blob: new Blob([new Uint8Array(zipped).buffer], {
       type: 'application/zip',

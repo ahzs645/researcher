@@ -1,4 +1,6 @@
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
+import { type ManuscriptCitationProvenance } from './manuscriptCitationProvenance';
+import { withCitationFormattingReport } from './manuscriptExportProvenance';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
 import { resolveCslStyleXml } from './manuscriptCiteproc';
 import { blocknoteDocxExporter } from './manuscriptDocxExport';
@@ -16,6 +18,7 @@ import { blocknotePdfExporter } from './manuscriptPdfExport';
 //   - typstExporter                                  → typst.ts (in-browser PDF)
 
 export type ExportFile = {
+  citationProvenance?: ManuscriptCitationProvenance;
   filename: string;
   mimeType: string;
   // Text for Markdown/JSON/XML; a Blob for binary formats (DOCX/PDF).
@@ -99,7 +102,7 @@ export const markdownBundleExporter: ManuscriptExporter = {
         content: styleXml,
       });
     }
-    return files;
+    return withCitationFormattingReport(formattedBundle, files);
   },
 };
 

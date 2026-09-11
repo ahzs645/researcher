@@ -24,6 +24,7 @@ import {
   EQUATION_LABEL_SEPARATOR,
 } from './manuscriptBlocks';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { withCitationFormattingReport } from './manuscriptExportProvenance';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { fitManuscriptFigureImages } from './manuscriptFigureFit';
 import { isManuscriptDocxStylesXml } from './manuscriptDocxTemplate';
@@ -630,11 +631,14 @@ export const blocknoteDocxExporter: ManuscriptExporter = {
   label: 'Word (.docx)',
   formats: ['DOCX'],
   offline: true,
-  export: async (bundle): Promise<ExportFile[]> => [
-    {
-      filename: `${slugifyTitle(bundle.metadata.title)}.docx`,
-      mimeType: DOCX_MIME,
-      content: await exportManuscriptToDocxBlob(bundle),
-    },
-  ],
+  export: async (bundle): Promise<ExportFile[]> => {
+    const prepared = await prepareManuscriptBundleWithCsl(bundle);
+    return withCitationFormattingReport(prepared, [
+      {
+        filename: `${slugifyTitle(prepared.metadata.title)}.docx`,
+        mimeType: DOCX_MIME,
+        content: await exportManuscriptToDocxBlob(prepared),
+      },
+    ]);
+  },
 };

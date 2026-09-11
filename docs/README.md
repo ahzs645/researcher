@@ -20,6 +20,7 @@ and the frontend architecture.
 | Document                                                                                                                               | What it covers                                                                                                                     |
 | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | [`../packages/twenty-front/src/modules/local-db/research/README.md`](../packages/twenty-front/src/modules/local-db/research/README.md) | How research objects are grafted onto Twenty's metadata, the nav re-skin, and the design constraints to read before adding fields. |
+| [`offline-and-hosting.md`](offline-and-hosting.md)                                                                                     | Running with no server: the three runtime modes, what works with zero network, what still needs it, and what no-server cannot do.  |
 | [`../convex/README.md`](../convex/README.md)                                                                                           | The Convex parity runtime.                                                                                                         |
 
 ## Screenshots
@@ -32,4 +33,6 @@ and the frontend architecture.
 
 [`AGENTS.md`](../AGENTS.md) and [`CLAUDE.md`](../CLAUDE.md) are the root briefs
 for Codex and Claude Code. They must stay identical apart from which assistant
-they name; `node scripts/check-agent-docs-sync.mjs` enforces that.
+they name, so both are generated from [`assistant-brief.md`](assistant-brief.md)
+by `node scripts/build-agent-docs.mjs`. Edit the source, not the generated
+files; `--check` fails when they are out of date.

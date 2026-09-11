@@ -133,10 +133,13 @@ A `journalTemplate` record holds the target venue's format: `citationMode` and
 (`S` → Figure S1), `numberingScope`, `crossRefFormat`, caption position and
 size, two-column layout, abstract word limit, and the allowed output formats.
 
-Bundled CSL styles resolve local-first from `packages/twenty-front/public/csl/`
-with a CDN fallback, so the common journals format offline. Nature, Science,
-IEEE, MDPI/IJERPH, ACS, APA 7th and Chicago author-date have been checked
-against real house style; Vancouver is online-only. See
+The 15 bundled CSL styles are compiled into the JavaScript bundle as raw XML
+(`research/manuscript/csl-styles/`, imported with Vite's `?raw`), together with
+the `en-US` locale. Citation formatting therefore needs **no network at all** —
+there is no CDN fallback to fail. Nature, Science, IEEE, MDPI/IJERPH, ACS,
+APA 7th and Chicago author-date have been checked against real house style;
+Vancouver, AMA, Elsevier-Harvard, Springer and four air-quality/environmental
+journal styles are also bundled. See
 [`paper-format-assessment/citation-formats-and-storage.md`](paper-format-assessment/citation-formats-and-storage.md).
 
 ## 5. Export targets
@@ -179,7 +182,8 @@ Markdown that already obeys §2 and §3:
    undone.
 3. Tables as Markdown grids, not images.
 4. Numbered display equations as `$$…$$` blocks with a stable key you also use
-   in `[#key]` and `[[asset:key]]`.
+   in `[#key]` and `[[asset:key]]`. **Not supported by the importer yet — see
+   the gap note below.**
 5. A companion bibliography as CSL-JSON, keyed by the same `citationKey`
    values the tokens use. BibTeX is accepted and converted; CSL-JSON is
    preferred because it is stored verbatim.
@@ -188,6 +192,24 @@ Markdown that already obeys §2 and §3:
 A draft in this shape imports through the normal pipeline
 (`manuscriptDocxFile.ts` → `manuscriptDocImport.ts` → the import wizard →
 `manuscriptImportPrepare.ts`) rather than needing hand-built records.
+
+This section is an executed contract, not a description. The fixture in
+`manuscript/__tests__/manuscriptDraftingOutsideTheAppFixture.ts` is a draft
+written exactly as above, and
+`manuscript/__tests__/manuscriptDraftingOutsideTheAppRoundTrip.test.ts` drives
+it through the real pipeline. Section order and depth, cluster order and
+locators, citation resolution against the bibliography, tables staying editable
+grids with their merge markers, and figure/table cross-references each resolving
+to exactly one asset are all asserted and green. If this section drifts from
+what the importer does, that suite fails.
+
+**Item 4 is the exception — it does not hold yet.** The importer classifies a `$$…$$` block as an
+equation but re-serializes it straight back into the section body: nothing
+outside the portable-package path ever creates an `assetKind: 'EQUATION'`
+record, so the `[#key]` and `[[asset:key]]` an author writes for a numbered
+display equation resolve to nothing — which §6 counts as two hard preflight
+errors. The two assertions covering it are marked `it.failing` in that suite,
+so they turn red the moment the pipeline starts keeping the promise.
 
 ## 8. Reporting rules
 

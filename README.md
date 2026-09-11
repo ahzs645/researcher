@@ -67,6 +67,11 @@ Selected by `REACT_APP_DATA_MODE`, a URL path, or a query parameter:
 Every edit persists to the visitor's own IndexedDB — there is no server and
 nothing is shared.
 
+Citation formatting, importing, and DOCX/PDF/HTML/JATS export all run with no
+network at all. See [`docs/offline-and-hosting.md`](docs/offline-and-hosting.md)
+for exactly what works offline, the four features that do need the network, and
+what no-server genuinely cannot do (no sharing, no sync, one browser profile).
+
 ## What was added to Twenty
 
 | Area                                                                   | Where                                                  |
@@ -88,10 +93,13 @@ for the graft points and design constraints.
 
 - [`docs/`](docs/README.md) — index of the docs in this fork
 - [`docs/manuscript-format.md`](docs/manuscript-format.md) — the manuscript format
+- [`docs/offline-and-hosting.md`](docs/offline-and-hosting.md) — running with no
+  server: what works offline, what needs the network, and the real limits
 - [`docs/paper-format-assessment/`](docs/paper-format-assessment/README.md) —
   how the platform is set up, and a hands-on assessment of the paper pipeline
 - [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) — working agreements for
-  coding assistants; kept in sync by `scripts/check-agent-docs-sync.mjs`
+  coding assistants. Both are generated from `docs/assistant-brief.md` —
+  edit that, not them
 - [Twenty's documentation](https://docs.twenty.com) still applies to the CRM
   core — objects, views, fields, the frontend architecture
 
@@ -106,8 +114,8 @@ npx jest packages/twenty-front/src/modules/local-db/research \
 npx nx typecheck twenty-front
 npx nx lint:diff-with-main twenty-front
 
-# Keep the two assistant briefs in sync
-node scripts/check-agent-docs-sync.mjs
+# Regenerate the two assistant briefs from docs/assistant-brief.md
+node scripts/build-agent-docs.mjs
 ```
 
 The full backend (`twenty-server`, Postgres, Redis, the worker) is only needed

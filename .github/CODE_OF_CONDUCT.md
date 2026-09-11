@@ -1,12 +1,12 @@
 # Contributor Code of Conduct
 
-## Twenty's Pledge
+## Our Pledge
 
 The contributors and maintainers of this project pledge to ensure a harassment-free experience for everyone in the community.
 
 The focus of both contributors and maintainers is on acting and interacting in ways that promote an open, welcoming, friendly, diverse, inclusive, and healthy community.
 
-## Twenty's Standards
+## Our Standards
 
 Examples of behavior that contributes to a positive environment for this
 community include:
@@ -31,9 +31,25 @@ Examples of unacceptable behavior include:
 
 ## Enforcement Responsibilities
 
-Community leaders and maintainers of this repository are responsible for clarifying and enforcing Twenty's standards of acceptable behavior. They will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
+Community leaders and maintainers of this repository are responsible for clarifying and enforcing this project's standards of acceptable behavior. They will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
 
 Community leaders and maintainers of this repository have the right and responsibility to remove, edit, or reject comments, commits, code, issues, and other contributions that aren't aligned with this Code of Conduct. They will also communicate reasons for moderation decisions when appropriate.
+
+## Reporting
+
+Instances of abusive, harassing, or otherwise unacceptable behavior can be
+reported to the maintainers of this repository.
+
+<!-- TODO: add a dedicated enforcement contact (email or form) for this project. -->
+
+Until a dedicated contact is published, use GitHub's own reporting flow —
+["Report abuse"](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam)
+on the offending comment, issue, pull request or account — or open a private
+report from this repository's Security tab if the behavior also involves a
+security concern.
+
+All reports will be reviewed and investigated promptly and fairly. Maintainers
+are obligated to respect the privacy and security of the reporter.
 
 ## Scope
 

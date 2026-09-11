@@ -1,25 +1,87 @@
 ---
-description: Twenty CRM architecture overview - monorepo structure, tech stack, and development principles
+description: researcher architecture overview - browser-first runtime, monorepo structure, tech stack, and development principles
 globs: []
 alwaysApply: true
 ---
 
-# Twenty Architecture
+# researcher Architecture
+
+`researcher` is a research-team workspace and manuscript composer, built as a
+fork of Twenty (an open-source CRM). It keeps Twenty's object, view and
+navigation machinery and grafts a research domain onto it — grants, grant
+discovery, applications, obligations, projects, datasets, references and
+manuscripts — plus a composer that imports an existing paper, formats it
+against a target journal, and exports DOCX/PDF/HTML/JATS.
+
+## The runtime: browser-first, no backend
+
+**The research app runs without the Twenty backend.** A browser-side data
+bridge serves the standard object machinery from IndexedDB (Dexie), so the
+whole app builds to a static site with no server, no account and no database.
+
+```bash
+npx nx build twenty-shared   # once
+npx nx start twenty-front    # http://localhost:3001/demo
+```
+
+Port is **3001** (`packages/twenty-front/vite.config.ts`), and the nx target is
+`start` — there is no `dev` target. On localhost the local bridge engages
+automatically. A bare `/` is an empty workspace by design; `/demo` seeds the
+sample dataset and `/reset` wipes IndexedDB.
+
+Runtime modes are resolved in `local-db/twenty-local/isLocalTwentyDataMode.ts`:
+
+| Mode      | Storage                          | Used by                                  |
+| --------- | -------------------------------- | ---------------------------------------- |
+| `local`   | Dexie / IndexedDB in the browser | the static build; the default on localhost |
+| `convex`  | a Convex deployment (`convex/`)  | optional backend parity; not the default  |
+| in-memory | RAM                              | tests                                     |
 
 ## Tech Stack
-- **Frontend**: React 18, TypeScript, Jotai, Styled Components, Vite
-- **Backend**: NestJS, TypeORM, PostgreSQL, Redis, GraphQL
-- **Monorepo**: Nx workspace with yarn
+
+- **Frontend (the app)**: React 18, TypeScript, Vite, Jotai for state, Linaria
+  for zero-runtime CSS-in-JS, Lingui for i18n (`src/locales/*.po`)
+- **Data layer (the app)**: Dexie/IndexedDB bridge under
+  `packages/twenty-front/src/modules/local-db/`, which answers the same GraphQL
+  the CRM core expects — Apollo Client still sits in front of it
+- **Vendored upstream server (not run by default)**: NestJS, TypeORM,
+  PostgreSQL, Redis, GraphQL Yoga, BullMQ. `twenty-server`, Postgres, Redis and
+  the worker matter **only** for work on the upstream CRM server. Do not assume
+  they are running, and do not add app features that require them.
+- **Monorepo**: Nx workspace managed with Yarn 4
 
 ## Package Structure
+
 ```
 packages/
-├── twenty-front/     # React app
-├── twenty-server/    # NestJS API  
-├── twenty-ui/        # Shared components
-├── twenty-shared/    # Common types/utils
-└── twenty-emails/    # Email templates
+├── twenty-front/          # React app — this is where the research fork lives
+├── twenty-shared/         # Common types and utilities (build this first)
+├── twenty-ui/             # Shared UI component library
+├── twenty-server/         # Vendored upstream NestJS API — not run by this fork
+├── twenty-emails/         # Email templates
+├── twenty-utils/          # Dev-environment scripts
+├── twenty-e2e-testing/    # Playwright E2E tests
+└── …                      # Further vendored upstream packages (docs, website,
+                           #   cli, sdk, zapier, apps, …)
+convex/                    # Optional Convex parity runtime
 ```
+
+The research domain is **not** a package — it lives inside the frontend:
+
+```
+packages/twenty-front/src/modules/local-db/
+├── data-source/          # The GraphQL-over-Dexie data source and Apollo providers
+├── twenty-local/         # Bridge modes, seeding, workspace reset
+└── research/             # Research objects, views, nav, seed data
+    ├── manuscript/       # Composer: import, tokens, citations, exports
+    ├── import-wizard/    # Upload → map → review → commit → rollback
+    └── components/       # Composer and editor UI
+```
+
+Before working under `local-db/research/`, read
+`packages/twenty-front/src/modules/local-db/research/AGENTS.md`,
+`docs/manuscript-format.md` and
+`packages/twenty-front/src/modules/local-db/research/README.md`.
 
 ## Key Principles
 - **Functional components only** (no classes)

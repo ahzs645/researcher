@@ -2,14 +2,10 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
-    exclude-paths:
-      - "packages/twenty-apps/community/**"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
     versioning-strategy: "lockfile-only"
-    assignees:
-      - "mabdullahabaid"
     ignore:
       - dependency-name: "@graphql-yoga/nestjs"
       - dependency-name: "@nestjs/graphql"

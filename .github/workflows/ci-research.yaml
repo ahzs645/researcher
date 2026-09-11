@@ -1,0 +1,65 @@
+name: Research suite
+
+# The manuscript machinery is the part of this fork that upstream CI never
+# covered, and `docs/manuscript-format.md` makes promises about it — including
+# §7, the shape a draft must have to survive the importer. Running the research
+# suite here keeps those promises executable rather than aspirational.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/twenty-front/src/modules/local-db/**'
+      - 'packages/twenty-shared/**'
+      - 'docs/manuscript-format.md'
+      - '.github/workflows/ci-research.yaml'
+  pull_request:
+    paths:
+      - 'packages/twenty-front/src/modules/local-db/**'
+      - 'packages/twenty-shared/**'
+      - 'docs/manuscript-format.md'
+      - '.github/workflows/ci-research.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NODE_OPTIONS: '--max-old-space-size=8192'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 1
+
+      - name: Install dependencies
+        uses: ./.github/actions/yarn-install
+
+      # twenty-shared must exist before the frontend's lingui config resolves,
+      # and twenty-ui's subpath exports (e.g. `twenty-ui/input`) resolve to its
+      # dist — without it three composer/editor suites fail to load.
+      - name: Build twenty-shared and twenty-ui
+        run: npx nx build twenty-shared && npx nx build twenty-ui
+
+      # setupTests.ts imports `~/locales/generated/en`, which only exists once
+      # the Lingui catalogs are compiled. Without this every suite fails to load.
+      - name: Compile Lingui catalogs
+        working-directory: packages/twenty-front
+        run: ../../node_modules/.bin/lingui compile --typescript
+
+      - name: Run the research test suite
+        working-directory: packages/twenty-front
+        run: >-
+          ../../node_modules/.bin/jest
+          src/modules/local-db/research
+          --config=jest.config.mjs
+          --runInBand
+          --ci

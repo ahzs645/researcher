@@ -41,8 +41,7 @@ if (
     getMdSection(
       'Welcome!',
       `
-Hello there, congrats on your first PR! We're excited to have you contributing to this project.
-By submitting your Pull Request, you acknowledge that you agree with the terms of our [Contributor License Agreement](https://github.com/twentyhq/twenty/blob/main/.github/CLA.md).`,
+Hello there, congrats on your first PR! We're excited to have you contributing to this project.`,
     ),
   );
 }

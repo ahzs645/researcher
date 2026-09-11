@@ -1,3 +1,5 @@
+<!-- Generated from docs/assistant-brief.md by scripts/build-agent-docs.mjs. Do not edit AGENTS.md directly; edit the source and re-run the script. -->
+
 # AGENTS.md
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
@@ -68,6 +70,18 @@ npx nx run twenty-server:worker  # Start background worker
 ```
 
 ### Testing
+
+Frontend tests need a one-time bootstrap, or every suite fails to load:
+
+```bash
+npx nx build twenty-shared   # lingui config resolves through it
+npx nx build twenty-ui       # subpath exports like `twenty-ui/input` resolve to dist
+cd packages/twenty-front && ../../node_modules/.bin/lingui compile --typescript
+```
+
+`setupTests.ts` imports `~/locales/generated/en`, which only exists after that
+lingui compile. Run jest from `packages/twenty-front` — `npx jest` at the repo
+root cannot resolve the config.
 
 ```bash
 # Preferred: run a single test file (fast)
@@ -305,5 +319,7 @@ This handles everything: starts Postgres + Redis (auto-detects local services vs
 - `packages/twenty-front/src/modules/local-db/research/AGENTS.md` - Required workflow for transposing an existing paper into Manuscript Compose records and exports
 - `docs/manuscript-format.md` - The manuscript format on one page: records, token grammar, journal templates, exports, preflight
 - `packages/twenty-front/src/modules/local-db/research/README.md` - How research objects are grafted onto Twenty's metadata
+- `docs/offline-and-hosting.md` - The no-server story: runtime modes, what works offline, what needs the network, and the real limits
 - `docs/README.md` - Index of this fork's documentation
+- `docs/assistant-brief.md` - Canonical source for this file and AGENTS.md; edit it, then run `node scripts/build-agent-docs.mjs`
 - `.cursor/rules/` - Detailed development guidelines and best practices

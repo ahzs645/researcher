@@ -1,8 +1,9 @@
 name: Docs checks
 
 # CLAUDE.md and AGENTS.md are the auto-injected briefs for Claude Code and
-# Codex. When one is edited alone the other assistant silently loses the
-# instruction, so the two are checked for drift on every change to either.
+# Codex. Both are generated from docs/assistant-brief.md so an instruction
+# cannot reach one assistant and not the other. This check fails when the
+# generated files are out of date with that source.
 
 on:
   push:
@@ -10,13 +11,15 @@ on:
     paths:
       - 'CLAUDE.md'
       - 'AGENTS.md'
-      - 'scripts/check-agent-docs-sync.mjs'
+      - 'docs/assistant-brief.md'
+      - 'scripts/build-agent-docs.mjs'
       - '.github/workflows/ci-docs.yaml'
   pull_request:
     paths:
       - 'CLAUDE.md'
       - 'AGENTS.md'
-      - 'scripts/check-agent-docs-sync.mjs'
+      - 'docs/assistant-brief.md'
+      - 'scripts/build-agent-docs.mjs'
       - '.github/workflows/ci-docs.yaml'
   workflow_dispatch:
 
@@ -24,7 +27,7 @@ permissions:
   contents: read
 
 jobs:
-  agent-docs-sync:
+  agent-docs-generated:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -33,6 +36,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      # The check is dependency-free, so no install step is needed.
-      - name: Check CLAUDE.md and AGENTS.md are in sync
-        run: node scripts/check-agent-docs-sync.mjs
+      # The generator is dependency-free, so no install step is needed.
+      - name: Check CLAUDE.md and AGENTS.md are up to date
+        run: node scripts/build-agent-docs.mjs --check

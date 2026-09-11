@@ -1,0 +1,38 @@
+name: Docs checks
+
+# CLAUDE.md and AGENTS.md are the auto-injected briefs for Claude Code and
+# Codex. When one is edited alone the other assistant silently loses the
+# instruction, so the two are checked for drift on every change to either.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - 'scripts/check-agent-docs-sync.mjs'
+      - '.github/workflows/ci-docs.yaml'
+  pull_request:
+    paths:
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - 'scripts/check-agent-docs-sync.mjs'
+      - '.github/workflows/ci-docs.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-docs-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 1
+
+      # The check is dependency-free, so no install step is needed.
+      - name: Check CLAUDE.md and AGENTS.md are in sync
+        run: node scripts/check-agent-docs-sync.mjs

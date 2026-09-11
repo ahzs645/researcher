@@ -29,13 +29,14 @@ or the worker to use the research workspace or the manuscript composer.
 
 | URL                        | What it does                                                                  |
 | -------------------------- | ----------------------------------------------------------------------------- |
-| `/`                        | Empty workspace — the default for a fresh browser                             |
+| `/`                        | Fresh workspace — journal templates seeded, no sample research records        |
 | `/demo` or `?demo=1`       | Seeds the sample dataset: journal templates, manuscripts, figures, references |
 | `/reset`                   | Wipes IndexedDB back to blank                                                 |
 | `/compose?manuscript=<id>` | The manuscript composer                                                       |
 
-Start at `/demo` the first time — a bare `/` gives you an empty workspace with
-no templates, which looks like a broken build but is the intended default.
+A fresh `/` is not empty: blank mode seeds the starter journal-template
+library, so you can format a paper immediately. What it has none of is sample
+manuscripts, figures or references — for a worked example, start at `/demo`.
 
 ### Writing a manuscript
 

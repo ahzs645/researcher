@@ -2,6 +2,7 @@ import {
   parseManuscriptAffiliations,
   parseManuscriptAuthors,
 } from './manuscriptContributors';
+import { allocatePortableFigureAssets } from './manuscriptPortableAssetPaths';
 import { type SubmissionMaterials } from './manuscriptSubmission';
 import {
   type FigureLike,
@@ -104,32 +105,6 @@ export type PortableResearchPaperManifest = {
   submissionMaterials: SubmissionMaterials;
 };
 
-const dataImageExtension = (
-  value: string | null | undefined,
-): string | null => {
-  const mime = /^data:([^;,]+);base64,/s.exec(value ?? '')?.[1];
-  const extensions: Record<string, string> = {
-    'image/bmp': 'bmp',
-    'image/gif': 'gif',
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/svg+xml': 'svg',
-    'image/tiff': 'tif',
-    'image/webp': 'webp',
-  };
-  return mime === undefined ? null : (extensions[mime] ?? null);
-};
-
-export const portableFigureImagePath = (
-  refKey: string,
-  imageUrl: string | null | undefined,
-): string | null => {
-  const extension = dataImageExtension(imageUrl);
-  if (extension === null) return null;
-  const safeKey = refKey.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'figure';
-  return `portable-assets/${safeKey}.${extension}`;
-};
-
 export const buildPortableResearchPaperManifest = (
   source: PortableManuscriptSource,
   exportStyle: JournalStyle,
@@ -142,6 +117,9 @@ export const buildPortableResearchPaperManifest = (
     source.manuscript.authorLine,
     affiliations,
   );
+  // Asset paths are allocated once, for the whole figure list, so the manifest
+  // and the ZIP writer cannot disagree about where an image lives.
+  const figureAssets = allocatePortableFigureAssets(source.figures);
   const sectionKeyById = new Map(
     source.sections.map((section, index) => [
       section.id,
@@ -184,8 +162,7 @@ export const buildPortableResearchPaperManifest = (
       includeInExport: section.includeInExport !== false,
     })),
     figures: source.figures.map((figure, index) => {
-      const refKey = figure.refKey ?? `figure-${index + 1}`;
-      const imagePath = portableFigureImagePath(refKey, figure.imageUrl);
+      const { refKey, path: imagePath } = figureAssets[index];
       return {
         key: `figure-${index + 1}`,
         name: figure.name ?? `Figure ${index + 1}`,

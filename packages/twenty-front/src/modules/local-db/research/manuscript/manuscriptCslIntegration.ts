@@ -13,7 +13,7 @@ import {
 } from './manuscriptCiteproc';
 import {
   citationClusterKey,
-  extractCitationClusters,
+  extractCitationClusterItems,
   type FormattedBibliographyEntry,
 } from './manuscriptCitations';
 
@@ -54,7 +54,7 @@ export const prepareManuscriptBundleWithCsl = async (
     if (engine === null) return bundle;
 
     const clusters = exportableSectionContent(bundle).flatMap(
-      extractCitationClusters,
+      extractCitationClusterItems,
     );
     const labels = formatCslCitations(engine, clusters);
     const labelsByCluster = new Map(

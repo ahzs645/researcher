@@ -42,8 +42,9 @@ section content — the citation style is applied at export from the journal
 template.
 
 To run the research app: `npx nx start twenty-front`, then open
-`http://localhost:3001/demo` (a bare `/` is an empty workspace by design;
-`/reset` wipes it). On localhost the local bridge engages automatically.
+`http://localhost:3001/demo` for the worked example. A bare `/` is not empty —
+blank mode seeds the starter journal templates but no sample research records;
+`/reset` wipes it. On localhost the local bridge engages automatically.
 
 ## Key Commands
 

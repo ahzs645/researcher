@@ -1,5 +1,13 @@
 import { isNonEmptyString } from '@sniptt/guards';
 
+import {
+  citationClusterItemKeys,
+  replaceCitationTokens,
+  scanCitationTokens,
+  toCitationClusterItems,
+  type CitationClusterInput,
+  type CitationClusterItem,
+} from './manuscriptCitationTokens';
 import { type CitationMode, type ReferenceLike } from './manuscriptTypes';
 import { decodeXmlEntities } from './manuscriptXmlEntities';
 
@@ -103,27 +111,84 @@ export const buildCitationContext = (
   };
 };
 
-// Render one in-text citation cluster (one or more keys) in the active mode.
+const hasCitationItemAffixes = (item: CitationClusterItem): boolean =>
+  item.locator.length > 0 || item.prefix.length > 0 || item.suffix.length > 0;
+
+// Wrap one rendered source in the prefix/locator/suffix its token carried.
+// The locator follows the source ("[1, p. 42]"), the prefix leads it
+// ("[see 1]") and a free-text suffix trails it.
+const withCitationItemAffixes = (
+  item: CitationClusterItem,
+  body: string,
+): string => {
+  const withLocator =
+    item.locator.length > 0 ? `${body}, ${item.locator}` : body;
+  const withPrefix =
+    item.prefix.length > 0 ? `${item.prefix} ${withLocator}` : withLocator;
+  return item.suffix.length > 0 ? `${withPrefix} ${item.suffix}` : withPrefix;
+};
+
+// Suppressing the author leaves the year to stand alone after prose that
+// already names them ("Li's model (2017)").
+const authorDateBody = (
+  reference: ReferenceLike,
+  suppressAuthor: boolean,
+): string =>
+  suppressAuthor ? String(reference.year ?? 'n.d.') : authorYear(reference);
+
+// Render one in-text citation cluster in the active mode. Entries may be bare
+// keys or structured items carrying a locator, prefix, suffix or suppression.
 export const formatInTextCitation = (
-  keys: string[],
+  cluster: CitationClusterInput,
   context: CitationContext,
 ): string => {
-  const known = keys.filter((key) => context.referencesByKey.has(key));
+  const known = toCitationClusterItems(cluster).filter((item) =>
+    context.referencesByKey.has(item.citationKey),
+  );
   if (known.length === 0) return `[?]`;
 
   switch (context.mode) {
     case 'NUMERIC':
     case 'AUTHOR_NUMBER': {
-      const numbers = known.map((key) => context.numberByKey.get(key) ?? 0);
-      return `[${numbers.join(', ')}]`;
+      const rendered = known.map((item) =>
+        withCitationItemAffixes(
+          item,
+          String(context.numberByKey.get(item.citationKey) ?? 0),
+        ),
+      );
+      // "[1, 2]" reads as two sources, but once a locator is in play "[1, p.
+      // 42, 2]" is ambiguous — so affixed clusters separate with a semicolon.
+      const separator = known.some(hasCitationItemAffixes) ? '; ' : ', ';
+      return `[${rendered.join(separator)}]`;
     }
     case 'NUMERIC_SUPERSCRIPT': {
-      const numbers = known.map((key) => context.numberByKey.get(key) ?? 0);
-      return toSuperscript(numbers.join(','));
+      const numbers = known.map(
+        (item) => context.numberByKey.get(item.citationKey) ?? 0,
+      );
+      const superscript = toSuperscript(numbers.join(','));
+      // A superscript run cannot carry prose, so the prefix stays ahead of it
+      // and locators/suffixes trail it in normal text instead of being lost.
+      const prefix = known
+        .map((item) => item.prefix)
+        .filter((part) => part.length > 0)
+        .join(' ');
+      const trailing = known
+        .flatMap((item) => [item.locator, item.suffix])
+        .filter((part) => part.length > 0)
+        .join(', ');
+      return `${prefix.length > 0 ? `${prefix} ` : ''}${superscript}${
+        trailing.length > 0 ? ` (${trailing})` : ''
+      }`;
     }
     case 'AUTHOR_DATE': {
-      const rendered = known.map((key) =>
-        authorYear(context.referencesByKey.get(key) as ReferenceLike),
+      const rendered = known.map((item) =>
+        withCitationItemAffixes(
+          item,
+          authorDateBody(
+            context.referencesByKey.get(item.citationKey) as ReferenceLike,
+            item.suppressAuthor,
+          ),
+        ),
       );
       return `(${rendered.join('; ')})`;
     }
@@ -295,18 +360,32 @@ export const formatBibliography = (
     };
   });
 
-// Rewrite every [@key] / [@a; @b] citation cluster in the Markdown to its
-// formatted in-text form. (A simple pass that handles the common bracket forms.)
-const CITATION_CLUSTER = /\[(@[^\]]+)\]/g;
+// Rewrite every citation token in the Markdown to its formatted in-text form.
+// Parsing (including which brackets are literal) lives in
+// `manuscriptCitationTokens` so the editor and the exporters cannot drift.
 
-const citationKeysFromCluster = (inner: string): string[] =>
-  inner
-    .split(';')
-    .map((part) => part.trim().replace(/^@/, ''))
-    .filter((part) => part.length > 0);
+// Two clusters citing the same sources at different pages are different
+// citations, so the cache key carries the locator/prefix/suffix/suppression
+// too. Metadata-free clusters keep the bare joined-keys form callers (and the
+// anchor encoding) already rely on.
+const CITATION_ITEM_KEY_SEPARATOR = '\u001e';
 
-export const citationClusterKey = (keys: string[]): string =>
-  keys.join('\u001f');
+const citationItemKeyPart = (item: CitationClusterItem): string => {
+  const metadata = [
+    item.prefix,
+    item.locator,
+    item.suffix,
+    item.suppressAuthor ? '-' : '',
+  ];
+  return metadata.every((part) => part.length === 0)
+    ? item.citationKey
+    : `${item.citationKey}${CITATION_ITEM_KEY_SEPARATOR}${metadata.join(
+        CITATION_ITEM_KEY_SEPARATOR,
+      )}`;
+};
+
+export const citationClusterKey = (cluster: CitationClusterInput): string =>
+  toCitationClusterItems(cluster).map(citationItemKeyPart).join('\u001f');
 
 // ── Citation anchors ───────────────────────────────────────────────────────
 // Rendering a citation cluster loses which references it pointed at, which is
@@ -325,28 +404,41 @@ export const wrapCitationAnchor = (keys: string[], label: string): string =>
   `${CITATION_ANCHOR_OPEN}${citationClusterKey(keys)}${CITATION_ANCHOR_SPLIT}${label}${CITATION_ANCHOR_CLOSE}`;
 
 export const citationAnchorKeys = (encoded: string): string[] =>
-  encoded.split('\u001f').filter((key) => key.length > 0);
+  encoded
+    .split('\u001f')
+    .map((part) => part.split(CITATION_ITEM_KEY_SEPARATOR)[0])
+    .filter((key) => key.length > 0);
 
 export const stripCitationAnchors = (value: string): string =>
   value.replace(CITATION_ANCHOR_PATTERN, (_match, _keys, label: string) =>
     String(label),
   );
 
+export const extractCitationClusterItems = (
+  markdown: string,
+): CitationClusterItem[][] =>
+  scanCitationTokens(markdown).map((match) => match.items);
+
 export const extractCitationClusters = (markdown: string): string[][] =>
-  [...markdown.matchAll(CITATION_CLUSTER)].map((match) =>
-    citationKeysFromCluster(match[1]),
-  );
+  extractCitationClusterItems(markdown).map(citationClusterItemKeys);
+
+const renderedCluster = (
+  items: CitationClusterItem[],
+  label: string,
+  withAnchors: boolean,
+): string =>
+  withAnchors
+    ? wrapCitationAnchor(citationClusterItemKeys(items), label)
+    : label;
 
 export const renderCitationsInText = (
   markdown: string,
   context: CitationContext,
   withAnchors = false,
 ): string =>
-  markdown.replace(CITATION_CLUSTER, (_match, inner: string) => {
-    const keys = citationKeysFromCluster(inner);
-    const label = formatInTextCitation(keys, context);
-    return withAnchors ? wrapCitationAnchor(keys, label) : label;
-  });
+  replaceCitationTokens(markdown, (items) =>
+    renderedCluster(items, formatInTextCitation(items, context), withAnchors),
+  );
 
 export const renderCitationsInTextWithLabels = (
   markdown: string,
@@ -354,12 +446,11 @@ export const renderCitationsInTextWithLabels = (
   fallbackContext: CitationContext,
   withAnchors = false,
 ): string =>
-  markdown.replace(CITATION_CLUSTER, (_match, inner: string) => {
-    const keys = citationKeysFromCluster(inner);
+  replaceCitationTokens(markdown, (items) => {
     const label =
-      labelsByCluster.get(citationClusterKey(keys)) ??
-      formatInTextCitation(keys, fallbackContext);
-    return withAnchors ? wrapCitationAnchor(keys, label) : label;
+      labelsByCluster.get(citationClusterKey(items)) ??
+      formatInTextCitation(items, fallbackContext);
+    return renderedCluster(items, label, withAnchors);
   });
 
 // ── Seam for full CSL rendering (citeproc-js / @citeproc-rs) ────────────────

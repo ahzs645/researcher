@@ -124,6 +124,14 @@ Tables use GFM grids with merge markers: a cell of `<` continues the cell to
 its left, `^` continues the cell above, and the `|---|` separator's position
 sets the header depth.
 
+All six citation forms are parsed by one shared tokenizer
+(`manuscript/manuscriptCitationTokens.ts`) used by the editor, the preflight
+checks, the bibliography collector and every exporter, so a locator, prefix or
+suppressed author survives to the rendered output instead of being dropped at
+export. `manuscript/__tests__/manuscriptCitationTokens.test.ts` asserts each
+form's rendered result, including that escaped and code-span tokens stay
+literal.
+
 ## 4. Journal templates — the presentation layer
 
 A `journalTemplate` record holds the target venue's format: `citationMode` and
@@ -155,6 +163,13 @@ journal styles are also bundled. See
 
 The portable ZIP is the editable handoff. When fidelity matters, re-import it
 into a clean workspace and confirm counts, keys, content and links survive.
+
+**Word style import is styles, not a whole template.** Supplying your own
+`.docx` lifts `word/styles.xml` — fonts and heading styles — and uses it as the
+export's style base. It does not carry over the donor document's page geometry,
+headers, footers, numbering definitions or theme parts; the exporter sets its
+own 1-inch margins regardless. Treat it as "use my fonts and heading styles",
+not "reproduce my template".
 
 ## 6. Preflight — what blocks a submission package
 
@@ -197,11 +212,15 @@ This section is an executed contract, not a description. The fixture in
 `manuscript/__tests__/manuscriptDraftingOutsideTheAppFixture.ts` is a draft
 written exactly as above, and
 `manuscript/__tests__/manuscriptDraftingOutsideTheAppRoundTrip.test.ts` drives
-it through the real pipeline. Section order and depth, cluster order and
+it through the real import pipeline. Section order and depth, cluster order and
 locators, citation resolution against the bibliography, tables staying editable
-grids with their merge markers, and figure/table cross-references each resolving
-to exactly one asset are all asserted and green. If this section drifts from
-what the importer does, that suite fails.
+grids with their merge markers, and figure/table cross-references each
+resolving to exactly one asset are asserted and green. If this section drifts
+from what the importer does, that suite fails.
+
+Its scope is import only. The file reader, the wizard commit, export rendering,
+and re-import into a fresh workspace are **not** covered by it — do not read a
+green run as end-to-end proof.
 
 **Item 4 is the exception — it does not hold yet.** The importer classifies a `$$…$$` block as an
 equation but re-serializes it straight back into the section body: nothing
@@ -227,6 +246,21 @@ Do not use "complete", "lossless" or "submission ready" without evidence from
 the inventory, link reconciliation, preflight and export verification.
 
 ---
+
+## Known limits
+
+Recorded here so the rest of this document can be read as accurate.
+
+| Limit                                                        | Effect                                                                                                                                                                                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Numbered display equations are not extracted into assets     | §7 item 4. An author's `[#key]` and `[[asset:key]]` for a numbered equation resolve to nothing, which §6 counts as two hard preflight errors. Two `it.failing` tests stand as tripwires.                                       |
+| A requested citation style can fall back silently            | If a journal template names a style that is not vendored, or the citation engine throws, the export still succeeds using the built-in formatter and nothing records that the requested style was not applied.                  |
+| Word template import is styles only                          | Fonts and heading styles carry over; page geometry, headers, footers, numbering and theme parts do not. See §5.                                                                                                                |
+| The portable manifest records content, not format provenance | It carries the schema version, content and export style, but not the identity or digest of the guide, CSL bytes or renderer that produced a given export. A re-import restores the paper, not a proof of how it was formatted. |
+| The §7 contract covers import only                           | File reader, wizard commit, export rendering and fresh-workspace re-import are not exercised by that suite.                                                                                                                    |
+
+Do not describe an export as "lossless", "exactly formatted" or "submission
+ready" while these stand.
 
 ## Authoritative sources in this repo
 

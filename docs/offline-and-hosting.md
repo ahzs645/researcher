@@ -78,8 +78,9 @@ parity work, not the default.
 | `/reset`                   | Wipes IndexedDB back to blank and clears the persisted seed choice            |
 | `/localdb` or `?localdb=1` | Forces the local bridge on a non-localhost host                               |
 
-A first-time visitor on the bare URL sees an empty workspace with no journal
-templates. That is intended, but it reads as a broken build — start at `/demo`.
+A first-time visitor on the bare URL gets the starter journal-template library
+but no sample research records, so formatting works immediately while the
+workspace stays free of demo content. `/demo` adds the worked example.
 
 ## Backing up a workspace
 

@@ -1,3 +1,4 @@
+import { scanCitationTokens } from './manuscriptCitationTokens';
 import { buildAssetLookup, resolveAssetKey } from './manuscriptNumbering';
 import { type NumberedFigure } from './manuscriptTypes';
 
@@ -14,9 +15,6 @@ import { type NumberedFigure } from './manuscriptTypes';
 // anything but whitespace or a closing bracket. A stricter pattern here made
 // a refKey with a dot a live chip in the editor but literal text in exports.
 const CROSS_REF_PATTERN = /\[#([^\]\s]+)\]/g;
-// Citation keys: @key inside the text, key starts with a letter/digit and may
-// contain word chars, ':', '.', '-'. Matches Pandoc citekeys.
-const CITATION_PATTERN = /@([A-Za-z0-9_][\w:.-]*)/g;
 
 export type CrossReferenceResult = {
   text: string;
@@ -68,14 +66,17 @@ export const resolveCrossReferences = (
 
 // Pull every cited key from a body of Markdown, in first-appearance order
 // (numeric citation styles number references by order of first use).
+// Keys come from the shared token scanner, so the bibliography holds exactly
+// the sources that render: an `@` in prose, in code or behind a backslash is
+// not a citation and must not number a reference.
 export const extractCitationKeys = (markdown: string): string[] => {
   const keys: string[] = [];
   const seen = new Set<string>();
-  for (const match of markdown.matchAll(CITATION_PATTERN)) {
-    const key = match[1];
-    if (!seen.has(key)) {
-      seen.add(key);
-      keys.push(key);
+  for (const match of scanCitationTokens(markdown)) {
+    for (const item of match.items) {
+      if (seen.has(item.citationKey)) continue;
+      seen.add(item.citationKey);
+      keys.push(item.citationKey);
     }
   }
   return keys;

@@ -17,6 +17,11 @@ import natureXml from './csl-styles/nature.csl?raw';
 import scienceXml from './csl-styles/science.csl?raw';
 import springerBasicAuthorDateXml from './csl-styles/springer-basic-author-date.csl?raw';
 import vancouverXml from './csl-styles/vancouver.csl?raw';
+import {
+  citationClusterItemKeys,
+  toCitationClusterItems,
+  type CitationClusterInput,
+} from './manuscriptCitationTokens';
 import { type ReferenceLike } from './manuscriptTypes';
 import { decodeXmlEntities } from './manuscriptXmlEntities';
 
@@ -245,14 +250,78 @@ const plainTextFromHtml = (html: string): string =>
 export const cslClusterKey = (citationKeys: string[]): string =>
   citationKeys.join('\u001f');
 
+// CSL wants the locator split into a label and a value ("p. 42" → page, "42").
+// Anything it has no label for (Pandoc's rule) is free text and travels as the
+// citation suffix instead, so it still reaches the rendered citation.
+const CSL_LOCATOR_LABELS: Record<string, string> = {
+  bk: 'book',
+  book: 'book',
+  chap: 'chapter',
+  chapter: 'chapter',
+  ch: 'chapter',
+  col: 'column',
+  column: 'column',
+  fig: 'figure',
+  figure: 'figure',
+  fol: 'folio',
+  folio: 'folio',
+  iss: 'issue',
+  issue: 'issue',
+  l: 'line',
+  line: 'line',
+  n: 'note',
+  note: 'note',
+  op: 'opus',
+  opus: 'opus',
+  p: 'page',
+  pp: 'page',
+  page: 'page',
+  pages: 'page',
+  para: 'paragraph',
+  paragraph: 'paragraph',
+  pt: 'part',
+  part: 'part',
+  sec: 'section',
+  section: 'section',
+  'sub verbo': 'sub verbo',
+  sv: 'sub verbo',
+  v: 'verse',
+  verse: 'verse',
+  vol: 'volume',
+  volume: 'volume',
+};
+
+type CslLocator = {
+  locator?: string;
+  label?: string;
+  suffix?: string;
+};
+
+export const cslLocatorFromText = (locator: string): CslLocator => {
+  const value = locator.trim();
+  if (value.length === 0) return {};
+  // A bare number is a page, the way Pandoc reads `[@key, 42]`.
+  if (/^\d+(?:\s*[-–,]\s*\d+)*$/.test(value)) {
+    return { locator: value, label: 'page' };
+  }
+  const match = /^([A-Za-z]+)\.?\s+(\S.*)$/.exec(value);
+  if (match === null) return { suffix: value };
+  const label = CSL_LOCATOR_LABELS[match[1].toLowerCase()];
+  return label === undefined
+    ? { suffix: value }
+    : { locator: match[2].trim(), label };
+};
+
 export const formatCslCitations = (
   engine: ManuscriptCiteprocEngine,
-  clusters: string[][],
+  clusters: readonly CitationClusterInput[],
 ): string[] => {
   const labels = clusters.map(() => '[?]');
   const orderedKeys = [
     ...new Set([
-      ...clusters.flat().filter((key) => engine.knownItemKeys.has(key)),
+      ...clusters
+        .flatMap(citationClusterItemKeys)
+        .filter((key) => engine.knownItemKeys.has(key)),
       ...engine.itemKeys,
     ]),
   ];
@@ -260,9 +329,21 @@ export const formatCslCitations = (
 
   const precedingCitations: [string, number][] = [];
   clusters.forEach((cluster, clusterIndex) => {
-    const citationItems = cluster
-      .filter((key) => engine.knownItemKeys.has(key))
-      .map((id) => ({ id }));
+    const citationItems = toCitationClusterItems(cluster)
+      .filter((item) => engine.knownItemKeys.has(item.citationKey))
+      .map((item) => {
+        const { locator, label, suffix } = cslLocatorFromText(item.locator);
+        const trailing = [suffix, item.suffix]
+          .filter((part) => part !== undefined && part.length > 0)
+          .join(' ');
+        return {
+          id: item.citationKey,
+          ...(locator === undefined ? {} : { locator, label }),
+          ...(item.prefix.length > 0 ? { prefix: item.prefix } : {}),
+          ...(trailing.length > 0 ? { suffix: trailing } : {}),
+          ...(item.suppressAuthor ? { 'suppress-author': true } : {}),
+        };
+      });
     if (citationItems.length === 0) return;
 
     const citationID = `manuscript-citation-${clusterIndex}`;

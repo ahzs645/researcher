@@ -1,3 +1,13 @@
+import {
+  CITATION_TOKEN,
+  citationClusterToToken,
+  emptyCitationItem,
+  parseCitationClusterToken,
+  type CitationClusterItem,
+} from './manuscriptCitationTokens';
+
+export type { CitationClusterItem };
+
 type JsonRecord = Record<string, unknown>;
 
 type MarkdownEditor<TBlock> = {
@@ -10,30 +20,12 @@ export type ManuscriptInlineNode =
   | { type: 'citation'; props: { citationKey: string }; content?: undefined }
   | { type: 'crossRef'; props: { refKey: string }; content?: undefined };
 
-export type CitationClusterItem = {
-  citationKey: string;
-  locator: string;
-  prefix: string;
-  suffix: string;
-  suppressAuthor: boolean;
-};
-
 // A citation cluster (`[@a; @b]`) is one semantic unit: the formatter renders it
 // as a single "(A, 2017; B, 2020)" label, so it must stay one inline node. But
 // BlockNote inline props are primitives, so the cluster's keys travel joined by
 // this separator inside the single `citationKey` prop.
 const CITATION_KEY_SEPARATOR = '; ';
 const STRUCTURED_CITATION_PREFIX = '__citation_cluster__:';
-
-const CITATION_TOKEN = /^\[[^\]\r\n]*@[^\]\r\n]+\]/;
-
-const emptyCitationItem = (citationKey: string): CitationClusterItem => ({
-  citationKey,
-  locator: '',
-  prefix: '',
-  suffix: '',
-  suppressAuthor: false,
-});
 
 const isCitationClusterItem = (value: unknown): value is CitationClusterItem =>
   isJsonRecord(value) &&
@@ -94,33 +86,7 @@ export const citationClusterToProp = (items: CitationClusterItem[]): string => {
 };
 
 export const citationTokenFromProp = (citationKey: string): string =>
-  `[${citationClusterFromProp(citationKey)
-    .map((item) => {
-      const prefix = item.prefix.length > 0 ? `${item.prefix} ` : '';
-      const locator = item.locator.length > 0 ? `, ${item.locator}` : '';
-      const suffix = item.suffix.length > 0 ? ` ${item.suffix}` : '';
-      return `${prefix}${item.suppressAuthor ? '-' : ''}@${item.citationKey}${locator}${suffix}`;
-    })
-    .join(CITATION_KEY_SEPARATOR)}]`;
-
-const citationClusterFromToken = (token: string): CitationClusterItem[] => {
-  const parts = token.slice(1, -1).split(';');
-  const parsed = parts.map((rawPart): CitationClusterItem | undefined => {
-    const part = rawPart.trim();
-    const match = /^(.*?)(-?)@([^\s,;]+)(?:,\s*(.*))?$/.exec(part);
-    if (match === null) return undefined;
-    return {
-      citationKey: match[3],
-      prefix: match[1].trim(),
-      locator: (match[4] ?? '').trim(),
-      suffix: '',
-      suppressAuthor: match[2] === '-',
-    };
-  });
-  return parsed.every((item): item is CitationClusterItem => item !== undefined)
-    ? parsed
-    : [];
-};
+  citationClusterToToken(citationClusterFromProp(citationKey));
 
 // BlockNote removes Markdown escapes while parsing. Keep their provenance in
 // the editable text with an invisible separator, then restore the backslash
@@ -178,7 +144,7 @@ const nextToken = (
   if (text[start] === '[') {
     const match = CITATION_TOKEN.exec(text.slice(start));
     if (match !== null) {
-      const cluster = citationClusterFromToken(match[0]);
+      const cluster = parseCitationClusterToken(match[0]);
       if (cluster.length === 0) return undefined;
       return {
         end: start + match[0].length,

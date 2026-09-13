@@ -1,9 +1,5 @@
 ---
 description: TypeScript best practices and conventions for the Twenty codebase, including strict typing, naming conventions, and type safety guidelines.
-alwaysApply: false
----
----
-description: TypeScript best practices and conventions for the Twenty codebase, including strict typing, naming conventions, and type safety guidelines.
 globs: ["**/*.ts", "**/*.tsx"]
 alwaysApply: false
 ---

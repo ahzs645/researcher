@@ -21,18 +21,20 @@ architectural decision: it runs **without the Twenty backend**. Instead, a
 browser.
 
 ### Runtime modes (`REACT_APP_DATA_MODE`)
-| Mode | Storage | Used by |
-| --- | --- | --- |
-| `local` | **Dexie / IndexedDB** in the browser | the GitHub Pages static demo |
-| `convex` | a Convex deployment (HTTP actions) | the "next step" backend (parity, not the default) |
-| in-memory | RAM | tests |
+
+| Mode      | Storage                              | Used by                                           |
+| --------- | ------------------------------------ | ------------------------------------------------- |
+| `local`   | **Dexie / IndexedDB** in the browser | the GitHub Pages static demo                      |
+| `convex`  | a Convex deployment (HTTP actions)   | the "next step" backend (parity, not the default) |
+| in-memory | RAM                                  | tests                                             |
 
 The deployed site (`.github/workflows/deploy-github-pages.yaml`) builds
 `twenty-front` with `REACT_APP_DATA_MODE=local` and publishes a fully static SPA.
 Every create/edit persists to the visitor's own IndexedDB — there is no server,
 no account, no sharing.
 
-### Research objects are *grafted on*, not backend standard-objects
+### Research objects are _grafted on_, not backend standard-objects
+
 `packages/twenty-front/src/modules/local-db/research/` appends research objects to
 the static metadata the bridge reads (`researchObjectModel.ts` is the source of
 truth). The nav is reshaped into four folders — **Lab/My research**, **Work**,
@@ -40,11 +42,20 @@ truth). The nav is reshaped into four folders — **Lab/My research**, **Work**,
 are repurposed. See `research/README.md` for the merge points.
 
 ### Two seed modes — this matters a lot for "what templates we have"
+
 `getResearchSeedMode.ts` decides what a fresh browser sees:
 
 - **`blank` (the default).** Visiting `/researcher/` gives an **empty** workspace.
   Journal templates list = **0** (screenshot `01`). No manuscripts, no templates,
   no starter scaffold — just "Add your first Journal template".
+
+  > **Superseded — this is the behaviour as assessed, not as it stands.**
+  > Blank mode now seeds the starter journal-template library
+  > (`getResearchStarterRecords`), so a fresh workspace has templates and no
+  > sample research records. See "Blank first-run — fixed" in the status list
+  > below, and `docs/offline-and-hosting.md` for current behaviour. Screenshot
+  > `01` records the old state.
+
 - **`demo` (opt-in via `/demo` or `?demo=1`).** Loads the coherent sample dataset:
   the 3 journal templates, 4 manuscripts (one fully written), figures, tables and
   references.
@@ -59,13 +70,13 @@ none of it.
 
 Defined in `researchObjectModel.ts`, surfaced under **Work**:
 
-| Object | Role in the paper process |
-| --- | --- |
-| `manuscript` | the paper/preprint/thesis/chapter (type, status, target venue, DOI, progress) |
-| `manuscriptSection` | a section: type + placement (front/main/back/supplement), **Markdown** body, word limit/count, include-in-export |
-| `figure` | numbered figure/table/scheme: `refKey` for cross-refs, caption, `tableData` (Markdown table), image as URL or data-URL |
-| `reference` | a bibliography entry stored as **CSL-JSON** (the source of truth), with a `citationKey` used in text as `[@key]` |
-| `journalTemplate` | the *format*: citation style + CSL style id + figure/table label templates + numbering scope + caption position + abstract word limit + two-column + output formats |
+| Object              | Role in the paper process                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `manuscript`        | the paper/preprint/thesis/chapter (type, status, target venue, DOI, progress)                                                                                       |
+| `manuscriptSection` | a section: type + placement (front/main/back/supplement), **Markdown** body, word limit/count, include-in-export                                                    |
+| `figure`            | numbered figure/table/scheme: `refKey` for cross-refs, caption, `tableData` (Markdown table), image as URL or data-URL                                              |
+| `reference`         | a bibliography entry stored as **CSL-JSON** (the source of truth), with a `citationKey` used in text as `[@key]`                                                    |
+| `journalTemplate`   | the _format_: citation style + CSL style id + figure/table label templates + numbering scope + caption position + abstract word limit + two-column + output formats |
 
 Authoring conventions (from the section field help): Markdown body, math as `$…$`,
 citations as `[@key]`, cross-refs as `[#fig:label]`.
@@ -75,8 +86,8 @@ citations as `[@key]`, cross-refs as `[#fig:label]`.
 ## 3. The Compose pipeline (what was tested live)
 
 `/compose` (`ManuscriptComposerPage.tsx`, nav "Compose paper") is a single-column
-editor with five panels. Tested against the seeded *"Topological insulator
-substrates for robust qubits"* manuscript:
+editor with five panels. Tested against the seeded _"Topological insulator
+substrates for robust qubits"_ manuscript:
 
 1. **Sections** — pick/add a section; body edits in a WYSIWYG (BlockNote) editor
    (screenshot `03`). Word count auto-updates on save.
@@ -89,7 +100,8 @@ substrates for robust qubits"* manuscript:
    Zotero** (user/group library + API key). A live **CSL-formatted bibliography**
    ("Formatted references") renders above the list (screenshot `04`).
 
-### Does it work? Yes — for content authored *in the tool*.
+### Does it work? Yes — for content authored _in the tool_.
+
 Clicking **Export → Word (.docx)** produced a valid `.docx`
 (`sample-export.docx` in this folder) containing: the title, Abstract,
 Introduction with superscript numeric citations (¹,²,³), Figure 1 caption, a real
@@ -98,14 +110,15 @@ and a numbered bibliography. `file` confirms "Microsoft Word 2007+"; the zip has
 proper `document.xml`, `styles.xml`, `numbering.xml`, footnotes/endnotes.
 
 ### Templates we have (exactly three) — screenshot `02`
-| Name | Citation style | CSL id | Numbering | Figure label | Two-col |
-| --- | --- | --- | --- | --- | --- |
-| Nature (numeric, superscript) | Superscript ¹ | `nature` | Continuous | `Figure {n}` | No |
-| IEEE Transactions | Numeric [1] | `ieee` | Continuous | `Fig. {n}` | Yes |
-| Generic (author–date) | Author–date | `apa` | Continuous | `Figure {n}` | No |
+
+| Name                          | Citation style | CSL id   | Numbering  | Figure label | Two-col |
+| ----------------------------- | -------------- | -------- | ---------- | ------------ | ------- |
+| Nature (numeric, superscript) | Superscript ¹  | `nature` | Continuous | `Figure {n}` | No      |
+| IEEE Transactions             | Numeric [1]    | `ieee`   | Continuous | `Fig. {n}`   | Yes     |
+| Generic (author–date)         | Author–date    | `apa`    | Continuous | `Figure {n}` | No      |
 
 These exist **only in `demo` mode**. CSL styles are fetched live from the jsDelivr
-CSL repo (`manuscriptCsl.ts`), so in principle *any* style id works — but only
+CSL repo (`manuscriptCsl.ts`), so in principle _any_ style id works — but only
 with network at format time; offline falls back to a built-in formatter.
 
 ---
@@ -114,22 +127,22 @@ with network at format time; offline falls back to a built-in formatter.
 
 Mapping the real folder to the platform exposes the gaps:
 
-| Drive item | Where it'd go | Blocker |
-| --- | --- | --- |
-| `HHSC 490 Manuscript.pdf` (thesis) | `manuscript` (THESIS) + sections | **No manuscript importer.** Body must be retyped as Markdown sections. |
-| `Bertasson_ijerph-air-schools.pdf` (published IJERPH paper) | target format / a `reference` | **No IJERPH/MDPI template.** Add by DOI works only online. |
-| `Submission file` (PDF) | `manuscript` (SUBMITTED) | same — no PDF ingest |
-| `Grant Project.docx`, `Proposal.docx`, `TF.docx` | **Funding** pipeline (`grantApplication`/`applicationSection`/`reusableAnswer`) — *not* the paper composer | no DOCX import there either |
-| `…Air Quality` Doc, `Things to incorporate` Doc | `note` / `reusableAnswer` | manual copy-paste |
-| `Thesis Presentation Graph` (Sheets) | `dataset` → `figure` | **No data→figure/chart.** Upload a static image only. |
-| `2018 Data` / `Data` / `Map qgis` folders | `dataset` (metadata) / `figure` (map image) | no file/folder ingest; QGIS maps are just images |
-| `…Presentation` (Slides) | — | no "presentation/output" object |
+| Drive item                                                  | Where it'd go                                                                                              | Blocker                                                                |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `HHSC 490 Manuscript.pdf` (thesis)                          | `manuscript` (THESIS) + sections                                                                           | **No manuscript importer.** Body must be retyped as Markdown sections. |
+| `Bertasson_ijerph-air-schools.pdf` (published IJERPH paper) | target format / a `reference`                                                                              | **No IJERPH/MDPI template.** Add by DOI works only online.             |
+| `Submission file` (PDF)                                     | `manuscript` (SUBMITTED)                                                                                   | same — no PDF ingest                                                   |
+| `Grant Project.docx`, `Proposal.docx`, `TF.docx`            | **Funding** pipeline (`grantApplication`/`applicationSection`/`reusableAnswer`) — _not_ the paper composer | no DOCX import there either                                            |
+| `…Air Quality` Doc, `Things to incorporate` Doc             | `note` / `reusableAnswer`                                                                                  | manual copy-paste                                                      |
+| `Thesis Presentation Graph` (Sheets)                        | `dataset` → `figure`                                                                                       | **No data→figure/chart.** Upload a static image only.                  |
+| `2018 Data` / `Data` / `Map qgis` folders                   | `dataset` (metadata) / `figure` (map image)                                                                | no file/folder ingest; QGIS maps are just images                       |
+| `…Presentation` (Slides)                                    | —                                                                                                          | no "presentation/output" object                                        |
 
 ### Prioritized gap list
 
 1. **No ingest of existing documents (the #1 blocker).** A researcher's papers
-   already *exist* as `.docx`/`.pdf`/Google Docs. The composer can only author
-   from scratch — only *references* import (BibTeX/CSL/DOI/Zotero). Grafting a
+   already _exist_ as `.docx`/`.pdf`/Google Docs. The composer can only author
+   from scratch — only _references_ import (BibTeX/CSL/DOI/Zotero). Grafting a
    DOCX→sections importer (e.g. `mammoth` → Markdown) would unlock the whole
    real-world workflow.
 2. **Bare first-run has nothing.** Default `blank` mode ships zero templates and
@@ -155,7 +168,7 @@ Mapping the real folder to the platform exposes the gaps:
 
 ## 5. Recommendation
 
-The format *engine* is solid and genuinely works end-to-end (sections → figures →
+The format _engine_ is solid and genuinely works end-to-end (sections → figures →
 CSL references → DOCX/PDF, offline). The platform is currently a strong
 **authoring + format** tool but a weak **ingest** tool, so it can't yet absorb an
 existing body of work like the Drive folder. The highest-leverage next steps, in
@@ -163,8 +176,8 @@ order: (1) a DOCX/Markdown **manuscript importer**, (2) a **starter template pac
 in blank mode** + a journal/template picker, (3) **section scaffolding** driven by
 the chosen `journalTemplate`.
 
-*Screenshots `01`–`04` and `sample-export.docx` in this folder are the captured
-evidence from the live demo run.*
+_Screenshots `01`–`04` and `sample-export.docx` in this folder are the captured
+evidence from the live demo run._
 
 ---
 

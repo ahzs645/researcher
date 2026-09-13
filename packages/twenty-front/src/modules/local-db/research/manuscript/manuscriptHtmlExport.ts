@@ -11,6 +11,11 @@ import {
 } from './manuscriptCitations';
 import { formatManuscriptAuthorLine } from './manuscriptContributors';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { withCitationFormattingReport } from './manuscriptExportProvenance';
+import {
+  citationFormattingFailed,
+  describeCitationProvenance,
+} from './manuscriptCitationProvenance';
 import { renderManuscriptDiagrams } from './manuscriptDiagram';
 import { type ManuscriptTableStyle } from './manuscriptDocxTable';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
@@ -484,6 +489,9 @@ export const exportManuscriptToHtml = async (
     '<body>',
     toolbarHtml(tableStyle),
     '<main class="manuscript">',
+    citationFormattingFailed(prepared.citationProvenance)
+      ? `<aside role="alert">${escapeHtml(describeCitationProvenance(prepared.citationProvenance))}</aside>`
+      : '',
     titleBlockHtml(prepared, context),
     outlineHtml(state.outline),
     bodyHtml,
@@ -502,11 +510,16 @@ export const manuscriptHtmlExporter: ManuscriptExporter = {
   label: 'HTML (self-contained)',
   formats: ['HTML'],
   offline: true,
-  export: async (bundle): Promise<ExportFile[]> => [
-    {
-      filename: `${slugifyTitle(bundle.metadata.title)}.html`,
-      mimeType: 'text/html',
-      content: await exportManuscriptToHtml(bundle),
-    },
-  ],
+  export: async (bundle): Promise<ExportFile[]> => {
+    const prepared = await prepareManuscriptBundleWithCsl(bundle, {
+      citationAnchors: true,
+    });
+    return withCitationFormattingReport(prepared, [
+      {
+        filename: `${slugifyTitle(prepared.metadata.title)}.html`,
+        mimeType: 'text/html',
+        content: await exportManuscriptToHtml(prepared),
+      },
+    ]);
+  },
 };

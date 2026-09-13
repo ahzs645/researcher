@@ -1,8 +1,24 @@
-<!-- Generated from docs/assistant-brief.md by scripts/build-agent-docs.mjs. Do not edit AGENTS.md directly; edit the source and re-run the script. -->
+<!--
+  Canonical source for the root assistant briefs.
 
-# AGENTS.md
+  CLAUDE.md and AGENTS.md are GENERATED from this file by
+  `scripts/build-agent-docs.mjs`. Edit this file, then run:
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+      node scripts/build-agent-docs.mjs
+
+  Placeholders, substituted per target:
+    {{FILENAME}}       CLAUDE.md            | AGENTS.md
+    {{ASSISTANT}}      Claude Code (…)      | Codex (…)
+    {{ASSISTANT_WEB}}  Claude Code web      | Codex web
+
+  Everything else is shared, so an instruction added here reaches both
+  assistants. That is the point: the pointer to the manuscript workflow once
+  lived in AGENTS.md alone, and Claude sessions could not find the format.
+-->
+
+# {{FILENAME}}
+
+This file provides guidance to {{ASSISTANT}} when working with code in this repository.
 
 ## Project Overview
 
@@ -297,7 +313,7 @@ IMPORTANT: Use Context7 for code generation, setup or configuration steps, or li
 
 ## Dev Environment Setup
 
-All dev environments (Codex web, Cursor, local) use one script:
+All dev environments ({{ASSISTANT_WEB}}, Cursor, local) use one script:
 
 ```bash
 bash packages/twenty-utils/setup-dev-env.sh

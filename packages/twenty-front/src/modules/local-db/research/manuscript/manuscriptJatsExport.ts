@@ -2,6 +2,7 @@ import { isNonEmptyString } from '@sniptt/guards';
 
 import { slugifyTitle, type ManuscriptBundle } from './manuscriptAssembly';
 import { prepareManuscriptBundleWithCsl } from './manuscriptCslIntegration';
+import { withCitationFormattingReport } from './manuscriptExportProvenance';
 import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import {
@@ -379,12 +380,12 @@ export const jatsXmlExporter: ManuscriptExporter = {
     const formattedBundle = await prepareManuscriptDiagramImages(
       await prepareManuscriptBundleWithCsl(bundle),
     );
-    return [
+    return withCitationFormattingReport(formattedBundle, [
       {
         filename: `${slugifyTitle(formattedBundle.metadata.title)}.jats.xml`,
         mimeType: 'application/xml',
         content: buildJatsArticle(formattedBundle),
       },
-    ];
+    ]);
   },
 };

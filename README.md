@@ -1,169 +1,134 @@
-<p align="center">
-  <a href="https://www.twenty.com">
-    <img src="./packages/twenty-website-new/public/images/core/logo.svg" width="100px" alt="Twenty logo" />
-  </a>
-</p>
+# researcher
 
-<h2 align="center" >The #1 Open-Source CRM</h2>
+A research-team workspace and manuscript composer, built as a fork of
+[Twenty CRM](https://github.com/twentyhq/twenty).
 
-<p align="center"><a href="https://twenty.com"><img src="./packages/twenty-website-new/public/images/readme/globe-icon.svg" width="12" height="12"/> Website</a> · <a href="https://docs.twenty.com"><img src="./packages/twenty-website-new/public/images/readme/book-icon.svg" width="12" height="12"/> Documentation</a> · <a href="https://github.com/orgs/twentyhq/projects/1"><img src="./packages/twenty-website-new/public/images/readme/map-icon.svg" width="12" height="12"/> Roadmap </a> · <a href="https://discord.gg/cx5n4Jzs57"><img src="./packages/twenty-website-new/public/images/readme/discord-icon.svg" width="12" height="12"/> Discord</a> · <a href="https://www.figma.com/file/xt8O9mFeLl46C5InWwoMrN/Twenty"><img src="./packages/twenty-website-new/public/images/readme/figma-icon.webp"  width="12" height="12"/>  Figma</a></p>
+It keeps Twenty's object, view and navigation machinery and grafts a research
+domain onto it — grants, grant discovery, applications, obligations, projects,
+datasets, references and **manuscripts** — then adds a manuscript composer that
+imports an existing paper, formats it against a target journal, and exports
+DOCX, PDF, HTML, JATS or a journal submission package.
 
-<p align="center">
-  <a href="https://www.twenty.com">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website-new/public/images/readme/github-cover-dark.webp" />
-      <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website-new/public/images/readme/github-cover-light.webp" />
-      <img src="./packages/twenty-website-new/public/images/readme/github-cover-light.webp" alt="Twenty banner" />
-    </picture>
-  </a>
-</p>
+**It runs without the Twenty backend.** A browser-side data bridge serves the
+standard object machinery from IndexedDB, so the whole app builds to a static
+site with no server, no account and no database.
 
-<br />
+---
 
-# Why Twenty
-
-Twenty gives technical teams the building blocks for a custom CRM that meets complex business needs and quickly adapts as the business evolves. Twenty is the CRM you build, ship, and version like the rest of your stack.
-
-<a href="https://twenty.com/resources/why-twenty"><img src="./packages/twenty-website-new/public/images/readme/star-icon.svg" width="14" height="14"/> Learn more about why we built Twenty</a>
-
-<br />
-
-# Installation
-
-### <img src="./packages/twenty-website-new/public/images/readme/globe-icon.svg" width="14" height="14"/> Cloud
-
-The fastest way to get started. Sign up at [twenty.com](https://twenty.com) and spin up a workspace in under a minute, with no infrastructure to manage and always up to date.
-
-### <img src="./packages/twenty-website-new/public/images/readme/book-icon.svg" width="14" height="14"/> Build an app
-
-Scaffold a new app with the Twenty CLI:
+## Quick start
 
 ```bash
-npx create-twenty-app my-app
+yarn install
+npx nx build twenty-shared
+npx nx start twenty-front
 ```
 
-Define objects, fields, and views as code:
+Open `http://localhost:3001`. On localhost the local (Dexie/IndexedDB) bridge
+engages automatically — you do **not** need Postgres, Redis, `twenty-server`
+or the worker to use the research workspace or the manuscript composer.
 
-```ts
-import { defineObject, FieldType } from 'twenty-sdk/define';
+| URL                        | What it does                                                                  |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `/`                        | Fresh workspace — journal templates seeded, no sample research records        |
+| `/demo` or `?demo=1`       | Seeds the sample dataset: journal templates, manuscripts, figures, references |
+| `/reset`                   | Wipes IndexedDB back to blank                                                 |
+| `/compose?manuscript=<id>` | The manuscript composer                                                       |
 
-export default defineObject({
-  nameSingular: 'deal',
-  namePlural: 'deals',
-  labelSingular: 'Deal',
-  labelPlural: 'Deals',
-  fields: [
-    { name: 'name', label: 'Name', type: FieldType.TEXT },
-    { name: 'amount', label: 'Amount', type: FieldType.CURRENCY },
-    { name: 'closeDate', label: 'Close Date', type: FieldType.DATE_TIME },
-  ],
-});
-```
+A fresh `/` is not empty: blank mode seeds the starter journal-template
+library, so you can format a paper immediately. What it has none of is sample
+manuscripts, figures or references — for a worked example, start at `/demo`.
 
-Then ship it to your workspace:
+### Writing a manuscript
+
+Manuscripts are the door to the composer: open a `manuscript` record and use
+**Open in composer** (⌘⏎ in the side panel) or the button on the record page.
+There is no separate "Compose" nav item.
+
+- **[`docs/manuscript-format.md`](docs/manuscript-format.md)** — the manuscript
+  format on one page: record model, live-token grammar, journal templates,
+  export targets, preflight rules. Self-contained, so it can be handed to a
+  collaborator or an assistant that has no checkout.
+- **[`packages/twenty-front/src/modules/local-db/research/AGENTS.md`](packages/twenty-front/src/modules/local-db/research/AGENTS.md)**
+  — the authoritative workflow for transposing an existing paper into
+  Manuscript Compose records and exports, with a fidelity checklist. Read this
+  before importing a real paper.
+
+## Runtime modes
+
+Selected by `REACT_APP_DATA_MODE`, a URL path, or a query parameter:
+
+| Mode      | Storage                                 | Used by                                          |
+| --------- | --------------------------------------- | ------------------------------------------------ |
+| `local`   | Dexie / IndexedDB in the browser        | the static Pages build; the default on localhost |
+| `convex`  | a [Convex](convex/README.md) deployment | backend parity; not the default                  |
+| in-memory | RAM                                     | tests                                            |
+
+`.github/workflows/deploy-github-pages.yaml` builds `twenty-front` with
+`REACT_APP_DATA_MODE=local` and publishes a fully static SPA to GitHub Pages.
+Every edit persists to the visitor's own IndexedDB — there is no server and
+nothing is shared.
+
+Citation formatting, importing, and DOCX/PDF/HTML/JATS export all run with no
+network at all. See [`docs/offline-and-hosting.md`](docs/offline-and-hosting.md)
+for exactly what works offline, the four features that do need the network, and
+what no-server genuinely cannot do (no sharing, no sync, one browser profile).
+
+## What was added to Twenty
+
+| Area                                                                   | Where                                                  |
+| ---------------------------------------------------------------------- | ------------------------------------------------------ |
+| Research objects, views, nav, seed data                                | `packages/twenty-front/src/modules/local-db/research/` |
+| Manuscript composer, import, export                                    | `.../research/manuscript/`                             |
+| Funding funnel — discovery, assessment, applications, reusable answers | `.../research/research*.ts`                            |
+| Obligations tracker and project roster                                 | `.../research/` + `ObligationsPage`                    |
+| Browser data bridge                                                    | `packages/twenty-front/src/modules/local-db/`          |
+| Convex parity runtime                                                  | `convex/`                                              |
+
+The nav is regrouped into four folders — **Lab**, **Work**, **Funding**,
+**Discovery** — and two CRM objects are repurposed: People → _Collaborators_,
+Companies → _Institutions_. See
+[`.../research/README.md`](packages/twenty-front/src/modules/local-db/research/README.md)
+for the graft points and design constraints.
+
+## Documentation
+
+- [`docs/`](docs/README.md) — index of the docs in this fork
+- [`docs/manuscript-format.md`](docs/manuscript-format.md) — the manuscript format
+- [`docs/offline-and-hosting.md`](docs/offline-and-hosting.md) — running with no
+  server: what works offline, what needs the network, and the real limits
+- [`docs/paper-format-assessment/`](docs/paper-format-assessment/README.md) —
+  how the platform is set up, and a hands-on assessment of the paper pipeline
+- [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) — working agreements for
+  coding assistants. Both are generated from `docs/assistant-brief.md` —
+  edit that, not them
+- [Twenty's documentation](https://docs.twenty.com) still applies to the CRM
+  core — objects, views, fields, the frontend architecture
+
+## Development
 
 ```bash
-npx twenty deploy
+# Test — prefer a single file, then the research suite
+npx jest packages/twenty-front/src/modules/local-db/research \
+  --config=packages/twenty-front/jest.config.mjs --runInBand
+
+# Type-check and lint
+npx nx typecheck twenty-front
+npx nx lint:diff-with-main twenty-front
+
+# Regenerate the two assistant briefs from docs/assistant-brief.md
+node scripts/build-agent-docs.mjs
 ```
 
-See the [app development guide](https://docs.twenty.com/developers/extend/apps/getting-started) for objects, views, agents, and logic functions.
+The full backend (`twenty-server`, Postgres, Redis, the worker) is only needed
+for work on the upstream CRM server itself. For that,
+`bash packages/twenty-utils/setup-dev-env.sh` starts the services; see
+[`CLAUDE.md`](CLAUDE.md) for the full command set.
 
-### <img src="./packages/twenty-website-new/public/images/readme/rocket-icon.svg" width="14" height="14"/> Self-hosting
+## Stack
 
-Run Twenty on your own infrastructure with [Docker Compose](https://docs.twenty.com/developers/self-host/capabilities/docker-compose), or contribute locally via the [local setup guide](https://docs.twenty.com/developers/contribute/capabilities/local-setup).
+TypeScript · Nx monorepo · React 18 with Jotai, Linaria and Lingui · Dexie
+(IndexedDB) · Convex · NestJS, PostgreSQL and Redis for the upstream server.
 
-<br />
-<br />
+## License
 
-# Everything you need
-
-Twenty gives you the building blocks of a modern CRM (objects, views, workflows, and agents) and lets you extend them as code. Here's a tour of what's in the box.
-
-Want to go deeper? Read the <a href="https://docs.twenty.com/user-guide/introduction"><img src="./packages/twenty-website-new/public/images/readme/planner-icon.svg" width="14" height="14"/> User Guide</a> for product walkthroughs, or the <a href="https://docs.twenty.com"><img src="./packages/twenty-website-new/public/images/readme/book-icon.svg" width="14" height="14"/> Documentation</a> for developer reference.
-
-<table align="center">
-  <tr>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website-new/public/images/readme/v2-build-apps-dark.webp" />
-        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website-new/public/images/readme/v2-build-apps-light.webp" />
-        <img src="./packages/twenty-website-new/public/images/readme/v2-build-apps-light.webp" alt="Create your apps" />
-      </picture>
-      <p align="center"><a href="https://docs.twenty.com/developers/extend/apps/getting-started"><img src="./packages/twenty-website-new/public/images/readme/code-icon.svg" width="16" height="16"/> Learn more about apps in doc</a></p>
-    </td>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website-new/public/images/readme/v2-version-control-dark.webp" />
-        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website-new/public/images/readme/v2-version-control-light.webp" />
-        <img src="./packages/twenty-website-new/public/images/readme/v2-version-control-light.webp" alt="Stay on top with version control" />
-      </picture>
-      <p align="center"><a href="https://docs.twenty.com/developers/extend/apps/publishing"><img src="./packages/twenty-website-new/public/images/readme/monitor-icon.svg" width="16" height="16"/> Learn more about version control in doc</a></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website-new/public/images/readme/v2-all-tools-dark.webp" />
-        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website-new/public/images/readme/v2-all-tools-light.webp" />
-        <img src="./packages/twenty-website-new/public/images/readme/v2-all-tools-light.webp" alt="All the tools you need to build anything" />
-      </picture>
-      <p align="center"><a href="https://docs.twenty.com/developers/extend/apps/building"><img src="./packages/twenty-website-new/public/images/readme/rocket-icon.svg" width="16" height="16"/> Learn more about primitives in doc</a></p>
-    </td>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website-new/public/images/readme/v2-tools-dark.webp" />
-        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website-new/public/images/readme/v2-tools-light.webp" />
-        <img src="./packages/twenty-website-new/public/images/readme/v2-tools-light.webp" alt="Customize your layouts" />
-      </picture>
-      <p align="center"><a href="https://docs.twenty.com/user-guide/layout/overview"><img src="./packages/twenty-website-new/public/images/readme/planner-icon.svg" width="16" height="16"/> Learn more about layouts in doc</a></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website-new/public/images/readme/v2-ai-agents-dark.webp" />
-        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website-new/public/images/readme/v2-ai-agents-light.webp" />
-        <img src="./packages/twenty-website-new/public/images/readme/v2-ai-agents-light.webp" alt="AI agents and chats" />
-      </picture>
-      <p align="center"><a href="https://docs.twenty.com/user-guide/ai/overview"><img src="./packages/twenty-website-new/public/images/readme/message-icon.svg" width="16" height="16"/> Learn more about AI in doc</a></p>
-    </td>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website-new/public/images/readme/v2-crm-tools-dark.webp" />
-        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website-new/public/images/readme/v2-crm-tools-light.webp" />
-        <img src="./packages/twenty-website-new/public/images/readme/v2-crm-tools-light.webp" alt="Plus all the tools of a good CRM" />
-      </picture>
-      <p align="center"><a href="https://docs.twenty.com/user-guide/introduction"><img src="./packages/twenty-website-new/public/images/readme/star-icon.svg" width="16" height="16"/> Learn more about CRM features in doc</a></p>
-    </td>
-  </tr>
-</table>
-
-<br />
-
-# Stack
-
-- <a href="https://www.typescriptlang.org/"><img src="./packages/twenty-website-new/public/images/readme/stack-typescript.svg" width="14" height="14"/> TypeScript</a>
-- <a href="https://nx.dev/"><img src="./packages/twenty-website-new/public/images/readme/stack-nx.svg" width="14" height="14"/> Nx</a>
-- <a href="https://nestjs.com/"><img src="./packages/twenty-website-new/public/images/readme/stack-nestjs.svg" width="14" height="14"/> NestJS</a>, with <a href="https://bullmq.io/">BullMQ</a>, <a href="https://www.postgresql.org/"><img src="./packages/twenty-website-new/public/images/readme/stack-postgresql.svg" width="14" height="14"/> PostgreSQL</a>, <a href="https://redis.io/"><img src="./packages/twenty-website-new/public/images/readme/stack-redis.svg" width="14" height="14"/> Redis</a>
-- <a href="https://reactjs.org/"><img src="./packages/twenty-website-new/public/images/readme/stack-react.svg" width="14" height="14"/> React</a>, with <a href="https://jotai.org/">Jotai</a>, <a href="https://linaria.dev/">Linaria</a> and <a href="https://lingui.dev/">Lingui</a>
-
-
-
-# Thanks
-
-<p align="center">
-  <a href="https://www.chromatic.com/"><img src="./packages/twenty-website-new/public/images/readme/chromatic.webp" height="28" alt="Chromatic" /></a>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://greptile.com"><img src="./packages/twenty-website-new/public/images/readme/greptile.webp" height="28" alt="Greptile" /></a>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://sentry.io/"><img src="./packages/twenty-website-new/public/images/readme/sentry.webp" height="28" alt="Sentry" /></a>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://crowdin.com/"><img src="./packages/twenty-website-new/public/images/readme/crowdin.webp" height="28" alt="Crowdin" /></a>
-</p>
-
-  Thanks to these amazing services that we use and recommend for UI testing (Chromatic), code review (Greptile), catching bugs (Sentry) and translating (Crowdin).
-
-
-# Join the Community
-
-<p><a href="https://github.com/twentyhq/twenty"><img src="./packages/twenty-website-new/public/images/readme/star-icon.svg" width="12" height="12"/> Star the repo</a> · <a href="https://discord.gg/cx5n4Jzs57"><img src="./packages/twenty-website-new/public/images/readme/discord-icon.svg" width="12" height="12"/> Discord</a> · <a href="https://github.com/twentyhq/twenty/discussions"><img src="./packages/twenty-website-new/public/images/readme/message-icon.svg" width="12" height="12"/> Feature requests</a> · <a href="https://github.com/orgs/twentyhq/projects/1/views/35"><img src="./packages/twenty-website-new/public/images/readme/rocket-icon.svg" width="12" height="12"/> Releases</a> · <a href="https://twitter.com/twentycrm"><img src="./packages/twenty-website-new/public/images/readme/x-icon.svg" width="12" height="12"/> X</a> · <a href="https://www.linkedin.com/company/twenty/"><img src="./packages/twenty-website-new/public/images/readme/linkedin-icon.svg" width="12" height="12"/> LinkedIn</a> · <a href="https://twenty.crowdin.com/twenty"><img src="./packages/twenty-website-new/public/images/readme/language-icon.svg" width="12" height="12"/> Crowdin</a> · <a href="https://github.com/twentyhq/twenty/contribute"><img src="./packages/twenty-website-new/public/images/readme/code-icon.svg" width="12" height="12"/> Contribute</a></p>
+AGPL-3.0, inherited from Twenty. See [LICENSE](LICENSE).

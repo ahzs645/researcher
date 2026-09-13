@@ -1,66 +1,74 @@
-# Contributing to Twenty
+# Contributing to researcher
 
-Thanks for considering contributing to Twenty!
+Thanks for considering a contribution.
 
-Please make sure to go through the [documentation](https://docs.twenty.com) before.
+`researcher` is a research-team workspace and manuscript composer, built as a
+fork of [Twenty](https://github.com/twentyhq/twenty). Start with the
+[root README](../README.md) for what the project is, and
+[`CLAUDE.md`](../CLAUDE.md) for the full command set.
 
-<br>
+## Run the app
 
+The app runs **without a backend** — a browser-side Dexie/IndexedDB bridge
+serves the object machinery, so no server, Postgres or Redis is needed.
 
-## Good first issues
-
-Good first issues are a great way to start contributing and get familiar with the codebase. You can find them on by filtering on the [good first issue](https://github.com/twentyhq/twenty/labels/good%20first%20issue) label.
-
-## Issue assignment
-
-To avoid conflicts, we follow these guidelines:
-
-1. For `Good First Issue` and `Experienced Contributor` issues without `size: long` labels, we'll merge the first PRs that meet our [code quality standards](https://docs.twenty.com/developers). **We don't assign contributors to these issues**. For `priority: high` issues, our core team will step in within days if no adequate contributions are received.
-2. For `size: long` Issues, assigned contributors have one week to submit their first draft PR.
-
-## How to Contribute
-
-1. **Fork the Repository:** Click on the 'Fork' button in the upper right corner of the repository's GitHub page. This will create a copy of the repository in your GitHub account.
-
-2. **Clone the Repository:** Clone your forked repository to your local machine using `git clone`.
-
-```shell
-git clone https://github.com/yourusername/twenty.git
-cd twenty
+```bash
+yarn install
+npx nx build twenty-shared   # once
+npx nx start twenty-front
 ```
 
-3. **Create a New Branch:** Create a new branch for your changes instead of using the main branch.
+Open `http://localhost:3001/demo` (a bare `/` is an empty workspace by design;
+`/reset` wipes it).
 
-```shell
-git checkout -b your-branch-name
+The full backend (`twenty-server`, Postgres, Redis, the worker) is only needed
+for work on the vendored upstream CRM server. For that,
+`bash packages/twenty-utils/setup-dev-env.sh` starts the services.
+
+## Before you open a pull request
+
+```bash
+# Test — prefer a single file, then the research suite
+npx jest packages/twenty-front/src/modules/local-db/research \
+  --config=packages/twenty-front/jest.config.mjs --runInBand
+
+# Type-check and lint (lint:diff-with-main is the fast path)
+npx nx typecheck twenty-front
+npx nx lint:diff-with-main twenty-front
+npx nx lint:diff-with-main twenty-front --configuration=fix
 ```
 
-4. **Make Changes:** Make your desired changes and ensure that your code adheres to Twenty's coding standards.
+Code style follows the guidelines in [`CLAUDE.md`](../CLAUDE.md) and
+[`.cursor/rules/`](../.cursor/rules): functional components only, named exports
+only, no `any`, types over interfaces, kebab-case filenames, Jotai for state and
+Linaria for styling.
 
+If your change touches the research domain or the manuscript composer, read
+`packages/twenty-front/src/modules/local-db/research/AGENTS.md` and
+[`docs/manuscript-format.md`](../docs/manuscript-format.md) first.
 
-5. **Test Locally:** Test your changes locally to ensure they work as expected.
+`AGENTS.md` and `CLAUDE.md` at the repo root are **generated** from
+`docs/assistant-brief.md` — edit that file and run
+`node scripts/build-agent-docs.mjs`, never the generated files.
 
+## How to contribute
 
-6. **Commit Changes:** Commit your changes with a clear and concise commit message.
+1. **Fork** this repository and **clone** your fork.
+2. **Create a branch** for your change rather than working on `main`.
+3. **Make your change**, keeping it focused — a smaller diff is reviewed faster.
+4. **Run the tests, type-check and lint** commands above.
+5. **Commit** with a clear message and **push** to your fork.
+6. **Open a pull request against this repository** with a description of what
+   changed and why.
 
-```shell
-git commit -m "Add your detailed description here"
-```
+## Reporting issues
 
-7. **Push Changes:** Push your changes to your forked repository.
+Open issues and pull requests on **this repository**
+(`ahzs645/researcher`) — not on the upstream Twenty tracker. Include as much
+detail as you can: what you expected, what happened, and how to reproduce it.
 
-```shell
-git push origin your-branch-name
-```
+Bugs in unmodified upstream Twenty code are best reported upstream; bugs in the
+research workspace, the local-db bridge or the manuscript composer belong here.
 
-8. **Create a Pull Request:** Go to the original Twenty repository and create a pull request. Please provide a detailed description of your changes. Submitting a PR means you agree to the CLA.
-
-9. **Code Review:** Your pull request will undergo a code review.
-
-10. **Merge:** Once approved, maintainers will merge your pull request into the main repository.
-
-
-
-## Reporting Issues
-
-If you face any issues or have suggestions, please feel free to [create an issue on Twenty's GitHub repository](https://github.com/twentyhq/twenty/issues/new). Please provide as much detail as possible.
+For security vulnerabilities, follow [`SECURITY.md`](SECURITY.md) instead of
+opening a public issue.

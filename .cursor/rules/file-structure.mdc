@@ -1,26 +1,68 @@
 ---
-description: File structure guidelines for Twenty CRM
+description: File structure guidelines for the researcher repo
 globs: []
 alwaysApply: true
 ---
 # File Structure Guidelines
 
 ## Directory Organization
+
+The real top-level layout of the frontend — the app this fork actually runs:
+
 ```
 packages/twenty-front/src/
-├── components/      # Reusable UI components
-├── pages/          # Route components  
-├── modules/        # Feature modules
-├── hooks/          # Custom hooks
-├── services/       # API services
-└── types/          # Type definitions
-
-packages/twenty-server/src/
-├── modules/        # Feature modules
-├── entities/       # Database entities
-├── dto/           # Data transfer objects
-└── utils/         # Helper functions
+├── config/             # Runtime/build configuration
+├── generated/          # Generated GraphQL types (core)
+├── generated-admin/    # Generated GraphQL types (admin)
+├── generated-metadata/ # Generated GraphQL types (metadata)
+├── hooks/              # App-level hooks
+├── loading/            # Loading / bootstrap UI
+├── locales/            # Lingui catalogs (*.po) — i18n is Lingui, not JSON
+├── localization/       # Locale wiring
+├── modules/            # Feature modules — the bulk of the code
+├── pages/              # Route-level components
+├── testing/            # Test helpers, mocks, decorators
+├── types/              # Shared type definitions
+└── utils/              # Helper functions
 ```
+
+There is no `src/components/` and no `src/services/` — shared components live
+in `src/modules/ui/` and in the `twenty-ui` package, and data access goes
+through the local-db bridge and Apollo, not a services folder.
+
+The research domain of this fork lives inside `modules/`:
+
+```
+packages/twenty-front/src/modules/local-db/
+├── data-source/        # GraphQL-over-Dexie data source and Apollo providers
+├── twenty-local/       # Bridge modes, seeding, workspace reset
+└── research/           # Research objects, views, nav, seed data
+    ├── manuscript/     # Composer: import, tokens, citations, exports
+    ├── import-wizard/  # Upload → map → review → commit → rollback
+    ├── components/     # Composer and editor UI
+    ├── hooks/
+    └── __tests__/
+```
+
+The vendored upstream server — **not run by this fork**, and only relevant when
+working on the upstream CRM backend:
+
+```
+packages/twenty-server/src/
+├── command/            # CLI commands
+├── constants/
+├── database/           # Data source config, instance/workspace commands
+├── engine/             # Core engine: metadata, API, auth, twenty-orm
+├── filters/            # Exception filters
+├── modules/            # Feature modules
+├── queue-worker/       # BullMQ worker entrypoint
+├── types/
+└── utils/
+```
+
+There is no `src/entities/` and no `src/dto/` at the server top level — entity
+and DTO files live inside the `engine/` and `modules/` feature folders next to
+the code that uses them.
 
 ## File Naming
 - **kebab-case** for all files and directories
@@ -43,29 +85,30 @@ export { UserList } from './user-list.component';
 export type { UserCardProps, UserListProps } from './types';
 
 // ✅ Usage - clean imports
-import { UserCard, UserList } from '@/components/user';
+import { UserCard, UserList } from '@/ui/components/user';
 ```
 
 ## Module Structure
 ```
-src/modules/user/
+src/modules/<feature>/
 ├── components/     # Module-specific components
-├── hooks/         # Module hooks
-├── services/      # API services
-├── types/         # Type definitions
-└── index.ts       # Module exports
+├── hooks/          # Module hooks
+├── states/         # Jotai atoms and selectors
+├── types/          # Type definitions
+├── utils/          # Pure helpers
+└── __tests__/      # Tests
 ```
 
 ## Import/Export Patterns
 ```typescript
 // ✅ Import organization
 // 1. External libraries
-import React from 'react';
-import styled from 'styled-components';
+import { styled } from '@linaria/react';
+import { useAtomValue } from 'jotai';
 
 // 2. Internal modules (absolute paths)
-import { Button } from '@/components/ui';
-import { UserService } from '@/services';
+import { Button } from 'twenty-ui/input';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
 // 3. Relative imports
 import { UserCardProps } from './types';
@@ -75,6 +118,9 @@ export const UserComponent = ({ user }: UserProps) => {
   // Component implementation
 };
 ```
+
+Styling is **Linaria** (`@linaria/react`), not styled-components, and state is
+**Jotai** (`@/ui/utilities/state/jotai/utils/createAtomState`), not Recoil.
 
 ## File Size Guidelines
 - **Components**: Under 300 lines
@@ -89,14 +135,16 @@ export const UserComponent = ({ user }: UserProps) => {
 .vscode/                       # VSCode settings
 ├── settings.json
 ├── extensions.json
-└── launch.json
+├── launch.json
+└── tasks.json
 
-.github/                       # GitHub workflows
+.github/                       # GitHub workflows and governance
 ├── workflows/
-└── templates/
+└── actions/
 
-.cursor/                       # Cursor rules
+.cursor/                       # Cursor rules and skills
 ├── rules/
+├── skills/
 └── environment.json
 ```
 

@@ -3,6 +3,12 @@ import { isDefined } from 'twenty-shared/utils';
 
 import { countWords, type ManuscriptBundle } from './manuscriptAssembly';
 import { isImageDataUrl } from './manuscriptImages';
+import {
+  citationFormattingReady,
+  describeCitationProvenance,
+  initialCitationProvenance,
+  requestedCitationStyleId,
+} from './manuscriptCitationProvenance';
 import { resolveSubmissionRequirementItems } from './manuscriptSubmissionRequirements';
 
 export type SubmissionMaterials = {
@@ -16,12 +22,7 @@ export type SubmissionMaterials = {
 export type SubmissionCheckSeverity = 'ERROR' | 'WARNING' | 'READY';
 
 export type SubmissionCheckTarget =
-  | 'write'
-  | 'titlePage'
-  | 'figures'
-  | 'references'
-  | 'submission'
-  | 'export';
+  'write' | 'titlePage' | 'figures' | 'references' | 'submission' | 'export';
 
 export type SubmissionCheck = {
   id: string;
@@ -184,6 +185,19 @@ export const validateSubmission = (
   const checks: SubmissionCheck[] = [];
   const abstractWords = countWords(bundle.metadata.abstract);
   const style = bundle.style;
+  // A style override must not inherit a successful check for another request.
+  const citationProvenance =
+    bundle.citationProvenance.requestedStyleId ===
+    requestedCitationStyleId(style.citationStyleId)
+      ? bundle.citationProvenance
+      : initialCitationProvenance(style.citationStyleId);
+  checks.push({
+    id: 'citation-style',
+    label: 'Citation formatting',
+    detail: describeCitationProvenance(citationProvenance),
+    severity: citationFormattingReady(citationProvenance) ? 'READY' : 'ERROR',
+    target: 'export',
+  });
   const hasTitle =
     isNonEmptyString(bundle.metadata.title) &&
     !/^untitled manuscript$/i.test(bundle.metadata.title.trim());

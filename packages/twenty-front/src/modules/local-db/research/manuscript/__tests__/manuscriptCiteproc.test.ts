@@ -322,3 +322,24 @@ describe('manuscript citeproc', () => {
     expect(formatted.bibliography[0].text).not.toMatch(/^1\./);
   });
 });
+
+describe('applied style evidence using the bundled engine', () => {
+  it('reports APA only after citeproc renders the citation and bibliography', async () => {
+    const source = buildManuscriptBundle({
+      manuscript: { id: 'provenance', name: 'Provenance fixture' },
+      sections: [{ id: 'body', name: 'Results', content: 'Result [@doe].' }],
+      figures: [],
+      references: [reference('doe', 'Doe', 2020, 'First')],
+      style: { citationStyleId: 'apa' },
+    });
+    const prepared = await prepareManuscriptBundleWithCsl(source);
+    expect(prepared.citationProvenance).toEqual({
+      requestedStyleId: 'apa',
+      appliedStyleId: 'apa',
+      engineOutcome: 'applied',
+    });
+    expect(prepared.fullMarkdown).toMatch(/Doe.*2020/);
+    expect(prepared.fullMarkdown).not.toContain('[@doe]');
+    expect(prepared.bibliography.length).toBeGreaterThan(0);
+  });
+});

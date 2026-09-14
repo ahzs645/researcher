@@ -34,6 +34,21 @@ describe('DOCX math conversion', () => {
     expect(components.length).toBeGreaterThan(3);
   });
 
+  it('keeps hidden limit slots before a summation operand for Word readers', () => {
+    for (const source of ['\\sum_{j} E_j', '\\sum^{n} E_j', '\\sum E_j']) {
+      const sum = latexToMathComponents(source)[0] as unknown as {
+        root: { rootKey: string }[];
+      };
+      expect(sum.root.map((child) => child.rootKey)).toEqual([
+        'm:naryPr',
+        'm:sub',
+        'm:sup',
+        'm:e',
+      ]);
+      expect(flattenText(sum.root[3])).toBe('Ej');
+    }
+  });
+
   it('keeps every character of a multi-character upright group', () => {
     expect(render('\\mathrm{abs}')).toBe('abs');
     expect(render('\\text{naive}')).toBe('naive');
@@ -56,10 +71,14 @@ describe('DOCX math conversion', () => {
     expect(render('\\tfrac{a}{b}')).toBe('ab');
   });
 
-  it('renders accents as combining marks rather than literal command names', () => {
-    expect(render('\\bar{x}')).toBe('x\u0304');
-    expect(render('\\hat{y}')).toBe('y\u0302');
-    expect(render('\\overline{x}')).toBe('x\u0304');
+  it('writes native accents over their full base with scripts outside the accent', () => {
+    const components = latexToMathComponents('\\hat{H}_{i,q}^{prop}');
+    const tree = JSON.stringify(components);
+    expect(tree).toContain('m:acc');
+    expect(tree).toContain('m:accPr');
+    expect(tree).toContain('m:sSubSup');
+    expect(render('\\hat{H}_{i,q}^{prop}')).toBe('Hi,qprop');
+    expect(tree).not.toContain('"root":["̂"]');
   });
 
   it('treats spacing macros as whitespace, not punctuation', () => {

@@ -1,4 +1,9 @@
 import {
+  createMathProtection,
+  protectMarkdownMath,
+} from './manuscriptMathProtection';
+
+import {
   CITATION_TOKEN,
   citationClusterToToken,
   emptyCitationItem,
@@ -582,22 +587,79 @@ const restoreEscapedTokens = (markdown: string): string => {
   return restoredMarkdown;
 };
 
+const mapEditorJson = (
+  value: unknown,
+  transform: (node: JsonRecord) => JsonRecord,
+): unknown => {
+  if (Array.isArray(value))
+    return value.map((child) => mapEditorJson(child, transform));
+  if (!isJsonRecord(value)) return value;
+  const node = transform(value);
+  return Object.fromEntries(
+    Object.entries(node).map(([key, child]) => [
+      key,
+      mapEditorJson(child, transform),
+    ]),
+  );
+};
+
 export const markdownToManuscriptBlocks = <TBlock>(
   editor: MarkdownEditor<TBlock>,
   markdown: string,
-): TBlock[] =>
-  manuscriptTokensToNodes(
-    editor.tryParseMarkdownToBlocks(
-      protectEscapedTokens(stashRawBlocks(markdown)),
+): TBlock[] => {
+  const math = createMathProtection(markdown);
+  const blocks = editor.tryParseMarkdownToBlocks(
+    protectEscapedTokens(
+      protectMarkdownMath(stashRawBlocks(markdown), math.stash),
     ),
   );
+  const restored = mapEditorJson(blocks, (node) =>
+    Object.fromEntries(
+      Object.entries(node).map(([key, value]) => [
+        key,
+        typeof value === 'string' ? math.restore(value) : value,
+      ]),
+    ),
+  ) as TBlock[];
+  return manuscriptTokensToNodes(restored);
+};
 
 export const manuscriptBlocksToMarkdown = <TBlock>(
   editor: MarkdownEditor<TBlock>,
   document: TBlock[],
-): string =>
-  unstashRawBlocks(
-    restoreEscapedTokens(
-      editor.blocksToMarkdownLossy(manuscriptNodesToTokens(document)),
+): string => {
+  const math = createMathProtection(JSON.stringify(document));
+  const protectedBlocks = mapEditorJson(document, (node) => {
+    if (!isJsonRecord(node.props) || typeof node.props.latex !== 'string')
+      return node;
+    if (node.type === 'inlineEquation') {
+      return {
+        type: 'text',
+        text: math.stash(`$${node.props.latex}$`),
+        styles: {},
+      };
+    }
+    if (node.type === 'displayEquation') {
+      return {
+        ...node,
+        type: 'paragraph',
+        props: {},
+        content: [
+          {
+            type: 'text',
+            text: math.stash(`$$${node.props.latex}$$`),
+            styles: {},
+          },
+        ],
+      };
+    }
+    return node;
+  }) as TBlock[];
+  return math.restore(
+    unstashRawBlocks(
+      restoreEscapedTokens(
+        editor.blocksToMarkdownLossy(manuscriptNodesToTokens(protectedBlocks)),
+      ),
     ),
   );
+};

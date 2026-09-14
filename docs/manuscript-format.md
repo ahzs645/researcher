@@ -193,6 +193,23 @@ lossless rendering.
 The portable ZIP is the editable handoff. When fidelity matters, re-import it
 into a clean workspace and confirm counts, keys, content and links survive.
 
+Display equations in PDF are typeset as vector shapes with bundled MathJax
+fonts; invalid or unsupported math raises an export error instead of silently
+dropping symbols. Word equations remain editable native OMML, with native
+accents and explicit hidden summation-limit slots for reader compatibility.
+The editor protects LaTeX before Markdown parsing so saving prose does not
+consume equation underscores or backslashes. These changes preserve fresh
+imports; they cannot reconstruct equation text already damaged in saved records.
+
+DOCX images retain their actual PNG/JPEG/GIF/BMP format and bytes; other
+browser-decodable formats are converted to PNG. PDF tables use conservative
+row-height estimates to keep small tables together and repeat headers between
+groups of rows in longer tables. A single oversized row or merged group may
+still span pages without a repeated header inside that group. Inspect rendered
+pages before submission, especially equations, wide tables and long captions.
+An explicit Word Subtitle stays in title-page extras, not the inferred author
+line; missing authors still require source-backed details.
+
 Built-in DOCX, PDF, HTML, JATS, and Markdown export adapters attach the
 outcome to their returned `ExportFile` objects and download a companion
 `citation-formatting.json`. Keep that report with the presentation file: its

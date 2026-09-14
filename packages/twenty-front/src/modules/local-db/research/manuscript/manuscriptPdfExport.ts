@@ -22,7 +22,6 @@ import { prepareManuscriptDiagramImages } from './manuscriptDiagram';
 import { fitManuscriptFigureImages } from './manuscriptFigureFit';
 import { type ExportFile, type ManuscriptExporter } from './manuscriptExport';
 import { isImageDataUrl } from './manuscriptImages';
-import { latexToScriptedText } from './manuscriptMathText';
 import {
   A4_HEIGHT_POINTS,
   PRINTABLE_WIDTH_POINTS,
@@ -50,6 +49,7 @@ export const exportManuscriptToPdfBlob = async (
     ),
   );
   const { editor, blocks } = buildBlockNoteDocument(bundle);
+  const { renderManuscriptPdfEquation } = await import('./manuscriptPdfMath');
   // Times-Roman is one of PDF's built-in fonts, and built-in means WinAnsi:
   // no ≤, no ≥, no ∑, none of the Unicode sub- and superscripts the equation
   // linearizer emits. Those characters came out as overlapping garbage.
@@ -67,9 +67,7 @@ export const exportManuscriptToPdfBlob = async (
   type PdfTextElement = Awaited<
     ReturnType<(typeof pdfDefaultSchemaMappings.blockMapping)['paragraph']>
   >;
-  // react-pdf cannot typeset math, so equation paragraphs (LaTeX source plus
-  // the invisible label separator) go through the Unicode linearizer — the
-  // same readable fallback, instead of printing raw LaTeX.
+  // Equation paragraphs retain LaTeX until the SVG math renderer typesets it.
   const plainText = (content: unknown): string => {
     if (!Array.isArray(content)) return '';
     return content
@@ -92,7 +90,7 @@ export const exportManuscriptToPdfBlob = async (
       EQUATION_LABEL_SEPARATOR,
     );
     return {
-      equation: latexToScriptedText(latex ?? ''),
+      equation: latex ?? '',
       ...(label !== undefined && label.trim().length > 0
         ? { label: label.trim() }
         : {}),
@@ -145,18 +143,16 @@ export const exportManuscriptToPdfBlob = async (
       const indent =
         firstLineIndent > 0 &&
         !BLOCK_PARAGRAPH_TAGS.includes(block.props.textColor);
-      const children =
-        block.props.textColor === 'equation'
-          ? (() => {
-              const { equation, label } = equationChildren(block);
-              const text =
-                label !== undefined ? `${equation}    ${label}` : equation;
-              return scriptRuns(text, bundle.style.bodyFontSize ?? 12);
-            })()
-          : (() => {
-              const runs = exporter.transformInlineContent(block.content);
-              return indent ? withFirstLineIndent(runs) : runs;
-            })();
+      if (block.props.textColor === 'equation') {
+        const { equation, label } = equationChildren(block);
+        return renderManuscriptPdfEquation(
+          equation,
+          bundle.style.bodyFontSize ?? 12,
+          label,
+        ) as PdfTextElement;
+      }
+      const runs = exporter.transformInlineContent(block.content);
+      const children = indent ? withFirstLineIndent(runs) : runs;
       // The exporter declares ReactElement<Text> instead of TextProps. The
       // runtime component is correct; bridge the upstream generic mismatch.
       return createElement(Text, {

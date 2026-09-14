@@ -530,7 +530,6 @@ const headingLevelFromStyle = (
   const heading = /^heading\s*([1-6])/i.exec(styleVal);
   if (heading !== null) return Number(heading[1]);
   if (/^title$/i.test(styleVal)) return 1;
-  if (/^subtitle$/i.test(styleVal)) return 2;
   return 0;
 };
 
@@ -745,8 +744,20 @@ const convertOmmlElement = (element: OmmlElement): string => {
           ? '\\sum'
           : (NARY_OPERATORS[operatorGlyph] ?? escapeLatexText(operatorGlyph));
       // Word omits `m:sup` entirely when only a lower limit is set.
-      const lower = ommlChildInner(children, 'm:sub');
-      const upper = ommlChildInner(children, 'm:sup');
+      const visibleLimit = (name: 'sub' | 'sup'): string | undefined => {
+        const hidden = ommlPropertyValue(children, 'm:naryPr', `m:${name}Hide`);
+        if (hidden === '1' || hidden === 'on' || hidden === 'true')
+          return undefined;
+        const value = ommlChildInner(children, `m:${name}`);
+        return value === undefined ||
+          convertOmmlChildren(value)
+            .replace(/\u200b/g, '')
+            .trim() === ''
+          ? undefined
+          : value;
+      };
+      const lower = visibleLimit('sub');
+      const upper = visibleLimit('sup');
       const limits = [
         lower === undefined ? '' : `_{${convertOmmlChildren(lower).trim()}}`,
         upper === undefined ? '' : `^{${convertOmmlChildren(upper).trim()}}`,
@@ -1370,7 +1381,24 @@ export const parseWordDocumentFromBlocks = (
   documentXml: string,
   blocks: WordMarkdownBlock[],
 ): ImportedDocument => {
-  const markdown = serializeWordMarkdownBlocks(blocks);
+  // Word's explicit Subtitle style is title-page furniture, never evidence
+  // of authorship. Keep it outside the author heuristic and body headings.
+  const firstBody = blocks.findIndex((block) =>
+    ['ABSTRACT', 'INTRODUCTION', 'METHODS'].includes(
+      classifyHeading(block.markdown.replace(/^\s*#{1,6}\s+/, '').trim())
+        .sectionType,
+    ),
+  );
+  const subtitles = blocks.filter(
+    (block, index) =>
+      (firstBody < 0 || index < firstBody) &&
+      [block.styleId, block.styleName].some((style) =>
+        /^subtitle$/i.test(style ?? ''),
+      ),
+  );
+  const markdown = serializeWordMarkdownBlocks(
+    blocks.filter((block) => !subtitles.includes(block)),
+  );
   const document = parseMarkdownDocument(markdown);
   const equationCount = (documentXml.match(/<m:oMath\b/g) ?? []).length;
   const embeddedImageCount = (
@@ -1398,6 +1426,16 @@ export const parseWordDocumentFromBlocks = (
     ...document,
     sections,
     ...titlePageMetadata,
+    ...(subtitles.length > 0
+      ? {
+          titlePageExtraLines: [
+            ...subtitles.map((block) =>
+              block.markdown.replace(/^\s*#{1,6}\s+/, '').trim(),
+            ),
+            ...(titlePageMetadata.titlePageExtraLines ?? []),
+          ],
+        }
+      : {}),
     warnings,
     stats: { equationCount, embeddedImageCount, tableCount },
   };

@@ -445,3 +445,27 @@ describe('manuscript editor content', () => {
     ).toBe(markdown);
   });
 });
+
+it('restores math-like text in link destinations without promoting linked text', () => {
+  const linkEditor = {
+    tryParseMarkdownToBlocks: (markdown: string) => [
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'link',
+            href: markdown,
+            content: [{ type: 'text', text: markdown, styles: {} }],
+          },
+        ],
+      },
+    ],
+    blocksToMarkdownLossy: () => '',
+  };
+  const [block] = markdownToManuscriptBlocks(
+    linkEditor,
+    'https://example.test/$x_y$',
+  );
+  expect(block.content[0].href).toBe('https://example.test/$x_y$');
+  expect(block.content[0].content[0].text).toBe('https://example.test/$x_y$');
+});

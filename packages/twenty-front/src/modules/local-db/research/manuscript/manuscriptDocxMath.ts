@@ -1,10 +1,15 @@
 import {
+  BuilderElement,
+  createMathAccentCharacter,
+  createMathBase,
+  createMathNAryProperties,
+  createMathSubScriptElement,
+  createMathSuperScriptElement,
   MathFraction,
   MathRadical,
   MathRun,
   MathSubScript,
   MathSubSuperScript,
-  MathSum,
   MathSuperScript,
   type MathComponent,
 } from 'docx';
@@ -27,7 +32,8 @@ const SPACING_COMMANDS: Record<string, string> = {
   thinspace: ' ',
 };
 
-// Accents render as base + combining mark, which Word composes into one glyph.
+// Native accents bind to the whole base; separate combining-mark runs leave
+// dotted placeholders and put scripts on the accent instead of the base.
 const ACCENT_COMBINING: Record<string, string> = {
   bar: '̄',
   overline: '̄',
@@ -121,7 +127,18 @@ const parseLatex = (
     }
     const accent = ACCENT_COMBINING[command];
     if (accent !== undefined) {
-      return [...parseGroup(), new MathRun(accent)];
+      return [
+        new BuilderElement({
+          name: 'm:acc',
+          children: [
+            new BuilderElement({
+              name: 'm:accPr',
+              children: [createMathAccentCharacter({ accent })],
+            }),
+            createMathBase({ children: parseGroup() }),
+          ],
+        }),
+      ];
     }
     const spacing = SPACING_COMMANDS[command];
     if (spacing !== undefined) {
@@ -132,10 +149,20 @@ const parseLatex = (
       while (source[index] === ' ') index += 1;
       const children = index < source.length ? parseAtom() : [new MathRun('')];
       return [
-        new MathSum({
-          children,
-          subScript: scripts.sub,
-          superScript: scripts.sup,
+        new BuilderElement({
+          name: 'm:nary',
+          // Keep both slots even when hidden. Readers such as LibreOffice
+          // otherwise consume the operand as the missing upper-limit slot.
+          children: [
+            createMathNAryProperties({
+              accent: '∑',
+              hasSubScript: scripts.sub !== undefined,
+              hasSuperScript: scripts.sup !== undefined,
+            }),
+            createMathSubScriptElement({ children: scripts.sub ?? [] }),
+            createMathSuperScriptElement({ children: scripts.sup ?? [] }),
+            createMathBase({ children }),
+          ],
         }),
       ];
     }

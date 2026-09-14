@@ -1170,3 +1170,33 @@ describe('author contributions', () => {
     expect(contributions[0].content).toContain('All authors contributed');
   });
 });
+
+describe('realistic DOCX fidelity regressions', () => {
+  it('preserves an explicit subtitle as extra title-page text without inventing authors', () => {
+    const document = parseWordDocument(`<w:body>
+      <w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>A sufficiently long research manuscript title</w:t></w:r></w:p>
+      <w:p><w:pPr><w:pStyle w:val="Subtitle"/></w:pPr><w:r><w:t>Research manuscript draft | Frozen release of 11 September 2026</w:t></w:r></w:p>
+      <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Abstract</w:t></w:r></w:p>
+      <w:p><w:r><w:t>Study abstract.</w:t></w:r></w:p>
+    </w:body>`);
+    expect(document.authorLine).toBeUndefined();
+    expect(document.titlePageExtraLines).toEqual([
+      'Research manuscript draft | Frozen release of 11 September 2026',
+    ]);
+    expect(document.sections.map((section) => section.name)).toEqual([
+      'Abstract',
+    ]);
+  });
+
+  it('does not turn hidden Word summation placeholders into visible upper limits', () => {
+    const document = parseWordDocument(`<w:body><w:p><m:oMath>
+      <m:nary><m:naryPr><m:chr m:val="∑"/><m:supHide m:val="on"/></m:naryPr>
+      <m:sub><m:r><m:t>j</m:t></m:r><m:r><m:t>∈</m:t></m:r><m:sSub><m:e><m:r><m:t>T</m:t></m:r></m:e><m:sub><m:r><m:t>q</m:t></m:r></m:sub></m:sSub></m:sub>
+      <m:sup><m:r><m:t>​</m:t></m:r></m:sup><m:e><m:r><m:t>E</m:t></m:r></m:e></m:nary>
+    </m:oMath></w:p></w:body>`);
+    const source = JSON.stringify(document);
+    expect(source).not.toContain('​');
+    expect(source).not.toContain('^{');
+    expect(source).toContain('T_{q}');
+  });
+});

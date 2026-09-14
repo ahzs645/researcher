@@ -1,3 +1,4 @@
+import { manuscriptDocxImageRun } from './manuscriptDocxImage';
 import {
   DOCXExporter,
   docxDefaultSchemaMappings,
@@ -157,29 +158,26 @@ const createManuscriptDocxMappings = ({
   ...docxDefaultSchemaMappings,
   blockMapping: {
     ...docxDefaultSchemaMappings.blockMapping,
-    image: async (
-      block,
-      exporter,
-      nestingLevel,
-      numberedListIndex,
-      children,
-    ) => {
+    image: async (block, exporter) => {
       const caption = block.props.caption;
-      const mappedImage = await docxDefaultSchemaMappings.blockMapping.image(
-        typeof caption === 'string' && hasManuscriptScripts(caption)
-          ? {
-              ...block,
-              props: {
-                ...block.props,
-                caption: stripManuscriptScriptMarkers(caption),
-              },
-            }
-          : block,
-        exporter,
-        nestingLevel,
-        numberedListIndex,
-        children,
-      );
+      const source = await exporter.resolveFile(block.props.url);
+      const mappedImage = [
+        new Paragraph({
+          alignment:
+            block.props.textAlignment === 'center'
+              ? AlignmentType.CENTER
+              : block.props.textAlignment === 'right'
+                ? AlignmentType.RIGHT
+                : AlignmentType.LEFT,
+          children: [
+            await manuscriptDocxImageRun(
+              source,
+              block.props.previewWidth,
+              stripManuscriptScriptMarkers(caption ?? ''),
+            ),
+          ],
+        }),
+      ];
       if (
         typeof caption !== 'string' ||
         caption.length === 0 ||
@@ -188,7 +186,7 @@ const createManuscriptDocxMappings = ({
         return mappedImage;
       }
       return [
-        ...mappedImage.slice(0, -1),
+        ...mappedImage,
         new Paragraph({
           style: 'Caption',
           keepLines: true,
@@ -453,7 +451,10 @@ export const exportManuscriptToDocxBlob = async (
   );
   const tableStyle = (bundle.style.tableStyle ??
     'ACADEMIC') as ManuscriptTableStyle;
-  const tableFontSize = Math.max(8, bundle.style.tableFontSize ?? bodyFontSize);
+  const tableFontSize = Math.max(
+    8,
+    bundle.style.tableFontSize ?? bodyFontSize - 2,
+  );
   const tableLineSpacing = Math.max(1, bundle.style.tableLineSpacing ?? 1);
   const figureCaptionFontSize = Math.max(
     8,

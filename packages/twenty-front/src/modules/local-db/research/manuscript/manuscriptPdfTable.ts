@@ -1,3 +1,4 @@
+import { paginateManuscriptTable } from './manuscriptPdfTablePagination';
 /* oxlint-disable twenty/no-hardcoded-colors -- rules printed on paper, not app
    chrome: these are the same greys the DOCX exporter writes into the Word
    table so the two outputs match. */
@@ -44,7 +45,12 @@ const TABLE_RULES: Record<ManuscriptTableStyle, TableRule> = {
     vertical: false,
     innerOnlyUnderHeader: false,
   },
-  GRID: { outer: 0.75, inner: 0.75, vertical: true, innerOnlyUnderHeader: false },
+  GRID: {
+    outer: 0.75,
+    inner: 0.75,
+    vertical: true,
+    innerOnlyUnderHeader: false,
+  },
   SHADED_HEADER: {
     outer: 0.75,
     inner: 0.75,
@@ -144,7 +150,8 @@ export const createManuscriptPdfTableMapping = ({
                   fontSize: tableFontSize,
                   fontWeight: isHeader ? 'bold' : 'normal',
                   lineHeight: tableLineSpacing,
-                  textAlign: tableStyle === 'GRID' && !isHeader ? 'left' : 'center',
+                  textAlign:
+                    tableStyle === 'GRID' && !isHeader ? 'left' : 'center',
                 },
               },
               ...renderText(text, tableFontSize),
@@ -152,74 +159,86 @@ export const createManuscriptPdfTableMapping = ({
       );
     };
 
-    return createElement(
-      View,
-      { key: `table${block.id}`, style: { marginVertical: 6 } },
-      ...placedRows.map((placed, rowIndex) => {
-        const children: ReactNode[] = [];
-        let columnIndex = 0;
-        let cellIndex = 0;
-        while (columnIndex < widths.length) {
-          const continuation = covered.get(`${rowIndex}:${columnIndex}`);
-          if (continuation !== undefined) {
-            children.push(
-              renderCell(
-                `c${rowIndex}-${columnIndex}`,
-                columnIndex,
-                continuation.columnSpan,
-                rowIndex,
-                null,
-              ),
-            );
-            columnIndex += continuation.columnSpan;
-            continue;
-          }
-          const cell = placed[cellIndex];
-          if (cell === undefined || cell.columnIndex !== columnIndex) break;
+    const renderedRows = placedRows.map((placed, rowIndex) => {
+      const children: ReactNode[] = [];
+      let columnIndex = 0;
+      let cellIndex = 0;
+      while (columnIndex < widths.length) {
+        const continuation = covered.get(`${rowIndex}:${columnIndex}`);
+        if (continuation !== undefined) {
           children.push(
             renderCell(
               `c${rowIndex}-${columnIndex}`,
               columnIndex,
-              cell.columnSpan,
+              continuation.columnSpan,
               rowIndex,
-              cell.text,
+              null,
             ),
           );
-          columnIndex += cell.columnSpan;
-          cellIndex += 1;
+          columnIndex += continuation.columnSpan;
+          continue;
         }
-        // Horizontal rules belong to the row, not to its cells: cells in a row
-        // are different heights, and a border on each of them draws a
-        // staggered line rather than one rule across the table. A row that
-        // continues a cell from above skips its rule, so the merge reads as
-        // one box.
-        const continues = [...covered.keys()].some((key) =>
-          key.startsWith(`${rowIndex}:`),
+        const cell = placed[cellIndex];
+        if (cell === undefined || cell.columnIndex !== columnIndex) break;
+        children.push(
+          renderCell(
+            `c${rowIndex}-${columnIndex}`,
+            columnIndex,
+            cell.columnSpan,
+            rowIndex,
+            cell.text,
+          ),
         );
-        const internalRule = continues
-          ? 0
-          : rule.innerOnlyUnderHeader
-            ? rowIndex === headerRows
-              ? rule.inner
-              : 0
-            : rule.inner;
-        return createElement(
-          View,
-          {
-            key: `r${rowIndex}`,
-            wrap: false,
-            style: {
-              borderBottomColor: OUTER_COLOR,
-              borderBottomWidth:
-                rowIndex === rows.length - 1 ? rule.outer : 0,
-              borderTopColor: rowIndex === 0 ? OUTER_COLOR : INNER_COLOR,
-              borderTopWidth: rowIndex === 0 ? rule.outer : internalRule,
-              flexDirection: 'row',
-            },
+        columnIndex += cell.columnSpan;
+        cellIndex += 1;
+      }
+      // Horizontal rules belong to the row, not to its cells: cells in a row
+      // are different heights, and a border on each of them draws a
+      // staggered line rather than one rule across the table. A row that
+      // continues a cell from above skips its rule, so the merge reads as
+      // one box.
+      const continues = [...covered.keys()].some((key) =>
+        key.startsWith(`${rowIndex}:`),
+      );
+      const internalRule = continues
+        ? 0
+        : rule.innerOnlyUnderHeader
+          ? rowIndex === headerRows
+            ? rule.inner
+            : 0
+          : rule.inner;
+      return createElement(
+        View,
+        {
+          key: `r${rowIndex}`,
+          wrap: false,
+          style: {
+            borderBottomColor: OUTER_COLOR,
+            borderBottomWidth: rowIndex === rows.length - 1 ? rule.outer : 0,
+            borderTopColor: rowIndex === 0 ? OUTER_COLOR : INNER_COLOR,
+            borderTopWidth: rowIndex === 0 ? rule.outer : internalRule,
+            flexDirection: 'row',
           },
-          ...children,
-        );
-      }),
+        },
+        ...children,
+      );
+    });
+    return createElement(
+      View,
+      { key: `table${block.id}`, style: { marginVertical: 6 } },
+      ...paginateManuscriptTable(
+        placedRows,
+        widths,
+        headerRows,
+        tableFontSize,
+        tableLineSpacing,
+      ).map((group, index) =>
+        createElement(
+          View,
+          { key: `group${index}`, wrap: !group.keepTogether },
+          ...group.rows.map((row) => renderedRows[row]),
+        ),
+      ),
     );
   };
 };
